@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reviewed PGN integration — 2026-10-28
 
+Commit: `435d6de`.
+
 - Apply Claude's approved proposal with G1/P2–P7/U9 changes: preserve existing
   tree/actor, notation traversal, file browser and atomic append/save workflow.
 - Add owned header-tag arrays, typed NAGs and leading comments. Merge repeated
