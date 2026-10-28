@@ -4,6 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Review fix U10 — 2026-10-28
+
+- U10: add an optional Cancel-default setting to the existing confirmation
+  dialog. Chess discard prompts select and initially focus Cancel, so Enter
+  keeps the exploration; explicit Discard remains available. Existing save
+  and OK prompts retain their accept-button default.
+- Clarify the question as “Discard the current board and its moves?” to cover
+  custom root FENs as well as explored moves.
+- Test actual modal dialogs and their default/focused buttons, both discard
+  entry points, explicit discard, and unchanged legacy save/OK defaults.
+- Validation: all six GUI suites pass (673 chess checks, range/overflow
+  checking, zero unfreed heap blocks), plus application build and source audit.
+
 ### Review fixes U7 and U8 — 2026-10-28
 
 - U7: reuse the existing confirmation dialog to ask Discard / Cancel before

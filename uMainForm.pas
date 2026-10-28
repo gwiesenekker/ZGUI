@@ -3162,7 +3162,7 @@ function TMainForm.ConfirmDiscardExploration(const ACaption: string): Boolean;
 begin
   if not GameTreeHasContent(FGameTree) then Exit(True);
   Result := ShowGuiConfirmationDialog(Self, ACaption,
-    'Discard the explored moves?', 'Discard', '', mrNo) = mrYes;
+    'Discard the current board and its moves?', 'Discard', '', mrNo, True) = mrYes;
 end;
 
 function TMainForm.ConfirmReplaceStandaloneGame: Boolean;

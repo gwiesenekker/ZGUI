@@ -18,6 +18,14 @@ type
     procedure Shown(Sender: TObject);
     procedure Pick(Data: PtrInt);
   end;
+  TConfirmation = class
+    Dialog: TForm;
+    ExpectedDefault: string;
+    ExpectCancelFocus,ClickAccept: Boolean;
+    ShownCount: Integer;
+    procedure Shown(Sender: TObject);
+    procedure Respond(Data: PtrInt);
+  end;
   TErrors = class
     procedure Report(Sender: TObject; E: Exception);
   end;
@@ -26,6 +34,36 @@ procedure TErrors.Report(Sender: TObject; E: Exception);
 begin WriteLn('FAIL: ',E.Message); DumpExceptionBackTrace(Output); Halt(1); end;
 procedure Check(Value: Boolean; const Text: string);
 begin Inc(Checks); if not Value then raise Exception.Create(Text); end;
+procedure TConfirmation.Shown(Sender: TObject);
+var I,Buttons: Integer;
+begin
+  Dialog:=TForm(Sender); Inc(ShownCount);
+  Check(Dialog.DefaultControl is TButton,'Confirmation has a real default button');
+  Check(TButton(Dialog.DefaultControl).Caption=ExpectedDefault,'Expected default '+ExpectedDefault);
+  if ExpectCancelFocus then
+  begin
+    Check(Dialog.DefaultControl=Dialog.CancelControl,'Discard defaults to its cancel action');
+    Check(Dialog.ActiveControl=Dialog.CancelControl,'Discard starts with Cancel focused');
+    Buttons:=0;
+    for I:=0 to Dialog.ComponentCount-1 do
+      if Dialog.Components[I] is TButton then Inc(Buttons);
+    Check(Buttons=2,'Discard dialog has exactly Discard and Cancel buttons');
+  end;
+  Application.QueueAsyncCall(@Respond,0);
+end;
+procedure TConfirmation.Respond(Data: PtrInt);
+var I: Integer;
+begin
+  if ClickAccept then
+  begin
+    for I:=0 to Dialog.ComponentCount-1 do
+      if (Dialog.Components[I] is TButton) and (TButton(Dialog.Components[I]).Caption='Discard') then
+      begin TButton(Dialog.Components[I]).Click; Exit; end;
+    raise Exception.Create('Missing explicit Discard button');
+  end
+  else TButton(Dialog.DefaultControl).Click;
+end;
+
 procedure TPaintChess.Render(B: TBitmap);
 begin
   HandleNeeded;
@@ -331,9 +369,9 @@ var Main: TMainForm; Board: TGameBoardControl; Memo: TGameNotationView;
     Actor: TGameTreeActor; Command: TGameTreeCommand; CanClose: Boolean;
     BeforeFEN,BeforeText,BeforeLegal,Selection: string; Key: Word;
     TreeId,TipId,BranchId: Int64; BeforeCount,BeforeBranches,BeforeSelStart,BeforeSelLength: Integer;
-    BeforeNode,BeforeBranch: TGameTreePlyNode;
+    BeforeNode,BeforeBranch: TGameTreePlyNode; Confirmation: TConfirmation;
 begin
-  Main:=TMainForm.Create(nil); Actor:=nil;
+  Main:=TMainForm.Create(nil); Actor:=nil; Confirmation:=TConfirmation.Create;
   try
     Main.Show; Application.ProcessMessages;
     Board:=TGameBoardControl(Main.FindComponent('MainBoard'));
@@ -363,9 +401,27 @@ begin
     BeforeLegal:=TMemo(Main.FindComponent('LegalMovesMemo')).Text;
     BeforeSelStart:=Memo.SelStart; BeforeSelLength:=Memo.SelLength; Selection:=Memo.SelText;
     Check(Selection<>'','Cancel test has a real notation selection');
+    GuiTestConfirmationResult:=0;
+    Confirmation.ExpectedDefault:='Cancel'; Confirmation.ExpectCancelFocus:=True;
+    GuiTestConfirmationOnShow:=@Confirmation.Shown;
+    Clipboard.AsText:=ChessStartingFEN; Menu(Main,'Paste FEN position from clipboard').Click;
+    Check(Confirmation.ShownCount=1,'Paste constructs actual Cancel-default dialog');
+    Check((Board.Position.ToFEN=BeforeFEN) and (Memo.SelStart=BeforeSelStart) and
+      (Main.ActiveGameTree.FindNodeById(BranchId)=BeforeBranch),'Default Paste action preserves explored tree and selection');
+    Main.OnCloseQuery(Main,CanClose);
+    Check((not CanClose) and (Confirmation.ShownCount=2),'Default close action cancels');
+    Check(Main.ActiveGameTree.MainlineNode[2].NodeId=TipId,'Default close action preserves tree');
+    Confirmation.ClickAccept:=True; Main.OnCloseQuery(Main,CanClose);
+    Check(CanClose,'Explicit Discard still accepts actual close dialog');
+    Confirmation.ClickAccept:=False; Confirmation.ExpectCancelFocus:=False; Confirmation.ExpectedDefault:='Yes';
+    Check(ShowGuiConfirmationDialog(Main,'Legacy save','Save first?','Yes','No',mrNo)=mrYes,
+      'Omitted option preserves actual legacy accept default');
+    Confirmation.ExpectedDefault:='OK';
+    Check(ShowGuiOkDialog(Main,'Information','Unchanged OK default')=mrYes,'OK dialog keeps its default');
+    GuiTestConfirmationOnShow:=nil;
     GuiTestConfirmationResult:=mrCancel;
     Clipboard.AsText:=ChessStartingFEN; Menu(Main,'Paste FEN position from clipboard').Click;
-    Check(GuiTestLastConfirmationText='Discard the explored moves?','Paste asks about discarding');
+    Check(GuiTestLastConfirmationText='Discard the current board and its moves?','Paste asks about discarding');
     Check((Main.ActiveGameTree.GameTreeId=TreeId) and
       (Main.ActiveGameTree.MainlineCount=BeforeCount) and (Main.ActiveGameTree.BranchCount=BeforeBranches),
       'Cancelled Paste preserves tree and branches');
@@ -377,7 +433,7 @@ begin
       (TMemo(Main.FindComponent('LegalMovesMemo')).Text=BeforeLegal), 'Cancelled Paste preserves view, cursor and legal list');
     GuiTestLastConfirmationText:=''; Main.OnCloseQuery(Main,CanClose);
     Check(not CanClose,'Cancel vetoes close');
-    Check(GuiTestLastConfirmationText='Discard the explored moves?','Close asks about discarding');
+    Check(GuiTestLastConfirmationText='Discard the current board and its moves?','Close asks about discarding');
     Check((Main.ActiveGameTree.GameTreeId=TreeId) and (Main.ActiveGameTree.BranchCount=BeforeBranches) and
       (Main.ActiveGameTree.MainlineNode[2].NodeId=TipId) and
       (Main.ActiveGameTree.FindNodeById(BranchId)=BeforeBranch), 'Cancelled close preserves entire tree');
@@ -406,7 +462,8 @@ begin
     Menu(Main,'Paste FEN position from clipboard').Click;
     Check(Board.Position.ToFEN=BeforeFEN,'Cancel protects a custom root position');
     Main.OnCloseQuery(Main,CanClose); Check(not CanClose,'Custom root also protected on close');
-  finally GuiTestConfirmationResult:=0; Actor.Free; Main.Free; end;
+  finally GuiTestConfirmationOnShow:=nil; GuiTestConfirmationResult:=0;
+    Confirmation.Free; Actor.Free; Main.Free; end;
 end;
 
 var Errors: TErrors;

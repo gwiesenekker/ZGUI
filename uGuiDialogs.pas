@@ -10,13 +10,15 @@ uses
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
 var GuiTestConfirmationResult: Integer = 0;
     GuiTestChoiceOnShow: TNotifyEvent = nil;
+    GuiTestConfirmationOnShow: TNotifyEvent = nil;
     GuiTestLastConfirmationText: string = '';
 {$ENDIF}
 
 function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
   AText: string; AChoices: TStrings): Integer;
 function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,
-  AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer): Integer;
+  AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer;
+  ADefaultToCancel: Boolean = False): Integer;
 function ShowGuiOkDialog(AOwner: TCustomForm; const ACaption,
   AText: string): Integer;
 function ShowGuiTextDialog(AOwner: TCustomForm; const ACaption,
@@ -320,7 +322,8 @@ begin
 end;
 
 function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,
-  AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer): Integer;
+  AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer;
+  ADefaultToCancel: Boolean): Integer;
 var
   AcceptLeft: Integer;
   Button: TButton;
@@ -334,8 +337,11 @@ var
 begin
   {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
   GuiTestLastConfirmationText := AText;
-  if GuiTestConfirmationResult <> 0 then Exit(GuiTestConfirmationResult);
-  raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
+  if not Assigned(GuiTestConfirmationOnShow) then
+  begin
+    if GuiTestConfirmationResult <> 0 then Exit(GuiTestConfirmationResult);
+    raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
+  end;
   {$ENDIF}
   Dialog := TForm.Create(AOwner);
   try
@@ -384,6 +390,15 @@ begin
     Button.ModalResult := mrCancel;
     Button.SetBounds(CancelLeft, ButtonTop, 80, DialogButtonHeight);
     Dialog.CancelControl := Button;
+    if ADefaultToCancel then
+    begin
+      Dialog.DefaultControl := Button;
+      Dialog.ActiveControl := Button;
+    end;
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    if Assigned(GuiTestConfirmationOnShow) then
+      Dialog.OnShow := GuiTestConfirmationOnShow;
+    {$ENDIF}
 
     CenterFormOnOwner(Dialog, AOwner);
     Result := Dialog.ShowModal;
