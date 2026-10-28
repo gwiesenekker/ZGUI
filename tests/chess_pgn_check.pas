@@ -31,7 +31,7 @@ end;
 procedure Tests;
 var D,E: TGameTreeNodeData; Tags: TGameFileTags; Header: TGameTreeHeaderInput;
   C: TGameTreeCommand; Text,Name: string; Reader: TChessPgnReader;
-  Start: QWord; Edited: Boolean; I: Integer; Saved: TStringList; O: TGameTreePdnRenderOptions;
+  Start: QWord; Edited: Boolean; I: Integer; Saved: TStringList; Broken: string; O: TGameTreePdnRenderOptions;
 begin
   RoundTrip('[Event "Escaped \"event\" \\ club"] [Site "Amsterdam"] [Date "2026.10.28"] '+
     '[Round "3"] [White "José"] [Black "文字"] [Result "1-0"] [X_Custom "kept"] '+
@@ -109,6 +109,27 @@ begin
     Check((A.GameTree.MainlineCount=2) and (A.GameTree.MainlineNode[1].MoveText='d2d4'),'Selected game offset import');
     Check(Pos('CP1252',TGameFileEntry(Reader.Entries[2]).WarningsText)>0,'Collection encoding warning');
   finally Saved.Free; Reader.Free; DeleteFile(Name); end;
+  Name:=GetTempFileName(GetTempDir,'zpr'); Reader:=TChessPgnReader.Create(V); Saved:=TStringList.Create;
+  try
+    for I:=0 to 2 do begin
+      case I of
+        0:Broken:='1.e4 e5';
+        1:Broken:='1.e4 (1.d4';
+        2:Broken:='1.e4 {unclosed';
+      end;
+      Saved.Text:='[Event "broken"]'+#10+Broken+#10+'[Event "reachable"]'+#10+'1.d4 d5 *';
+      Saved.SaveToFile(Name); Reader.OpenFile(Name);
+      Check(Reader.Entries.Count=2,'Damaged game does not swallow following entry');
+      TGameFileEntry(Reader.Entries[0]).Validate;
+      Check(TGameFileEntry(Reader.Entries[0]).ErrorText<>'','Damaged entry reports its own error');
+      TGameFileEntry(Reader.Entries[1]).Validate;
+      Check(TGameFileEntry(Reader.Entries[1]).ErrorText='','Following entry remains valid');
+      TGameFileEntry(Reader.Entries[1]).ImportInto(A);
+      Check(A.GameTree.EventName='reachable','Validated entry replays without a third parse');
+    end;
+  finally Saved.Free; Reader.Free; DeleteFile(Name); end;
+  RoundTrip('1.e4 {[%eval 0.25,22]} *');
+  Check(Pos('[%eval 0.25,22]',Export(A))>0,'Evaluation depth retained');
   // Two-pass timing includes the existing actor's validation, not a bypass.
   Text:=''; for I:=1 to 50 do Text+='Nf3 Nf6 Ng1 Ng8 ';
   Start:=GetTickCount64; ImportChessPgn(Text+'*',A,nil);

@@ -7,7 +7,7 @@ unit uGamePosition;
   Generic units (game tree, actor, displayed position, notation walker,
   analysis coordination, running games) talk to a game only through these
   classes. A concrete game supplies one TGameVariant and one TGamePosition
-  descendant. See claude/position-interface-proposal.md.
+  descendant. See the GWDGUI 3.4 position-interface design.
 
   Move contract:
   - A move is a canonical string produced by the implementation (LegalMove,

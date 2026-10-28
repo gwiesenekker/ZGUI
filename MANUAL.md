@@ -24,13 +24,16 @@ loaded because of an invalid move or malformed variation.
 PGN preserves tag values (including custom tags), comments, NAGs and nested
 variations. Repeated moves from the same position merge their comments, NAGs
 and continuations, with a warning. Formatting and comment delimiters may be
-normalized. Orthodox chess PGN is supported; null moves are rejected, and an
+normalized. Comments after a variation are associated with the preceding move
+and may be printed before that variation on saving. Orthodox chess PGN is supported; null moves are rejected, and an
 optional **e.p.** suffix is accepted after en passant. Legacy CP1252 files are
 converted to UTF-8 with a warning; saved PGN uses UTF-8 without a BOM.
 
 Standard `[%eval ...]`, `[%clk ...]` and `[%emt ...]` annotations are read and
 written as typed evaluation/clock data; unknown commands stay in the comments.
-The normal export omits ZGUI-specific PV/depth and secondary annotator metadata.
+The standard evaluation command includes depth when known and reloads as the
+engine score, including when its source was an annotator. The lossless export
+option retains the original source. The normal export omits ZGUI-specific PV/depth and secondary annotator metadata.
 An optional lossless mode is available through the export API using the existing
 node-data extension. Analysis PVs never become played variations. Movetext wraps
 at token boundaries near column 80; an indivisible comment or token may be longer.

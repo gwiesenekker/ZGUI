@@ -17,7 +17,7 @@ type
 procedure ImportChessPgn(const Text: string; Actor: TGameTreeActor; Warnings: TStrings);
 function PgnUtf8(const Bytes: string; out Converted: Boolean): string;
 implementation
-uses StrUtils, uChessPosition, uGameTree, uGameTreeBuilder, uGameFileMetadata,
+uses SHA1, StrUtils, uChessPosition, uGameTree, uGameTreeBuilder, uGameFileMetadata,
   uGameTreeNodeData, uChessPgnAnnotations, uGameOrchestrator;
 var ImportSequence: QWord=0;
 function PgnUtf8(const Bytes: string; out Converted: Boolean): string;
@@ -231,6 +231,7 @@ begin
 end;
 type
   TPgnEntry = class(TGameFileEntry)
+    ValidatedDigest: string;
     FileName: string; Offset,Size: Int64; Variant: TGameVariant;
     function Text: string;
     procedure Validate; override;
@@ -244,12 +245,13 @@ begin
   try F.Position:=Offset; SetLength(Result,Size); if Size>0 then F.ReadBuffer(Result[1],Size); finally F.Free; end;
 end;
 procedure TPgnEntry.Validate;
-var Actor: TGameTreeActor; W: TStringList;
+var Actor: TGameTreeActor; W: TStringList; S: string;
 begin
   if not Deferred then Exit;
   W:=TStringList.Create; Actor:=TGameTreeActor.Create(TGameTree.Create(Variant),True);
   try
-    try ParseText(Text,Actor,W); except on E:Exception do ErrorText:=E.Message; end;
+    try S:=Text; ParseText(S,Actor,W); ValidatedDigest:=SHA1Print(SHA1String(S));
+    except on E:Exception do ErrorText:=E.Message; end;
     WarningsText:=W.Text; Deferred:=False;
   finally Actor.Free; W.Free; end;
 end;
@@ -257,26 +259,40 @@ procedure TPgnEntry.ImportInto(Actor: TGameTreeActor);
 var W: TStringList; S: string;
 begin
   S:=Text; W:=TStringList.Create;
-  try ImportChessPgn(S,Actor,W); WarningsText:=W.Text; finally W.Free; end;
+  try
+    if (ValidatedDigest<>'') and (ValidatedDigest=SHA1Print(SHA1String(S))) and
+      (Actor.GameTree.Variant=Variant) then
+      // The same immutable bytes already passed a complete candidate parse.
+      // Replay can only fail on an internal inconsistency/allocation failure.
+      ParseText(S,Actor,nil)
+    else begin ImportChessPgn(S,Actor,W); WarningsText:=W.Text; end;
+  finally W.Free; end;
 end;
 constructor TChessPgnReader.Create(AVariant: TGameVariant);
 begin inherited Create; FVariant:=AVariant; end;
 procedure TChessPgnReader.OpenFile(const FileName: string);
 var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
-  Posn,Start: Int64; C: Char; Raw,Symbol: string;
-  Brace,Quote,Escape,LineComment,Tag,ColumnOne,Body: Boolean;
+  Posn,Start: Int64; C: Char; HeaderBytes,Symbol: string;
+  Brace,Quote,Escape,LineComment,Tag,ColumnOne,Body,HadTag: Boolean;
+  procedure Reset;
+  begin
+    HeaderBytes:=''; Symbol:=''; Depth:=0;
+    Brace:=False; Quote:=False; Escape:=False; LineComment:=False;
+    Tag:=False; ColumnOne:=True; Body:=False; HadTag:=False;
+  end;
   procedure Finish;
   var Entry: TPgnEntry; L: TChessPgnLexer; T: TPgnToken; Name: string; Converted: Boolean;
   begin
-    if Trim(Raw)='' then begin Start:=Posn; Exit; end;
-    Entry:=TPgnEntry.Create; Entry.FileName:=FileName; Entry.Offset:=Start; Entry.Size:=Length(Raw);
+    if not (Body or HadTag) then begin Start:=Posn; Reset; Exit; end;
+    Entry:=TPgnEntry.Create; Entry.FileName:=FileName; Entry.Offset:=Start; Entry.Size:=Posn-Start;
     Entry.Variant:=FVariant; Entry.Deferred:=True; Entry.WhiteName:='?'; Entry.BlackName:='?'; Entry.EventName:='?'; Entry.ResultText:='*';
-    L:=TChessPgnLexer.Create(PgnWhitespace(PgnUtf8(Raw,Converted)));
+    // Only the bounded header prefix is decoded/lexed for listing. Move bytes
+    // remain in the file and are read for the selected entry alone.
+    L:=TChessPgnLexer.Create(PgnWhitespace(PgnUtf8(HeaderBytes,Converted)));
     try
       try
         T:=L.NextToken;
         while T.Kind=ptComment do T:=L.NextToken;
-        if T.Kind=ptEnd then begin Entry.Free; Raw:=''; Symbol:=''; Start:=Posn; Exit; end;
         while T.Kind=ptTagOpen do begin
           T:=L.NextToken; Name:=T.Text; T:=L.NextToken;
           if T.Kind<>ptString then Break;
@@ -286,26 +302,26 @@ var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
         end;
       except on E:EPgnSyntaxError do Entry.WarningsText:=E.Message; end;
     finally L.Free; end;
-    Entries.Add(Entry); Raw:=''; Symbol:=''; Start:=Posn;
+    Entries.Add(Entry); Start:=Posn; Reset;
   end;
   function IsResult: Boolean;
   begin Result:=(Symbol='*') or (Symbol='1-0') or (Symbol='0-1') or (Symbol='1/2-1/2'); end;
 begin
-  Entries.Clear; Start:=0; Posn:=0; Raw:=''; Symbol:=''; Depth:=0;
-  Brace:=False; Quote:=False; Escape:=False; LineComment:=False; Tag:=False; ColumnOne:=True; Body:=False;
+  Entries.Clear; Start:=0; Posn:=0; Reset;
   F:=TFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite);
   try
     repeat
       Count:=F.Read(Buffer,SizeOf(Buffer));
       for I:=0 to Count-1 do begin
-        C:=Chr(Buffer[I]); Inc(Posn);
-        if not Brace and not Quote and not LineComment and not Tag and (Depth=0) and
-          not (C in ['0'..'9','a'..'z','A'..'Z','/','-','*']) and IsResult then begin
-          Dec(Posn); Finish; Inc(Posn); Body:=False;
-        end;
-        Raw+=C;
-        if (Posn=3) and (Raw=#$EF#$BB#$BF) then begin ColumnOne:=True; Continue; end;
-        if Length(Raw)>MaxPgnGameBytes then raise EPgnSyntaxError.Create('PGN game exceeds 16 MiB limit');
+        C:=Chr(Buffer[I]);
+        // A fresh tag line is the collection recovery boundary, even when
+        // the preceding entry has an unclosed comment/string/variation.
+        if (C='[') and ColumnOne and Body then Finish
+        else if not Brace and not Quote and not LineComment and not Tag and (Depth=0) and
+          not (C in ['0'..'9','a'..'z','A'..'Z','/','-','*']) and IsResult then Finish;
+        Inc(Posn);
+        if not Body and (Length(HeaderBytes)<1024*1024) then HeaderBytes+=C;
+        if (Posn=3) and (HeaderBytes=#$EF#$BB#$BF) then begin ColumnOne:=True; Continue; end;
         if LineComment then begin if C in [#10,#13] then LineComment:=False; end
         else if Brace then begin if C='}' then Brace:=False; end
         else if Quote then begin
@@ -313,17 +329,19 @@ begin
         end else case C of
           '{':Brace:=True; ';':LineComment:=True;
           '%':if ColumnOne then LineComment:=True;
-          '"':Quote:=True; '[':Tag:=True; ']':Tag:=False;
-          '(':Inc(Depth); ')':Dec(Depth);
+          '"':Quote:=True; '[':begin Tag:=True; HadTag:=True; end; ']':Tag:=False;
+          '(':begin Inc(Depth); Body:=True; end; ')':begin Dec(Depth); Body:=True; end;
           else if not Tag then begin
-            if C in ['0'..'9','a'..'z','A'..'Z','/','-','*'] then begin Symbol+=C; Body:=True; end
-            else Symbol:='';
+            if C in ['0'..'9','a'..'z','A'..'Z','/','-','*'] then begin
+              if Length(Symbol)<16 then Symbol+=C;
+              Body:=True;
+            end else Symbol:='';
           end;
         end;
         ColumnOne:=C in [#10,#13];
       end;
     until Count=0;
-    if IsResult or Body or (Trim(Raw)<>'') then Finish;
+    Finish;
   finally F.Free; end;
 end;
 end.

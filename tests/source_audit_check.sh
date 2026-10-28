@@ -43,7 +43,7 @@ if rg -n 'DecodeVariationAnnotations|EncodeVariationAnnotations|DecodePdnVariati
 fi
 
 # Game-neutral units reach the game only through uGamePosition (see
-# claude/position-interface-proposal.md). Each migration step adds the units it
+# the GWDGUI 3.4 position-interface design). Each migration step adds the units it
 # converts. A generic unit must not use the draughts board or parse move text.
 GENERIC_UNITS=(
   uGamePosition

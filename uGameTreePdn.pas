@@ -236,7 +236,12 @@ begin
     end;
   end;
   if not AForFile then begin
-    Encoded:=''; for N in Data.Nags do Encoded+=' $'+IntToStr(N);
+    Encoded:=''; for N in Data.Nags do
+      case N of
+        1:Encoded+=' !'; 2:Encoded+=' ?'; 3:Encoded+=' !!';
+        4:Encoded+=' ??'; 5:Encoded+=' !?'; 6:Encoded+=' ?!';
+        else Encoded+=' $'+IntToStr(N);
+      end;
   end else Encoded:='';
   Projection := Result;
   if Result <> '' then

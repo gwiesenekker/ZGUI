@@ -107,14 +107,18 @@ begin
 end;
 function PgnNodeComment(const Data: TGameTreeNodeData; Side: TGameSide;
   ShowScore, ShowClocks, Lossless: Boolean): string;
-var Text,RawScore,Score,Depth,Encoded: string;
+var Text,RawScore,Score,Depth,Encoded,StoredDepth: string; N: Integer;
   procedure Add(const S: string);
   begin if Text<>'' then Text+=' '; Text+=S; end;
 begin
   Text:=Data.CommentText;
   if ShowScore then begin
-    RawScore:=Data.EngineScore; if RawScore='' then RawScore:=Data.AnnotatorScore;
-    if EvalText(RawScore,Score,Depth) then Add('[%eval '+Score+']');
+    RawScore:=Data.EngineScore; StoredDepth:=Data.EnginePVDepth;
+    if RawScore='' then begin RawScore:=Data.AnnotatorScore; StoredDepth:=Data.AnnotatorPVDepth; end;
+    if EvalText(RawScore,Score,Depth) then begin
+      if TryStrToInt(StoredDepth,N) and (N>=0) then Score+=','+IntToStr(N);
+      Add('[%eval '+Score+']');
+    end;
   end;
   if ShowClocks then begin
     if Data.HasClockInfo then

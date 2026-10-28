@@ -4,6 +4,35 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### PGN review follow-up — 2026-10-28
+
+- P8: recover collection entries at a fresh tag line after movetext, including
+  unclosed comments/variations and missing results; keep later games reachable.
+- F2: index byte offsets and decode only header prefixes, without copying or
+  converting every movetext byte. Keep per-game validation deferred.
+- F1: reuse successful validation of identical entry bytes for replay; changed
+  bytes still require a new candidate. The proposed shared actor cache awaits
+  a separate review and is not implemented here.
+- P9/P10/U11: retain evaluation depth, document evaluation-source and comment-order
+  normalization, and show traditional NAG symbols on screen while files keep $n.
+- C3: remove tracked references to ignored design-document paths.
+- Validation: 110 PGN checks pass with range/overflow/heap checking; application
+  compiles. Listing 137.1 MB / 20,000 entries takes 445 ms; validation plus cached
+  replay of 200 plies / 676 nodes takes 2,000 ms in an optimized build.
+
+### UCI integration proposal — 2026-10-28
+
+Approved with D1–D3 in Claude review c0493e3; implementation follows separately.
+
+- Inspect the existing engine factory, Hub process worker, analysis runner,
+  configuration editor and GUI composition policy. Prepare a local review
+  proposal for UCI configuration and analysis through those existing components.
+- Specify the shared extractions and interfaces needing review, protocol stop
+  fences, coherent PV/score publication, option persistence, retained INI editing,
+  unchanged GUI layout and staged capability guards. Include fake-engine and
+  Stockfish acceptance tests; leave game running and pondering for later steps.
+- Documentation only; no production changes, compilation or test run in this step.
+
 ### Reviewed PGN integration — 2026-10-28
 
 Commit: `435d6de`.
@@ -52,7 +81,7 @@ Commit: `d082285`.
 - Add 1,193 scanner checks to the normal regression suite, including escaped
   strings, line endings, traditional annotations, malformed input and bounded
   progress. The standalone suite also passes range/overflow and heap checks.
-- Prepare `chatgpt/PGN_INTEGRATION_PROPOSAL.md` for Claude: extend existing
+- Prepare the local PGN proposal (review d082285) for Claude: extend existing
   metadata/actor seams, notation export, file browser and GUI policy (U9).
   Shared production code remains unchanged in this step, pending that review.
 - Validation: full headless regression sweep, source audit, build-info/archive
@@ -152,7 +181,7 @@ Recorded in commit: `f421f5b`.
 - Inspect the board, legal-move routing and PV view connections. The move
   selection and legal list already use the existing game interfaces, but the
   main/mini board bindings and PV browser still require draughts types.
-- Prepare `chatgpt/CHESS_BOARD_INTEGRATION_PROPOSAL.md` for Claude's review before
+- Prepare the local board proposal (review U1/U2) for Claude's review before
   changing the shared board presentation or PV browsing. No production code
   or GUI behaviour changed during this review.
 
