@@ -1,0 +1,19 @@
+hub
+init
+stop
+pos pos=Wbbbbbbbbbbbbbbbbbbbbeeeeeeeeeewwwwwwwwwwwwwwwwwwww
+level moves=1 time=2.000
+go analyze
+stop
+stop
+pos pos=Wbbbbbbbbbbbbbbbbbbbbeeeeeeeeeewwwwwwwwwwwwwwwwwwww moves="32-28"
+level moves=1 time=2.000
+go analyze
+stop
+stop
+pos pos=Wbbbbbbbbbbbbbbbbbbbbeeeeeeeeeewwwwwwwwwwwwwwwwwwww moves="32-28"
+level time=1000
+go mcts
+stop
+stop
+quit

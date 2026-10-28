@@ -62,6 +62,7 @@ GENERIC_UNITS=(
   uAnalysisCoordinator
   uPvSnapshot
   uEngineBase
+  uProcessEngineWorker
   uGameMoveHistory
   uGameOrchestrator
   uGameRunnerThread

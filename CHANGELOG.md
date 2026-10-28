@@ -4,7 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed Hub worker extraction (D3) — 2026-10-28
+
+- Extract Hub's existing process worker, command completion, line framing,
+  bounded reply queue, launch preparation and shutdown into a neutral helper
+  owned by the existing engine. Preserve Hub inheritance and protocol policy.
+- Record the pre-extraction wire stream and retain an exact regression fixture
+  for launch, analysis, navigation/stop, MCTS and quit. No UCI code in this commit.
+- Validation: recorded wire bytes match; full headless and all six GUI suites
+  pass, including Hub fences, analyzer shutdown/position and process isolation.
+  Application compiles; range/overflow/heap-checked wire test passes.
+
 ### PGN review follow-up — 2026-10-28
+
+Commit: `a0a925b`.
 
 - P8: recover collection entries at a fresh tag line after movetext, including
   unclosed comments/variations and missing results; keep later games reachable.

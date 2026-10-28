@@ -7,26 +7,20 @@ interface
 uses
   Classes, SyncObjs, SysUtils,
   uDraughtsBoard, uDraughtsEngine, uDraughtsPosition, uGamePosition, uEngineBase, uEngineParamsJson, uEngineRegistry,
-  uPlatformProcess, uThreadMessageQueue;
+  uPlatformProcess, uThreadMessageQueue, uProcessEngineWorker;
 
 type
   THubEngine = class(TDraughtsEngine)
   private
-    FBuffer: string;
-    FDroppingOutputLine: Boolean;
     FEngine: TExternalEngineDefinition;
     FLevelCommand: string;
     FLastWaitFailure: string;
-    FLineLock: TCriticalSection;
     FParams: TEngineParamArray;
     FProcess: TPlatformProcess;
-    FReceivedLines: TStringList;
     FStopping: Boolean;
     FStopFailed: Boolean;
-    FWorker: TThread;
-    FWorkerQueue: TThreadMessageQueue;
-    FWorkerThreadId: TThreadID;
-    FWorkerThreadIdValid: Boolean;
+    FWorker: TProcessEngineWorker;
+    function WorkerStopping: Boolean;
     function BuildHubPositionCommand: string;
     function DoLaunchAndInit: Boolean;
     procedure DiscardDoneLinesBeforeNewSearch(const AReason: string);
@@ -54,8 +48,6 @@ type
     procedure SendLine(const ALine: string);
     function TakeReceivedLine(const APrefix: string; out ALine: string): Boolean;
     function WaitForDoneMove(ATimeoutMs: Integer; out AMove: string): Boolean;
-    procedure WaitForWorkerCommand(ACommand: TThreadMessage;
-      ACompleted: TSimpleEvent; const AErrorText: string);
     function DrainDoneLinesAfterStop(AQuietMs: Integer): Integer;
     procedure WaitForSearchStopped;
     function WaitForLine(const APrefix: string; ATimeoutMs: Integer;
@@ -107,11 +99,8 @@ type
     hwcStop
   );
 
-  THubWorkerCommand = class(TThreadMessage)
+  THubWorkerCommand = class(TProcessEngineCommand)
   private
-    FBoolResult: Boolean;
-    FCompleted: TSimpleEvent;
-    FErrorMessage: string;
     FGameMinutes: Double;
     FGameMoves: Integer;
     FCommandKind: THubWorkerCommandKind;
@@ -120,15 +109,11 @@ type
     FRemainingSeconds: Double;
     FSide: TDraughtsSide;
     FStartingFEN: string;
-    FStringResult: string;
     FTextValue: string;
     FTotalUsedSeconds: Double;
   public
     constructor Create(AKind: THubWorkerCommandKind); reintroduce;
     destructor Destroy; override;
-    procedure SignalCompleted;
-    property BoolResult: Boolean read FBoolResult write FBoolResult;
-    property ErrorMessage: string read FErrorMessage write FErrorMessage;
     property GameMinutes: Double read FGameMinutes write FGameMinutes;
     property GameMoves: Integer read FGameMoves write FGameMoves;
     property CommandKind: THubWorkerCommandKind read FCommandKind;
@@ -137,20 +122,8 @@ type
     property RemainingSeconds: Double read FRemainingSeconds write FRemainingSeconds;
     property Side: TDraughtsSide read FSide write FSide;
     property StartingFEN: string read FStartingFEN write FStartingFEN;
-    property StringResult: string read FStringResult write FStringResult;
     property TextValue: string read FTextValue write FTextValue;
     property TotalUsedSeconds: Double read FTotalUsedSeconds write FTotalUsedSeconds;
-    property Completed: TSimpleEvent read FCompleted;
-  end;
-
-  THubWorkerThread = class(TThread)
-  private
-    FOwner: THubEngine;
-    FQueue: TThreadMessageQueue;
-  protected
-    procedure Execute; override;
-  public
-    constructor Create(AOwner: THubEngine; AQueue: TThreadMessageQueue);
   end;
 
 function HubQuote(const AText: string): string;
@@ -224,58 +197,13 @@ begin
   inherited Create(CommandNames[AKind]);
   FCommandKind := AKind;
   FMoves := TStringList.Create;
-  FCompleted := TSimpleEvent.Create;
+  AutoFree := AKind=hwcProcessData;
 end;
 
 destructor THubWorkerCommand.Destroy;
 begin
-  FCompleted.Free;
   FMoves.Free;
   inherited Destroy;
-end;
-
-procedure THubWorkerCommand.SignalCompleted;
-begin
-  FCompleted.SetEvent;
-end;
-
-constructor THubWorkerThread.Create(AOwner: THubEngine; AQueue: TThreadMessageQueue);
-begin
-  inherited Create(True);
-  FreeOnTerminate := False;
-  FOwner := AOwner;
-  FQueue := AQueue;
-  Start;
-end;
-
-procedure THubWorkerThread.Execute;
-var
-  CommandObject: TObject;
-  HubCommand: THubWorkerCommand;
-  AutoFreeCommand: Boolean;
-begin
-  FOwner.FWorkerThreadId := System.GetCurrentThreadId;
-  FOwner.FWorkerThreadIdValid := True;
-  try
-    while (not Terminated) and FQueue.WaitPop(CommandObject) do
-    begin
-      if not (CommandObject is THubWorkerCommand) then
-        Continue;
-      HubCommand := THubWorkerCommand(CommandObject);
-      AutoFreeCommand := HubCommand.CommandKind = hwcProcessData;
-      try
-        FOwner.ExecuteWorkerCommand(HubCommand);
-      except
-        on E: Exception do
-          HubCommand.ErrorMessage := E.Message;
-      end;
-      HubCommand.SignalCompleted;
-      if AutoFreeCommand then
-        HubCommand.Free;
-    end;
-  finally
-    FOwner.FWorkerThreadIdValid := False;
-  end;
 end;
 
 constructor THubEngine.Create(AEngine: TExternalEngineDefinition);
@@ -286,13 +214,9 @@ begin
   EngineName := FEngine.IdText;
   if EngineName = '' then
     EngineName := ChangeFileExt(FEngine.ExecutableName, '');
-  FReceivedLines := TStringList.Create;
-  FLineLock := TCriticalSection.Create;
-  FProcess := TPlatformProcess.Create;
-  FProcess.SynchronizeData := False;
-  FProcess.OnData := @ProcessData;
-  FWorkerQueue := TThreadMessageQueue.Create(False);
-  FWorker := THubWorkerThread.Create(Self, FWorkerQueue);
+  FWorker:=TProcessEngineWorker.Create(@ExecuteWorkerCommand,@Log,@WorkerStopping,'Hub');
+  FProcess:=FWorker.Process;
+  FProcess.OnData:=@ProcessData;
   FStopping := False;
   LoadEngineParamsFromJson(EngineParamsFileName(FEngine.ExePath), 'hub', FParams);
   ChangeState(esWaiting, 'hub adapter created');
@@ -301,29 +225,16 @@ end;
 destructor THubEngine.Destroy;
 begin
   Stop;
-  if FWorkerQueue <> nil then
-    FWorkerQueue.Close;
-  if FWorker <> nil then
-  begin
-    FWorker.Terminate;
-    FWorker.WaitFor;
-  end;
   FWorker.Free;
-  FWorkerQueue.Free;
-  FProcess.Free;
-  FLineLock.Free;
-  FReceivedLines.Free;
   FEngine.Free;
   inherited Destroy;
 end;
 
 procedure THubEngine.ProcessData(Sender: TObject; const AText: string);
 var
-  DelimiterLength: Integer;
   DepthText: string;
   InfoLine: string;
   Line: string;
-  LineEnd: Integer;
   LoggedPvText: string;
   LoggedScoreText: string;
   LoggedDepthText: string;
@@ -331,6 +242,8 @@ var
   PvText: string;
   ScoreText: string;
   TimeText: string;
+  Lines: TStringList;
+  Index: Integer;
 begin
   if not IsWorkerThread then
   begin
@@ -342,40 +255,17 @@ begin
   LoggedScoreText := '';
   LoggedDepthText := '';
   LoggedTimeText := '';
-  FLineLock.Acquire;
+  Lines:=TStringList.Create;
   try
-    FBuffer += AText;
-    while True do
-    begin
-      DelimiterLength := Length(LineEnding);
-      LineEnd := Pos(LineEnding, FBuffer);
-      if LineEnd = 0 then
-      begin
-        LineEnd := Pos(#10, FBuffer);
-        DelimiterLength := 1;
-      end;
-      if LineEnd = 0 then
-      begin
-        if Length(FBuffer) > 65536 then
-        begin FBuffer := ''; FDroppingOutputLine := True; end;
-        Break;
-      end;
-      if FDroppingOutputLine or (LineEnd > 65537) then
-      begin
-        Delete(FBuffer, 1, LineEnd + DelimiterLength - 1);
-        FDroppingOutputLine := False;
-        Continue;
-      end;
-
-      Line := Trim(Copy(FBuffer, 1, LineEnd - 1));
-      Delete(FBuffer, 1, LineEnd + DelimiterLength - 1);
+    FWorker.FrameData(AText,Lines);
+    for Index:=0 to Lines.Count-1 do begin
+      Line:=Lines[Index];
       if Line <> '' then
       begin
         if (Pos('info ', LowerCase(Line)) <> 1) and
           (Pos('info=', LowerCase(Line)) <> 1) then
         begin
-          FReceivedLines.Add(Line);
-          if FReceivedLines.Count > 1024 then FReceivedLines.Delete(0);
+          FWorker.AddReceivedLine(Line);
         end;
         if (Pos('info ', LowerCase(Line)) = 1) or
           (Pos('info=', LowerCase(Line)) = 1) then
@@ -412,7 +302,7 @@ begin
       end;
     end;
   finally
-    FLineLock.Release;
+    Lines.Free;
   end;
   // Log observers can publish throttled live snapshots. Parse the complete
   // chunk first so stdout cannot publish the previous info and consume the slot.
@@ -427,122 +317,18 @@ begin
     Log('time; value=' + LoggedTimeText);
 end;
 
-procedure THubEngine.WaitForWorkerCommand(ACommand: TThreadMessage;
-  ACompleted: TSimpleEvent; const AErrorText: string);
-var
-  ElapsedMs: QWord;
-  LastLogTick: QWord;
-  StartTick: QWord;
-  WaitResult: TWaitResult;
-begin
-  StartTick := GetTickCount64;
-  LastLogTick := StartTick;
-  repeat
-    WaitResult := ACompleted.WaitFor(HubWorkerWaitPollMs);
-    if WaitResult = wrSignaled then
-      Exit;
-    if WaitResult = wrError then
-      raise ESyncObjectException.Create(AErrorText);
-
-    if GetTickCount64 - LastLogTick >= HubWorkerWaitLogMs then
-    begin
-      ElapsedMs := GetTickCount64 - StartTick;
-      Log('worker command still waiting; command=' + ACommand.Kind +
-        '; elapsed_ms=' + IntToStr(ElapsedMs) +
-        '; queue_count=' + IntToStr(FWorkerQueue.Count));
-      LastLogTick := GetTickCount64;
-    end;
-  until False;
-end;
-
 function THubEngine.QueueBoolCommand(ACommand: TObject): Boolean;
-var
-  HubCommand: THubWorkerCommand;
-begin
-  Result := False;
-  if not (ACommand is THubWorkerCommand) then
-    Exit;
-  HubCommand := THubWorkerCommand(ACommand);
-  try
-    if IsWorkerThread then
-    begin
-      ExecuteWorkerCommand(HubCommand);
-      Result := HubCommand.BoolResult;
-      Exit;
-    end;
-    if (FWorkerQueue = nil) or (not FWorkerQueue.TryPost(HubCommand)) then
-      raise EInvalidOperation.Create('Hub worker queue is closed');
-    WaitForWorkerCommand(HubCommand, HubCommand.Completed,
-      'Hub worker command wait failed');
-    if HubCommand.ErrorMessage <> '' then
-      raise EInvalidOperation.Create(HubCommand.ErrorMessage);
-    Result := HubCommand.BoolResult;
-  finally
-    HubCommand.Free;
-  end;
-end;
-
+begin Result:=FWorker.QueueBoolCommand(ACommand); end;
 procedure THubEngine.QueueProcedureCommand(ACommand: TObject);
-var
-  HubCommand: THubWorkerCommand;
-begin
-  if not (ACommand is THubWorkerCommand) then
-    Exit;
-  HubCommand := THubWorkerCommand(ACommand);
-  try
-    if IsWorkerThread then
-    begin
-      ExecuteWorkerCommand(HubCommand);
-      Exit;
-    end;
-    if (FWorkerQueue = nil) or (not FWorkerQueue.TryPost(HubCommand)) then
-      raise EInvalidOperation.Create('Hub worker queue is closed');
-    WaitForWorkerCommand(HubCommand, HubCommand.Completed,
-      'Hub worker command wait failed');
-    if HubCommand.ErrorMessage <> '' then
-      raise EInvalidOperation.Create(HubCommand.ErrorMessage);
-  finally
-    HubCommand.Free;
-  end;
-end;
-
-procedure THubEngine.QueueProcessData(const AText: string);
-var
-  HubCommand: THubWorkerCommand;
-begin
-  if AText = '' then
-    Exit;
-  HubCommand := THubWorkerCommand.Create(hwcProcessData);
-  HubCommand.TextValue := AText;
-  if (FWorkerQueue = nil) or (not FWorkerQueue.TryPost(HubCommand)) then
-    HubCommand.Free;
-end;
-
+begin FWorker.QueueProcedureCommand(ACommand); end;
 function THubEngine.QueueStringCommand(ACommand: TObject): string;
-var
-  HubCommand: THubWorkerCommand;
+begin Result:=FWorker.QueueStringCommand(ACommand); end;
+procedure THubEngine.QueueProcessData(const AText: string);
+var C: THubWorkerCommand;
 begin
-  Result := '';
-  if not (ACommand is THubWorkerCommand) then
-    Exit;
-  HubCommand := THubWorkerCommand(ACommand);
-  try
-    if IsWorkerThread then
-    begin
-      ExecuteWorkerCommand(HubCommand);
-      Result := HubCommand.StringResult;
-      Exit;
-    end;
-    if (FWorkerQueue = nil) or (not FWorkerQueue.TryPost(HubCommand)) then
-      raise EInvalidOperation.Create('Hub worker queue is closed');
-    WaitForWorkerCommand(HubCommand, HubCommand.Completed,
-      'Hub worker command wait failed');
-    if HubCommand.ErrorMessage <> '' then
-      raise EInvalidOperation.Create(HubCommand.ErrorMessage);
-    Result := HubCommand.StringResult;
-  finally
-    HubCommand.Free;
-  end;
+  if AText='' then Exit;
+  C:=THubWorkerCommand.Create(hwcProcessData); C.TextValue:=AText;
+  if not FWorker.Post(C) then C.Free;
 end;
 
 procedure THubEngine.ExecuteWorkerCommand(ACommand: TObject);
@@ -587,16 +373,11 @@ begin
 end;
 
 function THubEngine.IsWorkerThread: Boolean;
-begin
-  Result := FWorkerThreadIdValid and
-    (System.GetCurrentThreadId = FWorkerThreadId);
-end;
-
+begin Result:=FWorker.IsWorkerThread; end;
+function THubEngine.WorkerStopping: Boolean;
+begin Result:=FStopping or StopRequested; end;
 procedure THubEngine.SendLine(const ALine: string);
-begin
-  Log('send; message=' + ALine);
-  FProcess.WriteLine(ALine);
-end;
+begin FWorker.SendLine(ALine); end;
 
 procedure THubEngine.SendHubParams;
 var
@@ -613,65 +394,10 @@ begin
   end;
 end;
 
-function THubEngine.WaitForLine(const APrefix: string; ATimeoutMs: Integer;
-  out ALine: string): Boolean;
-var
-  StartTick: QWord;
-begin
-  Result := False;
-  ALine := '';
-  FLastWaitFailure := '';
-  StartTick := GetTickCount64;
-  repeat
-    if FStopping or StopRequested then
-    begin
-      FLastWaitFailure := 'stopping';
-      Exit(False);
-    end;
-    if FProcess.NeedsPolling then
-      FProcess.ReadAvailable;
-    if TakeReceivedLine(APrefix, ALine) then
-      Exit(True);
-    if not FProcess.HasProcess then
-    begin
-      FLastWaitFailure := 'process missing';
-      Log('wait aborted; process missing; expected=' + APrefix);
-      Exit(False);
-    end;
-    if not FProcess.IsRunning then
-    begin
-      FLastWaitFailure := 'process exited';
-      Log('wait aborted; process exited; expected=' + APrefix);
-      Exit(False);
-    end;
-    Sleep(25);
-  until GetTickCount64 - StartTick >= QWord(ATimeoutMs);
-  FLastWaitFailure := 'timeout';
-  Log('wait timeout; expected=' + APrefix + '; timeout_ms=' +
-    IntToStr(ATimeoutMs));
-end;
-
-function THubEngine.TakeReceivedLine(const APrefix: string; out ALine: string
-  ): Boolean;
-var
-  I: Integer;
-begin
-  Result := False;
-  ALine := '';
-  FLineLock.Acquire;
-  try
-    for I := 0 to FReceivedLines.Count - 1 do
-      if (APrefix = '') or (CompareText(Copy(FReceivedLines[I], 1,
-        Length(APrefix)), APrefix) = 0) then
-      begin
-        ALine := FReceivedLines[I];
-        FReceivedLines.Delete(I);
-        Exit(True);
-      end;
-  finally
-    FLineLock.Release;
-  end;
-end;
+function THubEngine.WaitForLine(const APrefix: string; ATimeoutMs: Integer; out ALine: string): Boolean;
+begin Result:=FWorker.WaitForLine(APrefix,ATimeoutMs,ALine); FLastWaitFailure:=FWorker.LastWaitFailure; end;
+function THubEngine.TakeReceivedLine(const APrefix: string; out ALine: string): Boolean;
+begin Result:=FWorker.TakeReceivedLine(APrefix,ALine); end;
 
 procedure THubEngine.DiscardDoneLinesBeforeNewSearch(const AReason: string);
 var
@@ -780,7 +506,6 @@ var
   Args: TStringList;
   InitLines: TStringList;
   I: Integer;
-  LaunchArguments: string;
   Line: string;
 begin
   Result := False;
@@ -788,16 +513,7 @@ begin
   Args := TStringList.Create;
   InitLines := TStringList.Create;
   try
-    LaunchArguments := EngineParamValue(FParams,
-      EngineLaunchArgumentParamName(eekHub), FEngine.Arguments);
-    SplitLaunchArguments(ExpandEnginePlaceholders(LaunchArguments, FEngine), Args);
-    FEngine.IniFileName := EngineParamValue(FParams, 'gui-ini-file',
-      FEngine.IniFileName);
-    FEngine.IniContent := EngineParamValue(FParams, 'gui-ini-content',
-      FEngine.IniContent);
-    WriteEngineIniFile(FEngine.IniFileName, FEngine.IniContent, FEngine);
-    if Trim(FEngine.IniFileName) <> '' then
-      Log('wrote expanded INI/config file; file=' + FEngine.IniFileName);
+    FWorker.PrepareLaunch(FEngine,FParams,Args);
     FStopping := False;
     if StopRequested then Exit;
     Log('launch; executable=' + FEngine.ExePath);
@@ -1171,34 +887,13 @@ procedure THubEngine.DoStop;
 begin
   inherited Stop;
   FStopping := True;
-  if FProcess = nil then
-    Exit;
-  if FProcess.IsRunning then
-  begin
-    try
-      SendLine('stop');
-    except
-      on E: Exception do
-        Log('stop command failed; message=' + E.Message);
-    end;
-    if FProcess.IsRunning then
-    begin
-      Log('request graceful quit');
-      FProcess.RequestQuit('quit', 1000);
-    end;
-    if FProcess.IsRunning then
-    begin
-      Log('terminate process after quit timeout');
-      FProcess.Terminate(1000);
-    end;
-  end;
-  FProcess.Close;
+  if FWorker<>nil then FWorker.StopProcess;
 end;
 
 procedure THubEngine.Stop;
 begin
   DoRequestStop;
-  if (FWorkerQueue = nil) or (FWorkerQueue.IsClosed) then
+  if (FWorker = nil) or FWorker.IsClosed then
     DoStop
   else
     QueueProcedureCommand(THubWorkerCommand.Create(hwcStop));
