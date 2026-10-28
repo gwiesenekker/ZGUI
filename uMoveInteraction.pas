@@ -23,8 +23,10 @@ type
     destructor Destroy; override;
     procedure Clear;
     // Collects the legal moves from ASourceSquare. Returns the move when there
-    // is exactly one; otherwise remembers the source and its distinct targets.
-    function SelectSource(APosition: TGamePosition; ASourceSquare: Integer): string;
+    // is exactly one and the GUI permits one-click play; otherwise remembers
+    // the source and its distinct targets. Draughts retains its default.
+    function SelectSource(APosition: TGamePosition; ASourceSquare: Integer;
+      APlaySingleMoveOnSourceClick: Boolean = True): string;
     procedure TargetChoices(ATargetSquare: Integer; AMoves: TStrings);
     function FindTarget(ATargetSquare: Integer; out AMove: string): Boolean;
     property SourceSquare: Integer read FSourceSquare;
@@ -79,7 +81,7 @@ begin
   FTargets := nil;
 end;
 function TMoveInteraction.SelectSource(APosition: TGamePosition;
-  ASourceSquare: Integer): string;
+  ASourceSquare: Integer; APlaySingleMoveOnSourceClick: Boolean): string;
 var I, J, From, Target: Integer; Known: Boolean;
 begin
   Clear;
@@ -90,7 +92,7 @@ begin
   for I := 0 to FChoices.Count - 1 do
     APosition.MoveSquares(FChoices[I], From, FChoiceTargets[I]);
   if FChoices.Count = 0 then Exit;
-  if FChoices.Count = 1 then Exit(FChoices[0]);
+  if (FChoices.Count = 1) and APlaySingleMoveOnSourceClick then Exit(FChoices[0]);
   FSourceSquare := ASourceSquare;
   for I := 0 to FChoices.Count - 1 do
   begin

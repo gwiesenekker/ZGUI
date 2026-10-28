@@ -4,15 +4,15 @@ program main_form_boundaries_check;
   {$FATAL Build this test with its .lpi project}
 {$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF}
-  Interfaces, Forms, uGameNotationView, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls, Grids,
-  LCLType, Types, Graphics, uMainForm, uRunningGame, uDraughtsBoardControl, uDraughtsBoard, uDraughtsPdn,
+  Interfaces, Forms, uGamePosition, uGameNotationView, Classes, SysUtils, Controls, StdCtrls, Menus, ExtCtrls, Grids,
+  LCLType, Types, Graphics, uMainForm, uRunningGame, uGameBoardControl, uDraughtsBoard, uDraughtsPdn,
   uGameTree, uGameTreePdn, uGameTreeBuilder, uGameSetupTypes, uGameOrchestrator, uGuiDialogs,
   uDraughtsPositionSetupForm, uEngineRegistry, uEngineParamsJson, uAnalyzerRunnerThread,
   uGameGuiMessages, uGameTreeSearchRef, uEngineEditForm, uGameTreeActor, uDisplayedPosition, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine
   {$IFDEF UNIX}, BaseUnix{$ENDIF};
 
 type
-  TBoardPaintAccess = class(TDraughtsBoardControl)
+  TBoardPaintAccess = class(TGameBoardControl)
     procedure Render(Image: TBitmap);
   end;
   TCaptureChoice = class
@@ -57,7 +57,7 @@ begin
   raise Exception.Create('Missing menu: ' + Caption);
 end;
 
-function PointForSquare(Board: TDraughtsBoardControl; Square: Integer): TPoint;
+function PointForSquare(Board: TGameBoardControl; Square: Integer): TPoint;
 var X, Y, Step: Integer;
 begin
   Step := Board.BoardSquareSize div 2; if Step < 1 then Step := 1;
@@ -75,14 +75,14 @@ begin
   raise Exception.Create('Cannot locate square ' + IntToStr(Square));
 end;
 
-procedure ClickSquare(Board: TDraughtsBoardControl; Square: Integer);
+procedure ClickSquare(Board: TGameBoardControl; Square: Integer);
 var P: TPoint;
 begin P := PointForSquare(Board, Square); Board.OnMouseDown(Board, mbLeft, [], P.X, P.Y); end;
 
 { QA 2026-10-27: clicking right of the moves of a short game raised
   ERangeError "Column" from the notation document. }
 procedure CheckNotationClickPastLineEnd;
-var Form: TMainForm; Game: TPdnGame; View: TGameNotationView; Board: TDraughtsBoardControl;
+var Form: TMainForm; Game: TPdnGame; View: TGameNotationView; Board: TGameBoardControl;
   Expected: TDraughtsBoard;
 begin
   Form := TMainForm.Create(nil); Game := TPdnGame.Create; Expected := TDraughtsBoard.Create;
@@ -90,13 +90,13 @@ begin
     Game.MovesText := '32-28 18-23';
     Form.LoadPdnGameToDisplay(Game);
     View := TGameNotationView(Form.FindComponent('GameMoveMemo'));
-    Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    Board := TGameBoardControl(Form.FindComponent('MainBoard'));
     Check((View.Lines.Count = 1) and (Length(View.Lines[0]) < 40), 'short single-line notation fixture');
     View.LogicalCaretXY := Point(Length(View.Lines[0]) + 25, 1);
     View.OnClick(View);
     Check(View.SelStart <= Length(View.Text), 'caret right of the line maps into the text');
     Expected.PlayMove('32-28'); Expected.PlayMove('18-23');
-    Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'click after the last move shows the final position');
+    Check(Board.Position.ToFEN = Expected.CurrentFEN, 'click after the last move shows the final position');
     View.LogicalCaretXY := Point(500, 10);
     View.OnClick(View);
     Check(View.SelStart <= Length(View.Text), 'caret below the text maps into the text');
@@ -105,14 +105,14 @@ end;
 
 procedure CheckCaptureAndFlip;
 const Fen = 'W:WK32:B27,28';
-var Form: TMainForm; Board: TDraughtsBoardControl; Expected: TDraughtsBoard;
+var Form: TMainForm; Board: TGameBoardControl; Expected: TDraughtsBoard;
   Legal: string; Destination, I: Integer; Key: Word; BeforeText: string;
   Points: array[1..50] of TPoint; Flipped: Boolean; NodeId: Int64;
 begin
   Form := TMainForm.Create(nil); Expected := TDraughtsBoard.Create;
   try
     Form.LoadStandaloneFen(Fen);
-    Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    Board := TGameBoardControl(Form.FindComponent('MainBoard'));
     Board.SetBounds(0, 0, 500, 500);
     Expected.LoadFromFEN(Fen);
     Check(Expected.LegalMoveCount > 1, 'fixture offers several captures from one square');
@@ -127,7 +127,7 @@ begin
     ClickSquare(Board, Destination);
     Check((Form.ActiveGameTree.MainlineCount = 1) and
       (Form.ActiveGameTree.MainlineNode[1].MoveText = Legal), 'target click chooses the canonical capture');
-    Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'capture click displays its resulting position');
+    Check(Board.Position.ToFEN = Expected.CurrentFEN, 'capture click displays its resulting position');
     BeforeText := GameTreeToPdnText(Form.ActiveGameTree); NodeId := Form.ActiveGameTree.MainlineNode[1].NodeId;
     Flipped := Board.BoardFlipped;
     for I := 1 to 50 do Points[I] := PointForSquare(Board, I);
@@ -139,7 +139,7 @@ begin
     Check(Board.BoardFlipped = Flipped, 'second flip restores orientation');
     Check((GameTreeToPdnText(Form.ActiveGameTree) = BeforeText) and
       (Form.ActiveGameTree.MainlineNode[1].NodeId = NodeId) and
-      (Board.Board.CurrentFEN = Expected.CurrentFEN), 'flip preserves model, identity and displayed position');
+      (Board.Position.ToFEN = Expected.CurrentFEN), 'flip preserves model, identity and displayed position');
   finally Expected.Free; Form.Free; end;
 end;
 
@@ -163,7 +163,7 @@ begin
 end;
 procedure CheckAmbiguousCapture;
 const Fen = 'W:WK21:B31,39,14,17,19';
-var Form: TMainForm; Board: TDraughtsBoardControl; Expected: TDraughtsBoard;
+var Form: TMainForm; Board: TGameBoardControl; Expected: TDraughtsBoard;
   Choice: TCaptureChoice; Moves: TStringList; I, Scenario: Integer; Before: string;
 begin
   Choice := TCaptureChoice.Create; Expected := TDraughtsBoard.Create;
@@ -182,26 +182,26 @@ begin
         Form.LoadStandaloneFen(Fen); Choice.MainForm := Form;
         Choice.ChangePosition := Scenario = 2;
         if Scenario = 2 then Choice.Index := 0 else Choice.Index := Scenario;
-        Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+        Board := TGameBoardControl(Form.FindComponent('MainBoard'));
         Board.SetBounds(0, 0, 500, 500);
         Expected.LoadFromFEN(Fen);
         Before := GameTreeToPdnText(Form.ActiveGameTree);
         ClickSquare(Board, 21); ClickSquare(Board, 26);
         if Scenario = -1 then
           Check((GameTreeToPdnText(Form.ActiveGameTree) = Before) and
-            (Board.Board.CurrentFEN = Expected.CurrentFEN), 'cancel leaves tree and board untouched')
+            (Board.Position.ToFEN = Expected.CurrentFEN), 'cancel leaves tree and board untouched')
         else if Scenario = 2 then
         begin
           Expected.SetBeginPosition;
           Check((Form.ActiveGameTree.MainlineCount = 0) and
-            (Board.Board.CurrentFEN = Expected.CurrentFEN), 'position change while choosing rejects stale choice');
+            (Board.Position.ToFEN = Expected.CurrentFEN), 'position change while choosing rejects stale choice');
         end
         else
         begin
           Expected.LoadFromFEN(Fen); Expected.PlayMove(Moves[Scenario]);
           Check((Form.ActiveGameTree.MainlineCount = 1) and
             (Form.ActiveGameTree.MainlineNode[1].MoveText = Moves[Scenario]), 'explicit capture choice reaches actor');
-          Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'each selected capture displays the correct surviving pieces');
+          Check(Board.Position.ToFEN = Expected.CurrentFEN, 'each selected capture displays the correct surviving pieces');
         end;
       finally Form.Free; end;
     end;
@@ -345,7 +345,7 @@ begin
     Memo := TGameNotationView(Form.FindComponent('GameMoveMemo'));
     Key := VK_LEFT; Memo.OnKeyDown(Memo, Key, []); // following -> tip
     Key := VK_LEFT; Memo.OnKeyDown(Memo, Key, []); // tip -> ply 1
-    Check(TDraughtsBoardControl(Form.FindComponent('MainBoard')).Board.SideToMove = dsBlack,
+    Check(TGameBoardControl(Form.FindComponent('MainBoard')).Position.SideToMove = gsBlack,
       'historical analysis starts after the first move');
     NodeId := Form.ActiveGameTree.MainlineNode[1].NodeId;
     Item := Menu(Form, 'Open Annotator'); Popup := TPopupMenu(Item.GetParentMenu); Popup.OnPopup(Popup);
@@ -411,7 +411,7 @@ begin
 end;
 
 procedure CheckHintModes;
-var Form: TMainForm; Board: TDraughtsBoardControl; Actor: TGameTreeActor;
+var Form: TMainForm; Board: TGameBoardControl; Actor: TGameTreeActor;
   Display: TDisplayedPosition; Command: TGameTreeCommand;
   Main, Annotator, None: TMenuItem; Before, Fen: string; Key: Word; I: Integer; Image: TBitmap;
   function SquareHasColor(Square: Integer; Color: TColor): Boolean;
@@ -439,7 +439,7 @@ begin
   Form.LoadStandaloneFen(DefaultStartingFEN);
   Actor := TGameTreeActor.Create(Form.ActiveGameTree, False);
   try
-    Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    Board := TGameBoardControl(Form.FindComponent('MainBoard'));
     Board.Align := alNone; Board.SetBounds(0, 0, 500, 500);
     Board.PvSourceSquareColor := clFuchsia; Board.HintSourceSquareColor := clAqua;
     Main := Menu(Form, 'Show hints from main PV');
@@ -452,7 +452,7 @@ begin
     try Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText); finally Command.Free; end;
     Form.TestAnalysis.Pv.SetAnalyzerBaseFromTree(Form.ActiveGameTree, Form.ActiveGameTree.Root.NodeId,
       0, nil, Display, Actor.Revision);
-    Before := GameTreeToPdnText(Form.ActiveGameTree); Fen := Board.Board.CurrentFEN;
+    Before := GameTreeToPdnText(Form.ActiveGameTree); Fen := Board.Position.ToFEN;
     Main.Click;
     Check((Board.PvSourceSquare = 32) and (Board.HintSourceSquare = 18) and
       (Board.PvTargetSquare = 28) and (Board.HintTargetSquare = 23), 'main PV supplies its source/target hints');
@@ -483,7 +483,7 @@ begin
     Main.Click;
     Check(Main.Checked and not Annotator.Checked and not None.Checked and
       (Board.PvSourceSquare = 32), 'main hints can be re-enabled');
-    Check((GameTreeToPdnText(Form.ActiveGameTree) = Before) and (Board.Board.CurrentFEN = Fen),
+    Check((GameTreeToPdnText(Form.ActiveGameTree) = Before) and (Board.Position.ToFEN = Fen),
       'hint choices do not modify game data or displayed position');
     ClickSquare(Board, 32); ClickSquare(Board, 28);
     Check((Board.PvSourceSquare = 0) and (Board.PvTargetSquare = 0) and
@@ -498,7 +498,7 @@ end;
 
 procedure CheckAnalysisAfterPlayedMoves;
 var Form: TMainForm; Game: TPdnGame; Actor: TGameTreeActor;
-  Command: TGameTreeCommand; Memo: TGameNotationView; Board: TDraughtsBoardControl;
+  Command: TGameTreeCommand; Memo: TGameNotationView; Board: TGameBoardControl;
   Expected: TDraughtsBoard; Before: string; Key: Word; Mode: Integer;
   EngineFull, AnnotatorFull: TMenuItem;
   procedure RecordPV(Base: Integer; const Pv: string; Annotator: Boolean);
@@ -527,7 +527,7 @@ begin
     RecordPV(3, '12-18 41-37', False);
     Before := GameTreeToPdnText(Form.ActiveGameTree);
     Memo := TGameNotationView(Form.FindComponent('GameMoveMemo')); Memo.Enabled := False;
-    Board := TDraughtsBoardControl(Form.FindComponent('MainBoard'));
+    Board := TGameBoardControl(Form.FindComponent('MainBoard'));
     EngineFull := Menu(Form, 'Show engine full PV');
     AnnotatorFull := Menu(Form, 'Show annotator full PV');
     if not Menu(Form, 'Show engine PV move').Checked then Menu(Form, 'Show engine PV move').Click;
@@ -545,15 +545,15 @@ begin
         'engine/annotator full lines and first moves follow their played move');
       SelectMove('20-24');
       Expected.SetBeginPosition; Expected.PlayMove('32-28'); Expected.PlayMove('20-24');
-      Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'relocated engine PV replays from its original base');
+      Check(Board.Position.ToFEN = Expected.CurrentFEN, 'relocated engine PV replays from its original base');
       Key := VK_ESCAPE; Memo.OnKeyDown(Memo, Key, []);
       SelectMove('19-23');
       Expected.SetBeginPosition; Expected.PlayMove('32-28'); Expected.PlayMove('19-23');
-      Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'relocated annotator PV replays from its original base');
+      Check(Board.Position.ToFEN = Expected.CurrentFEN, 'relocated annotator PV replays from its original base');
       Key := VK_ESCAPE; Memo.OnKeyDown(Memo, Key, []);
       SelectMove('18-23');
       Expected.SetBeginPosition; Expected.PlayMove('32-28'); Expected.PlayMove('18-23');
-      Check(Board.Board.CurrentFEN = Expected.CurrentFEN, 'played move selection remains distinct from analysis');
+      Check(Board.Position.ToFEN = Expected.CurrentFEN, 'played move selection remains distinct from analysis');
       Check(GameTreeToPdnText(Form.ActiveGameTree) = Before, 'relocated analysis browsing preserves game and export');
     end;
   finally Actor.Free; Expected.Free; Game.Free; Form.Free; end;

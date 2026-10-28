@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
-  LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uDraughtsBoardControl,
+  LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uChessPosition,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
   uEngineParamsJson, uEngineRegistry, uDraughtsPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
@@ -16,6 +16,9 @@ uses
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type
+  TGuiGameFeature = (gfPdn, gfPositionSetup, gfDatabase, gfTournament,
+    gfEngines, gfNewGame);
+
   TPvHintSource = (phsMain, phsAnalyzer, phsNone);
 
   TDisplayedBoardInfo = record
@@ -30,13 +33,11 @@ type
     FAnalyzerCloseMenuItem: TMenuItem;
     FAnalyzerEngineKey: string;
     FAnnotatorSecondsEdit: TEdit;
-    FAnalyzerMiniBoard: TDraughtsBoard;
-    FAnalyzerMiniBoardControl: TDraughtsBoardControl;
+    FAnalyzerMiniBoardControl: TGameBoardControl;
     FAnalyzerMiniBoardForm: TForm;
     FAnalyzerMemo: TMemo;
     FAnalyzerOpenMenuItem: TMenuItem;
-    FAnalyzerPopoutBoard: TDraughtsBoard;
-    FAnalyzerPopoutBoardControl: TDraughtsBoardControl;
+    FAnalyzerPopoutBoardControl: TGameBoardControl;
     FAnalyzerPopup: TPopupMenu;
     FAnalyzerPvBrowser: TPvBrowser;
     FAnalyzerPvMemo: TMemo;
@@ -44,8 +45,8 @@ type
     FAnalysis: TAnalysisCoordinator;
     FAutoPlay: TAutoPlayCoordinator;
     FAutoPlayButton: TButton;
-    FBoard: TDraughtsBoard;
-    FBoardControl: TDraughtsBoardControl;
+    FBoard: TGamePosition;
+    FBoardControl: TGameBoardControl;
     FBoardFlipped: Boolean;
     FBlackClockLabel: TLabel;
     FClosing: Boolean;
@@ -61,8 +62,6 @@ type
     FGameLogMemoShowStdout: Boolean;
     FGameLogMemo: TMemo;
     FDisplayedPosition: TDisplayedPosition;
-    // Reused by the draughts board wrappers (main thread only).
-    FDraughtsScratch: TDraughtsPosition;
     // Reused displayed-position scratch for the active tree's game (main thread).
     FPositionScratch: TGamePosition;
     FPositionScratchVariant: TGameVariant;
@@ -107,8 +106,7 @@ type
     FMoveInteraction: TMoveInteraction;
     FLegalMovesMemo: TMemo;
     FLastDatabaseSearchFEN: string;
-    FMiniBoard: TDraughtsBoard;
-    FMiniBoardControl: TDraughtsBoardControl;
+    FMiniBoardControl: TGameBoardControl;
     FMiniBoardForm: TForm;
     FMctsCloseMenuItem: TMenuItem;
     FMctsEngineKey: string;
@@ -122,8 +120,7 @@ type
     FHintFromMainMenuItem: TMenuItem;
     FHintNoneMenuItem: TMenuItem;
     FPvHintSource: TPvHintSource;
-    FPopoutBoard: TDraughtsBoard;
-    FPopoutBoardControl: TDraughtsBoardControl;
+    FPopoutBoardControl: TGameBoardControl;
     FPositionSetupForm: TPositionSetupForm;
     FManualForm: TManualForm;
     FPendingEngineProblems: TStringList; // caption #1 text
@@ -156,8 +153,10 @@ type
     FDisplayBoardFailed: Boolean;
     FWhiteClockLabel: TLabel;
     FWhitePlayerEdit: TEdit;
+    function GameSupports(AFeature: TGuiGameFeature): Boolean;
+    procedure ApplyFeature(AComponent: TComponent; AFeature: TGuiGameFeature);
     procedure ApplyBoardFlipped;
-    procedure ApplyBoardTheme(AControl: TDraughtsBoardControl;
+    procedure ApplyBoardTheme(AControl: TGameBoardControl;
       AUseAnalysisTheme: Boolean);
     procedure ApplyPreferences;
     procedure ApplyGameToDisplay(AGame: TRunningGame);
@@ -308,9 +307,9 @@ type
     function ClockValuesForTree(AGameTree: TGameTree;
       out AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
       ABlackUsedSeconds: Double): Boolean;
-    // Board-control path only: the displayed position as a draughts board.
+    // Board-control path through the existing displayed-position replay.
     function TryBuildDisplayedBoard(AGameTree: TGameTree;
-      ABoard: TDraughtsBoard): Boolean;
+      ABoard: TGamePosition): Boolean;
     function TryBuildDisplayedPosition(AGameTree: TGameTree;
       APosition: TGamePosition): Boolean; overload;
     function TryBuildDisplayedPosition(AGameTree: TGameTree;
@@ -556,7 +555,7 @@ var
 begin
   inherited Create(AOwner);
 
-  Caption := 'ZGUI - International Polish Draughts';
+  Caption := 'ZGUI - '+DefaultGameVariant.Name;
   Application.HintColor := RGBToColor(255, 255, 225);
   Screen.HintFont.Color := clBlack;
   Position := poDesigned;
@@ -569,18 +568,14 @@ begin
   Constraints.MinHeight := 520;
   CenterFormOnLaptopPanel(Self, 0);
 
-  FBoard := TDraughtsBoard.Create;
-  FMiniBoard := TDraughtsBoard.Create;
-  FPopoutBoard := TDraughtsBoard.Create;
-  FAnalyzerMiniBoard := TDraughtsBoard.Create;
-  FAnalyzerPopoutBoard := TDraughtsBoard.Create;
-  FStartingFEN := FBoard.StartingFEN;
+  FBoard := DefaultGameVariant.CreatePosition;
+  FStartingFEN := DefaultGameVariant.DefaultStartingFEN;
   FGameState := gosWaiting;
   FGameResult := '*';
   FAnalysis := TAnalysisCoordinator.Create;
   FAutoPlay := TAutoPlayCoordinator.Create;
   FDisplayedPosition := TDisplayedPosition.Create;
-  FDraughtsScratch := TDraughtsPosition.Create;
+
   FNotation := TNotationPresentation.Create;
   FGameTreeBrowseMode := False;
   FGameLogSourceGameId := -1;
@@ -625,11 +620,13 @@ begin
   LMenuItem.Caption := '&Open PDN...';
   LMenuItem.ShortCut := ShortCut(Ord('O'), [ssCtrl]);
   LMenuItem.OnClick := @OpenPdnClick;
+  ApplyFeature(LMenuItem, gfPdn);
   LFileMenu.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := '&Save PDN...';
   LMenuItem.ShortCut := ShortCut(Ord('S'), [ssCtrl]);
   LMenuItem.OnClick := @SavePdnClick;
+  ApplyFeature(LMenuItem, gfPdn);
   LFileMenu.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := '&Preferences...';
@@ -648,15 +645,18 @@ begin
   LDatabaseMenu := TMenuItem.Create(Self);
   LDatabaseMenu.Caption := '&Database';
   LMainMenu.Items.Add(LDatabaseMenu);
+  ApplyFeature(LDatabaseMenu,gfDatabase);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := '&Create database...';
   LMenuItem.ShortCut := ShortCut(Ord('N'), [ssCtrl, ssShift]);
   LMenuItem.OnClick := @CreateDatabaseClick;
+  ApplyFeature(LMenuItem, gfDatabase);
   LDatabaseMenu.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := '&Open database...';
   LMenuItem.ShortCut := ShortCut(Ord('O'), [ssCtrl, ssShift]);
   LMenuItem.OnClick := @OpenDatabaseClick;
+  ApplyFeature(LMenuItem, gfDatabase);
   LDatabaseMenu.Add(LMenuItem);
   LHelpMenu := TMenuItem.Create(Self);
   LHelpMenu.Caption := '&Help'; LMainMenu.Items.Add(LHelpMenu);
@@ -684,6 +684,7 @@ begin
   FAutoPlayButton.Caption := 'Auto Play';
   FAutoPlayButton.Enabled := False;
   FAutoPlayButton.OnClick := @AutoPlayClick;
+  ApplyFeature(FAutoPlayButton, gfEngines);
 
   LAnnotatorSecondsPanel := TPanel.Create(Self);
   LAnnotatorSecondsPanel.Parent := LToolbar;
@@ -698,6 +699,7 @@ begin
   FAnnotatorSecondsEdit.Hint := 'Annotator seconds';
   FAnnotatorSecondsEdit.ShowHint := True;
   FAnnotatorSecondsEdit.OnEditingDone := @AnnotatorSecondsEditingDone;
+  ApplyFeature(FAnnotatorSecondsEdit,gfEngines);
 
   LTournamentButton := TButton.Create(Self);
   LTournamentButton.Parent := LToolbar;
@@ -706,6 +708,7 @@ begin
   LTournamentButton.BorderSpacing.Left := 8;
   LTournamentButton.Caption := 'Tournament...';
   LTournamentButton.OnClick := @TournamentClick;
+  ApplyFeature(LTournamentButton, gfTournament);
 
   LResetButton := TButton.Create(Self);
   LResetButton.Parent := LToolbar;
@@ -714,6 +717,7 @@ begin
   LResetButton.BorderSpacing.Left := 8;
   LResetButton.Caption := 'New game...';
   LResetButton.OnClick := @NewGameClick;
+  ApplyFeature(LResetButton, gfNewGame);
 
   LEnginesButton := TButton.Create(Self);
   LEnginesButton.Parent := LToolbar;
@@ -721,6 +725,7 @@ begin
   LEnginesButton.Width := 120;
   LEnginesButton.Caption := 'Engines...';
   LEnginesButton.OnClick := @EnginesClick;
+  ApplyFeature(LEnginesButton, gfEngines);
 
   LBottomPanel := TPanel.Create(Self);
   LBottomPanel.Parent := Self;
@@ -744,20 +749,24 @@ begin
   FAnalyzerPopup.OnPopup := @AnalyzerPopupPopup;
   FAnalyzerOpenMenuItem := TMenuItem.Create(Self);
   FAnalyzerOpenMenuItem.Caption := 'Open Annotator';
+  ApplyFeature(FAnalyzerOpenMenuItem,gfEngines);
   FAnalyzerPopup.Items.Add(FAnalyzerOpenMenuItem);
   FAnalyzerCloseMenuItem := TMenuItem.Create(Self);
   FAnalyzerCloseMenuItem.Caption := 'Close Annotator';
   FAnalyzerCloseMenuItem.OnClick := @CloseAnalyzerClick;
+  ApplyFeature(FAnalyzerCloseMenuItem,gfEngines);
   FAnalyzerPopup.Items.Add(FAnalyzerCloseMenuItem);
 
   FMctsPopup := TPopupMenu.Create(Self);
   FMctsPopup.OnPopup := @MctsPopupPopup;
   FMctsOpenMenuItem := TMenuItem.Create(Self);
   FMctsOpenMenuItem.Caption := 'Open MCTS annotator';
+  ApplyFeature(FMctsOpenMenuItem,gfEngines);
   FMctsPopup.Items.Add(FMctsOpenMenuItem);
   FMctsCloseMenuItem := TMenuItem.Create(Self);
   FMctsCloseMenuItem.Caption := 'Close MCTS annotator';
   FMctsCloseMenuItem.OnClick := @CloseMctsClick;
+  ApplyFeature(FMctsCloseMenuItem,gfEngines);
   FMctsPopup.Items.Add(FMctsCloseMenuItem);
 
   LAnalyzerBoardPanel := TPanel.Create(Self);
@@ -781,10 +790,10 @@ begin
   LAnalyzerMiniBoardPanel.BevelOuter := bvNone;
   LAnalyzerMiniBoardPanel.BorderSpacing.Right := 6;
 
-  FAnalyzerMiniBoardControl := TDraughtsBoardControl.Create(Self);
+  FAnalyzerMiniBoardControl := CreateGameBoardControl(Self, DefaultGameVariant);
   FAnalyzerMiniBoardControl.Parent := LAnalyzerMiniBoardPanel;
   FAnalyzerMiniBoardControl.Align := alClient;
-  FAnalyzerMiniBoardControl.Board := FAnalyzerMiniBoard;
+
   FAnalyzerMiniBoardControl.ShowCoordinates := False;
   FAnalyzerMiniBoardControl.PopupMenu := LAnalyzerBoardPopup;
   FAnalyzerMiniBoardControl.OnDblClick := @AnalyzerMiniBoardDblClick;
@@ -831,7 +840,7 @@ begin
   FAnalyzerPvMemo.Lines.Add('No PV');
   FAnalyzerPvMemo.PopupMenu := FAnalyzerPopup;
 
-  FAnalyzerPvBrowser := TPvBrowser.Create(FAnalyzerMiniBoard,
+  FAnalyzerPvBrowser := TPvBrowser.Create(DefaultGameVariant,
     FAnalyzerMiniBoardControl, nil, FAnalyzerPvMemo);
   FAnalyzerPvBrowser.OnBoardChanged := @AnalyzerPvBoardChanged;
 
@@ -925,6 +934,7 @@ begin
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'New game...';
   LMenuItem.OnClick := @NewGameClick;
+  ApplyFeature(LMenuItem, gfNewGame);
   LGamesPopup.Items.Add(LMenuItem);
   FReplayGameMenuItem := TMenuItem.Create(Self);
   FReplayGameMenuItem.Caption := 'Replay game';
@@ -958,6 +968,7 @@ begin
   LLegalMovesLabel.Layout := tlCenter;
 
   FLegalMovesMemo := TMemo.Create(Self);
+  FLegalMovesMemo.Name := 'LegalMovesMemo';
   FLegalMovesMemo.Parent := LLegalPanel;
   FLegalMovesMemo.SetBounds(0, 24, LLegalPanel.ClientWidth, LLegalPanel.ClientHeight - 24);
   FLegalMovesMemo.Anchors := [akTop, akLeft, akRight, akBottom];
@@ -1104,11 +1115,11 @@ begin
   LMenuItem.OnClick := @MiniBoardPopoutClick;
   LPvPopup.Items.Add(LMenuItem);
 
-  FMiniBoardControl := TDraughtsBoardControl.Create(Self);
+  FMiniBoardControl := CreateGameBoardControl(Self, DefaultGameVariant);
   FMiniBoardControl.Name := 'EnginePvBoard';
   FMiniBoardControl.Parent := LPvBoardPanel;
   FMiniBoardControl.Align := alClient;
-  FMiniBoardControl.Board := FMiniBoard;
+
   FMiniBoardControl.ShowCoordinates := False;
   FMiniBoardControl.PopupMenu := LPvPopup;
   FMiniBoardControl.OnDblClick := @MiniBoardDblClick;
@@ -1170,7 +1181,7 @@ begin
   FPvMemo.WordWrap := True;
   FPvMemo.HideSelection := False;
 
-  FPvBrowser := TPvBrowser.Create(FMiniBoard, FMiniBoardControl, FPvInfoLabel,
+  FPvBrowser := TPvBrowser.Create(DefaultGameVariant, FMiniBoardControl, FPvInfoLabel,
     FPvMemo);
   FPvBrowser.OnBoardChanged := @PvBoardChanged;
 
@@ -1195,11 +1206,11 @@ begin
   FWhiteClockLabel.Alignment := taCenter;
   FWhiteClockLabel.Layout := tlCenter;
 
-  FBoardControl := TDraughtsBoardControl.Create(Self);
+  FBoardControl := CreateGameBoardControl(Self, DefaultGameVariant);
   FBoardControl.Name := 'MainBoard';
   FBoardControl.Parent := LMainPanel;
   FBoardControl.Align := alClient;
-  FBoardControl.Board := FBoard;
+  FBoardControl.SetPosition(FBoard);
   FBoardControl.ShowSideToMoveMarker := True;
   FBoardControl.OnMouseDown := @BoardMouseDown;
   FBoardControl.BoardFlipped := FBoardFlipped;
@@ -1232,6 +1243,7 @@ begin
   FSearchPositionInDatabaseMenuItem.AutoCheck := False;
   FSearchPositionInDatabaseMenuItem.Checked := FSearchPositionInDatabase;
   FSearchPositionInDatabaseMenuItem.OnClick := @SearchPositionInDatabaseClick;
+  ApplyFeature(FSearchPositionInDatabaseMenuItem, gfDatabase);
   LBoardPopup.Items.Add(FSearchPositionInDatabaseMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := '-';
@@ -1239,6 +1251,7 @@ begin
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'Setup position...';
   LMenuItem.OnClick := @SetupPositionClick;
+  ApplyFeature(LMenuItem, gfPositionSetup);
   LBoardPopup.Items.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'Copy FEN position to clipboard';
@@ -1284,17 +1297,13 @@ begin
   FAnalysis.Free;
   FNotation.Free;
   FDisplayedPosition.Free;
-  FDraughtsScratch.Free;
+
   FPositionScratch.Free;
   FMoveInteraction.Free;
   FGameTreeActor.Free;
   FGameTree.Free;
   FGameLog.Free;
   FGames.Free;
-  FAnalyzerPopoutBoard.Free;
-  FAnalyzerMiniBoard.Free;
-  FPopoutBoard.Free;
-  FMiniBoard.Free;
   FBoard.Free;
   inherited Destroy;
 end;
@@ -1309,7 +1318,36 @@ begin
     Result := LGame.GameTree;
 end;
 
-procedure TMainForm.ApplyBoardTheme(AControl: TDraughtsBoardControl;
+function TMainForm.GameSupports(AFeature: TGuiGameFeature): Boolean;
+begin
+  // GUI composition policy for this standalone-exploration step. Game rules
+  // and shared runners do not know which UI/file/engine adapters are ready.
+  case AFeature of
+    gfPdn, gfPositionSetup, gfDatabase, gfTournament, gfEngines, gfNewGame:
+      Result := not (DefaultGameVariant is TChessVariant);
+  end;
+end;
+
+procedure TMainForm.ApplyFeature(AComponent: TComponent; AFeature: TGuiGameFeature);
+begin
+  if AComponent is TMenuItem then
+  begin
+    TMenuItem(AComponent).Enabled := GameSupports(AFeature);
+    if not GameSupports(AFeature) then
+      TMenuItem(AComponent).Hint := 'Not yet available for chess';
+  end
+  else if AComponent is TControl then
+  begin
+    TControl(AComponent).Enabled := GameSupports(AFeature);
+    if not GameSupports(AFeature) then
+    begin
+      TControl(AComponent).Hint := 'Not yet available for chess';
+      TControl(AComponent).ShowHint := True;
+    end;
+  end;
+end;
+
+procedure TMainForm.ApplyBoardTheme(AControl: TGameBoardControl;
   AUseAnalysisTheme: Boolean);
 begin
   if AControl = nil then
@@ -1781,8 +1819,8 @@ begin
     NodeId := CurrentDisplayedGameTreeNode(ActiveGameTree).NodeId;
     Fen := LPosition.ToFEN;
     for I := 0 to Choices.Count - 1 do Captions.Add(LPosition.MoveNotation(Choices[I]));
-    Choice := ShowGuiChoiceDialog(Self, 'Choose capture',
-      'Several captures reach this square. Choose the path to play.', Captions);
+    Choice := ShowGuiChoiceDialog(Self, 'Choose move',
+      'Several moves reach this square. Choose the move to play.', Captions);
     // A modal chooser pumps events. Never apply a choice to a changed position.
     if (Choice < 0) or (Choice >= Choices.Count) or (ActiveGameTree = nil) then Exit;
     if (ActiveGameTree.GameTreeId <> TreeId) or
@@ -1874,7 +1912,8 @@ begin
   LPosition := ActiveGameTree.Variant.CreatePosition;
   try
     if not TryBuildDisplayedPosition(ActiveGameTree, LPosition) then Exit;
-    Move := FMoveInteraction.SelectSource(LPosition, ASourceSquare);
+    Move := FMoveInteraction.SelectSource(LPosition, ASourceSquare,
+      not (ActiveGameTree.Variant is TChessVariant));
   finally
     LPosition.Free;
   end;
@@ -2014,6 +2053,7 @@ end;
 
 procedure TMainForm.AutoPlayClick(Sender: TObject);
 begin
+  if not GameSupports(gfEngines) then Exit;
   if FAutoPlay.Active then
     StopAutoPlay
   else
@@ -2030,6 +2070,7 @@ var
   LGameTree: TGameTree;
   LNode: TGameTreePlyNode;
 begin
+  if not GameSupports(gfEngines) then Exit;
   LGameTree := ActiveGameTree;
   if (LGameTree = nil) or (StateForTree(LGameTree) <> gosStopped) then
     Exit;
@@ -2422,6 +2463,7 @@ var
   I: Integer;
   Item: TMenuItem;
 begin
+  if not GameSupports(gfEngines) then Exit;
   FAnalyzerOpenMenuItem.Clear;
   FAnalyzerOpenMenuItem.Enabled := FAnalyzerRunner = nil;
   FAnalyzerCloseMenuItem.Enabled := FAnalyzerRunner <> nil;
@@ -2447,6 +2489,7 @@ begin
       Item.Caption := EnginePickerDisplayName(Engines[I], I + 1);
       Item.Hint := EngineKey;
       Item.OnClick := @OpenAnalyzerClick;
+      ApplyFeature(Item, gfEngines);
       FAnalyzerOpenMenuItem.Add(Item);
     end;
   finally
@@ -2470,6 +2513,7 @@ var
   Engines: TExternalEngineList;
   I: Integer;
 begin
+  if not GameSupports(gfEngines) then Exit;
   if FAnalyzerRunner <> nil then
     Exit;
   if not (Sender is TMenuItem) then
@@ -2541,6 +2585,7 @@ var
   I: Integer;
   Item: TMenuItem;
 begin
+  if not GameSupports(gfEngines) then Exit;
   FMctsOpenMenuItem.Clear;
   FMctsOpenMenuItem.Enabled := FMctsRunner = nil;
   FMctsCloseMenuItem.Enabled := FMctsRunner <> nil;
@@ -2566,6 +2611,7 @@ begin
       Item.Caption := EnginePickerDisplayName(Engines[I], I + 1);
       Item.Hint := EngineKey;
       Item.OnClick := @OpenMctsClick;
+      ApplyFeature(Item, gfEngines);
       FMctsOpenMenuItem.Add(Item);
     end;
   finally
@@ -2589,6 +2635,7 @@ var
   Engines: TExternalEngineList;
   I: Integer;
 begin
+  if not GameSupports(gfEngines) then Exit;
   if FMctsRunner <> nil then
     Exit;
   if not (Sender is TMenuItem) then
@@ -2667,6 +2714,7 @@ end;
 procedure TMainForm.RestartAnalyzer(AGameTree: TGameTree);
 var LPosition: TGamePosition; AnalysisPosition: TAnalysisPosition; Request: TAnalysisRequest;
 begin
+  if not GameSupports(gfEngines) then Exit;
   if FAutoPlay.Active or (FAnalyzerRunner = nil) or (AGameTree = nil) then Exit;
   LPosition := AGameTree.Variant.CreatePosition;
   try
@@ -2684,6 +2732,7 @@ end;
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
 var LPosition: TGamePosition; AnalysisPosition: TAnalysisPosition; Request: TAnalysisRequest;
 begin
+  if not GameSupports(gfEngines) then Exit;
   if (FMctsRunner = nil) or (AGameTree = nil) then Exit;
   LPosition := AGameTree.Variant.CreatePosition;
   try
@@ -2743,7 +2792,7 @@ begin
       Exit;
   end;
 
-  if FGameActive and GameTreeHasContent(FGameTree) then
+  if GameSupports(gfPdn) and FGameActive and GameTreeHasContent(FGameTree) then
   begin
     LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
       'Save the standalone board as PDN before closing?', 'Yes', 'No', mrNo);
@@ -2788,6 +2837,7 @@ end;
 
 procedure TMainForm.SetupPositionAccepted(Sender: TObject; const AFEN: string);
 begin
+  if not GameSupports(gfPositionSetup) then Exit;
   if not ConfirmReplaceStandaloneGame then
     Exit;
   try
@@ -2802,6 +2852,7 @@ procedure TMainForm.SetupPositionClick(Sender: TObject);
 var
   LFen: string;
 begin
+  if not GameSupports(gfPositionSetup) then Exit;
   if FPositionSetupForm = nil then
   begin
     FPositionSetupForm := TPositionSetupForm.Create(Self);
@@ -2941,6 +2992,7 @@ var
   LWhiteName: string;
   LBlackName: string;
 begin
+  if not GameSupports(gfPdn) then Exit;
   if AGame = nil then
     Exit;
 
@@ -3098,6 +3150,7 @@ end;
 
 function TMainForm.HasDisplayedGameToSave: Boolean;
 begin
+  if not GameSupports(gfPdn) then Exit(False);
   Result := GameTreeHasContent(ActiveGameTree);
 end;
 
@@ -3105,6 +3158,7 @@ function TMainForm.ConfirmReplaceStandaloneGame: Boolean;
 var
   Response: Integer;
 begin
+  if not GameSupports(gfPdn) then Exit(True);
   Result := True;
   if not GameTreeHasContent(FGameTree) then
     Exit;
@@ -3359,14 +3413,9 @@ end;
 
 
 function TMainForm.TryBuildDisplayedBoard(AGameTree: TGameTree;
-  ABoard: TDraughtsBoard): Boolean;
-var Actor: TGameTreeActor; Revision: Int64;
+  ABoard: TGamePosition): Boolean;
 begin
-  Actor := ActorForGameTree(AGameTree);
-  Revision := -1;
-  if Actor <> nil then Revision := Actor.Revision;
-  Result := TryBuildDraughtsDisplayedBoard(FDisplayedPosition, AGameTree,
-    AGameTree = ActiveGameTree, Revision, ABoard, FDraughtsScratch);
+  Result := TryBuildDisplayedPosition(AGameTree,ABoard);
 end;
 
 function TMainForm.TryBuildDisplayedPosition(AGameTree: TGameTree;
@@ -4002,14 +4051,14 @@ begin
     Caption := 'ZGUI - Cannot display the selected position';
     ClearHumanMoveSelection;
     CancelAnalyzerSearch;
-    if FBoardControl <> nil then FBoardControl.Board := nil;
+    if FBoardControl <> nil then FBoardControl.SetPosition(nil);
     if FAutoPlayButton <> nil then FAutoPlayButton.Enabled := False;
     Exit;
   end;
-  Caption := 'ZGUI - International Polish Draughts';
+  Caption := 'ZGUI - '+DefaultGameVariant.Name;
   if FBoardControl <> nil then
   begin
-    FBoardControl.Board := FBoard;
+    FBoardControl.SetPosition(FBoard);
     FBoardControl.Invalidate;
   end;
   UpdateDatabaseSearchPositionFromTree(AGameTree);
@@ -4189,10 +4238,10 @@ begin
     FMiniBoardForm.Constraints.MinHeight := 320;
     FMiniBoardForm.OnClose := @MiniBoardFormClose;
 
-    FPopoutBoardControl := TDraughtsBoardControl.Create(FMiniBoardForm);
+    FPopoutBoardControl := CreateGameBoardControl(FMiniBoardForm, DefaultGameVariant);
     FPopoutBoardControl.Parent := FMiniBoardForm;
     FPopoutBoardControl.Align := alClient;
-    FPopoutBoardControl.Board := FPopoutBoard;
+
     FPopoutBoardControl.BoardFlipped := FBoardFlipped;
     ApplyBoardTheme(FPopoutBoardControl, False);
 
@@ -4204,7 +4253,12 @@ begin
     FPopoutBoardControl.PopupMenu := LPopup;
   end;
 
-  FPopoutBoard.AssignFrom(FMiniBoard);
+  if FPvBrowser.Position <> nil then
+    begin
+      FPopoutBoardControl.SetPosition(FPvBrowser.Position);
+
+    end
+    else FPopoutBoardControl.SetPosition(nil);
   if FPopoutBoardControl <> nil then
     FPopoutBoardControl.Invalidate;
   ShowFormCenteredOnOwner(FMiniBoardForm, Self);
@@ -4212,8 +4266,9 @@ end;
 
 procedure TMainForm.PopoutBoardCopyFenClick(Sender: TObject);
 begin
-  if FPopoutBoard <> nil then
-    Clipboard.AsText := FPopoutBoard.CurrentFEN;
+  if FPopoutBoardControl <> nil then
+    if FPopoutBoardControl.Position <> nil then
+      Clipboard.AsText := FPopoutBoardControl.Position.ToFEN;
 end;
 
 procedure TMainForm.PvBoardChanged(Sender: TObject);
@@ -4221,9 +4276,14 @@ var
   LGameTree: TGameTree;
 begin
   if (FMiniBoardForm <> nil) and FMiniBoardForm.Visible and
-    (FPopoutBoard <> nil) then
+    (FPopoutBoardControl <> nil) then
   begin
-    FPopoutBoard.AssignFrom(FMiniBoard);
+    if FPvBrowser.Position <> nil then
+    begin
+      FPopoutBoardControl.SetPosition(FPvBrowser.Position);
+
+    end
+    else FPopoutBoardControl.SetPosition(nil);
     if FPopoutBoardControl <> nil then
       FPopoutBoardControl.Invalidate;
   end;
@@ -4263,11 +4323,11 @@ begin
     FAnalyzerMiniBoardForm.Constraints.MinHeight := 320;
     FAnalyzerMiniBoardForm.OnClose := @AnalyzerMiniBoardFormClose;
 
-    FAnalyzerPopoutBoardControl := TDraughtsBoardControl.Create(
-      FAnalyzerMiniBoardForm);
+    FAnalyzerPopoutBoardControl := CreateGameBoardControl(
+      FAnalyzerMiniBoardForm, DefaultGameVariant);
     FAnalyzerPopoutBoardControl.Parent := FAnalyzerMiniBoardForm;
     FAnalyzerPopoutBoardControl.Align := alClient;
-    FAnalyzerPopoutBoardControl.Board := FAnalyzerPopoutBoard;
+
     FAnalyzerPopoutBoardControl.BoardFlipped := FBoardFlipped;
     ApplyBoardTheme(FAnalyzerPopoutBoardControl, True);
 
@@ -4279,7 +4339,12 @@ begin
     FAnalyzerPopoutBoardControl.PopupMenu := LPopup;
   end;
 
-  FAnalyzerPopoutBoard.AssignFrom(FAnalyzerMiniBoard);
+  if FAnalyzerPvBrowser.Position <> nil then
+    begin
+      FAnalyzerPopoutBoardControl.SetPosition(FAnalyzerPvBrowser.Position);
+
+    end
+    else FAnalyzerPopoutBoardControl.SetPosition(nil);
   if FAnalyzerPopoutBoardControl <> nil then
     FAnalyzerPopoutBoardControl.Invalidate;
   ShowFormCenteredOnOwner(FAnalyzerMiniBoardForm, Self);
@@ -4287,8 +4352,9 @@ end;
 
 procedure TMainForm.AnalyzerPopoutBoardCopyFenClick(Sender: TObject);
 begin
-  if FAnalyzerPopoutBoard <> nil then
-    Clipboard.AsText := FAnalyzerPopoutBoard.CurrentFEN;
+  if FAnalyzerPopoutBoardControl <> nil then
+    if FAnalyzerPopoutBoardControl.Position <> nil then
+      Clipboard.AsText := FAnalyzerPopoutBoardControl.Position.ToFEN;
 end;
 
 procedure TMainForm.AnalyzerPvBoardChanged(Sender: TObject);
@@ -4296,9 +4362,14 @@ var
   LGameTree: TGameTree;
 begin
   if (FAnalyzerMiniBoardForm <> nil) and FAnalyzerMiniBoardForm.Visible and
-    (FAnalyzerPopoutBoard <> nil) then
+    (FAnalyzerPopoutBoardControl <> nil) then
   begin
-    FAnalyzerPopoutBoard.AssignFrom(FAnalyzerMiniBoard);
+    if FAnalyzerPvBrowser.Position <> nil then
+    begin
+      FAnalyzerPopoutBoardControl.SetPosition(FAnalyzerPvBrowser.Position);
+
+    end
+    else FAnalyzerPopoutBoardControl.SetPosition(nil);
     if FAnalyzerPopoutBoardControl <> nil then
       FAnalyzerPopoutBoardControl.Invalidate;
   end;
@@ -4378,6 +4449,7 @@ var
   LGameTree: TGameTree;
   LOptions: TGameTreePdnRenderOptions;
 begin
+  if not GameSupports(gfPdn) then Exit('');
   Result := '';
   LGameTree := ActiveGameTree;
   if LGameTree = nil then
@@ -4553,6 +4625,7 @@ var
   LGameTree: TGameTree;
   LOptions: TGameTreePdnRenderOptions;
 begin
+  if not GameSupports(gfPdn) then Exit;
   LGameTree := ActiveGameTree;
   if LGameTree = nil then
     Exit;
@@ -4595,6 +4668,7 @@ begin
     LMenuItem := TMenuItem.Create(FGameTreeForm);
     LMenuItem.Caption := 'Copy tree PDN to clipboard';
     LMenuItem.OnClick := @CopyGameTreePdnClick;
+    ApplyFeature(LMenuItem, gfPdn);
     LPopup.Items.Add(LMenuItem);
     FGameTreeNestedMenuItem := TMenuItem.Create(FGameTreeForm);
     FGameTreeNestedMenuItem.Name := 'GameTreeNestedLayout';
@@ -4669,7 +4743,7 @@ begin
 end;
 procedure TMainForm.AboutClick(Sender: TObject);
 begin
-  ShowGuiOkDialog(Self, 'About ZGUI', AppAboutText);
+  ShowGuiOkDialog(Self, 'About ZGUI', AppAboutText(DefaultGameVariant.Name));
 end;
 
 procedure TMainForm.QuitClick(Sender: TObject);
@@ -4703,7 +4777,7 @@ procedure TMainForm.BoardPopupPopup(Sender: TObject);
 begin
   if FSearchPositionInDatabaseMenuItem <> nil then
   begin
-    FSearchPositionInDatabaseMenuItem.Enabled :=
+    FSearchPositionInDatabaseMenuItem.Enabled := GameSupports(gfDatabase) and
       (FDatabaseForm <> nil) and FDatabaseForm.Visible;
     FSearchPositionInDatabaseMenuItem.Checked := FSearchPositionInDatabase;
   end;
@@ -4732,6 +4806,7 @@ procedure TMainForm.NewGameClick(Sender: TObject);
 var
   LBusyEngineKeys: TStringList;
 begin
+  if not GameSupports(gfNewGame) then Exit;
   if FSetupForm = nil then
   begin
     FSetupForm := TGameSetupForm.Create(Self);
@@ -4750,6 +4825,7 @@ end;
 
 procedure TMainForm.EnginesClick(Sender: TObject);
 begin
+  if not GameSupports(gfEngines) then Exit;
   if FEnginesDialog = nil then
     FEnginesDialog := TEnginesDialog.Create(Self);
   ShowFormCenteredOnOwner(FEnginesDialog, Self);
@@ -4760,6 +4836,7 @@ var
   Dialog: TSaveDialog;
   LFen: string;
 begin
+  if not GameSupports(gfDatabase) then Exit;
   Dialog := TSaveDialog.Create(Self);
   try
     Dialog.Title := 'Create database';
@@ -4795,6 +4872,7 @@ var
   Dialog: TOpenDialog;
   LFen: string;
 begin
+  if not GameSupports(gfDatabase) then Exit;
   Dialog := TOpenDialog.Create(Self);
   try
     Dialog.Title := 'Open database';
@@ -4828,6 +4906,7 @@ procedure TMainForm.OpenPdnClick(Sender: TObject);
 var
   Dialog: TOpenDialog;
 begin
+  if not GameSupports(gfPdn) then Exit;
   Dialog := TOpenDialog.Create(Self);
   try
     Dialog.Title := 'Open PDN';
@@ -4855,6 +4934,7 @@ end;
 
 procedure TMainForm.PdnGameSelected(Sender: TObject; AGame: TPdnGame);
 begin
+  if not GameSupports(gfPdn) then Exit;
   if ConfirmReplaceStandaloneGame then
     LoadPdnGameToDisplay(AGame);
 end;
@@ -4864,6 +4944,7 @@ procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
 var
   LPdnText: string;
 begin
+  if not GameSupports(gfPdn) then Exit;
   if (AGame = nil) or (Trim(AFileName) = '') then
     Exit;
 
@@ -4878,6 +4959,7 @@ var
   LPdnText: string;
   RunningGame: TRunningGame;
 begin
+  if not GameSupports(gfPdn) then Exit(False);
   Result := False;
   RunningGame := SelectedDisplayedGame;
   if RunningGame <> nil then
@@ -4903,6 +4985,7 @@ end;
 
 procedure TMainForm.SavePdnClick(Sender: TObject);
 begin
+  if not GameSupports(gfPdn) then Exit;
   SaveCurrentGameWithDialog;
 end;
 
@@ -4930,6 +5013,7 @@ end;
 
 procedure TMainForm.SearchPositionInDatabaseClick(Sender: TObject);
 begin
+  if not GameSupports(gfDatabase) then Exit;
   if (FDatabaseForm = nil) or (not FDatabaseForm.Visible) then
     Exit;
   FSearchPositionInDatabase := not FSearchPositionInDatabase;
@@ -4944,6 +5028,7 @@ end;
 
 procedure TMainForm.GameSetupAccepted(Sender: TObject; const ASetup: TGameSetup);
 begin
+  if not GameSupports(gfNewGame) then Exit;
   if not CheckSetupEnginesCanStart(ASetup, 'New game') then
     Exit;
   StartGameFromSetup(ASetup);
@@ -4962,6 +5047,8 @@ var
   LWhiteEngineKey: string;
   LWhiteName: string;
 begin
+  if not GameSupports(gfNewGame) then
+    raise EInvalidOperation.Create('Clocked chess games are not yet enabled');
   LWhiteName := PlayerSetupDisplayName(ASetup.WhitePlayer, ASetup.WhiteEngine);
   LBlackName := PlayerSetupDisplayName(ASetup.BlackPlayer, ASetup.BlackEngine);
   LTitle := Trim(ATitlePrefix);
@@ -5013,7 +5100,7 @@ begin
   finally
     LBoard.Free;
   end;
-  FBoardControl.Board := FBoard;
+  FBoardControl.SetPosition(FBoard);
   FGameActive := True;
   RefreshDisplayFromGameTree(Result.GameTree, True);
 
@@ -5358,6 +5445,7 @@ end;
 
 procedure TMainForm.TournamentClick(Sender: TObject);
 begin
+  if not GameSupports(gfTournament) then Exit;
   if FTournamentDialog = nil then
   begin
     FTournamentDialog := TTournamentDialog.Create(Self);
@@ -5740,6 +5828,8 @@ var
 begin
   if FAutoPlayButton = nil then
     Exit;
+  if not GameSupports(gfEngines) then
+  begin FAutoPlayButton.Enabled := False; Exit; end;
   if FAutoPlay.Active then
   begin
     FAutoPlayButton.Caption := 'Auto Playing';
@@ -5824,6 +5914,7 @@ procedure TMainForm.UpdateDatabaseSearchPositionFromTree(AGameTree: TGameTree);
 var
   LFen: string;
 begin
+  if not GameSupports(gfDatabase) then Exit;
   if not TryGetDisplayedBoardFen(AGameTree, LFen) then
     Exit;
   if (not FSearchPositionInDatabase) or (FDatabaseForm = nil) or

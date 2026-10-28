@@ -4,6 +4,28 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed chess board and shared PV integration — 2026-10-28
+
+- Address U1/U2/A1: bind the main/mini/popout views to owned game-position
+  snapshots and adapt the existing PV browser, retaining its navigation,
+  pending-update freeze, selection offsets and invalid-prefix behaviour.
+  Show SAN and variant-provided move numbers; clear incompatible PV bases.
+- U3/U4: add original GPLv3 Canvas vector chess artwork and edge coordinates
+  that follow board orientation. No external piece font/assets are required.
+- U5/U6: retain the existing move router and promotion/capture chooser, with
+  neutral wording and an optional GUI interaction flag so chess always waits
+  for a destination click. Draughts retains its one-move source shortcut.
+- C1/P1: centralize GUI capability guards for not-yet-connected chess features,
+  including automatic database search and PDN save/replace/close paths. Keep
+  all existing controls and layout. Standalone exploration is this step's scope.
+- C2: migrate GUI assertions to the shared position interface. Harden bitmap
+  capture against stale raw-image caches; nonblank saved fixtures match the
+  previous renderer exactly. The new chess GUI suite passes 534 checks,
+  including equal control bounds across both games. Existing GUI and full
+  headless suites pass. Score history is retained and tested unchanged.
+- Keep trees, runners, clocks, tournaments, databases and engine process
+  implementations unchanged; these are view bindings, not replacement systems.
+
 ### Shared board presentation extraction — 2026-10-28
 
 - Address Claude U1/U2/U4: extract the existing board rendering shell, themes,

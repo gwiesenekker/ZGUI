@@ -2,7 +2,7 @@ unit uAppInfo;
 {$mode objfpc}{$H+}{$codepage utf8}
 interface
 function AppBuildCommit: string;
-function AppAboutText: string;
+function AppAboutText(const AGameName: string = 'International draughts'): string;
 function AppManualText: string;
 implementation
 uses Classes, SysUtils;
@@ -17,9 +17,9 @@ const
 {$ENDIF}
 function AppBuildCommit: string;
 begin Result := BuildCommit; end;
-function AppAboutText: string;
+function AppAboutText(const AGameName: string): string;
 begin
-  Result := 'ZGUI' + LineEnding + 'International draughts' + LineEnding +
+  Result := 'ZGUI' + LineEnding + AGameName + LineEnding +
     LineEnding + 'Build: ' + BuildRevision + LineEnding + 'Commit: ' + BuildCommit;
   if BuildHasChanges then Result += LineEnding + 'Includes uncommitted changes.';
 end;

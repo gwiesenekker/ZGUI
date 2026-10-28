@@ -31,5 +31,6 @@ for mode in ('baseline', 'current'):
 for i in range(8):
     a = (out / 'baseline/images' / f'{i}.bmp').read_bytes()
     b = (out / 'current/images' / f'{i}.bmp').read_bytes()
+    assert len(set(a[54:])) > 16 and len(set(b[54:])) > 16, 'Blank saved bitmap'
     assert a == b, f'Rendering differs for fixture {i}; inspect {out}'
 print('Draughts rendering matches 42e0d54 exactly (8 bitmap fixtures)')

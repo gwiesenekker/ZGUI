@@ -6,7 +6,13 @@ type TPaintBoard = class(TDraughtsBoardControl)
   procedure Render(B: TBitmap);
 end;
 procedure TPaintBoard.Render(B: TBitmap);
-begin PaintWindow(B.Canvas.Handle); end;
+begin
+  HandleNeeded;
+  PaintWindow(B.Canvas.Handle);
+  // Native painting bypasses TBitmap's change notification. Invalidate its
+  // cached raw image before saving/assigning the pixels to a PNG.
+  B.Canvas.Pixels[0,0] := B.Canvas.Pixels[0,0];
+end;
 var F: TForm; B: TPaintBoard; P: TDraughtsBoard; Image: TBitmap; I: Integer;
 begin
   RequireDerivedFormResource := False; Application.Initialize;
@@ -26,6 +32,8 @@ begin
       B.HintSourceSquare := 32; B.HintTargetSquare := 23;
       B.LastMoveTargetSquare := 28; B.SetTargetSquares([17,22,27]);
       B.Render(Image);
+      if Image.Canvas.Pixels[30,30]=Image.Canvas.Pixels[80,30] then
+        raise Exception.Create('Rendering fixture is blank: expected alternating cells');
       Image.SaveToFile(IncludeTrailingPathDelimiter(ParamStr(1))+IntToStr(I)+'.bmp');
     end;
   finally Image.Free; F.Free; P.Free; end;

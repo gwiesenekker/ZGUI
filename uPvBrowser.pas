@@ -5,28 +5,28 @@ unit uPvBrowser;
 interface
 
 uses
-  Classes, LCLType, StdCtrls, SysUtils, uDraughtsBoardControl, uDraughtsBoard,
+  Classes, LCLType, StdCtrls, SysUtils, uGameBoardControl,
   uGamePosition, uGameTreeBuilder, uPvSnapshot;
 
 type
   TIntArray = array of Integer;
 
-  // Draughts PV view with its mini board. Base positions arrive as game
-  // positions (analysis state, snapshots); positions of another game are
-  // ignored and keep the previous base.
+  // One existing PV view for the selected game; all positions are owned copies.
   TPvBrowser = class
   private
-    FBaseBoard: TDraughtsBoard;
+    FVariant: TGameVariant; // Owned by application composition.
+    FPositionClass: TClass;
+    FBaseBoard: TGamePosition;
     FBasePly: Integer;
-    FBoard: TDraughtsBoard;
-    FBoardControl: TDraughtsBoardControl;
+    FBoard: TGamePosition;
+    FBoardControl: TGameBoardControl;
     FBrowsePly: Integer;
     FDepth: string;
     FInfoLabel: TLabel;
     FMoveLengths: TIntArray;
     FMoveStarts: TIntArray;
     FOnBoardChanged: TNotifyEvent;
-    FPendingBaseBoard: TDraughtsBoard;
+    FPendingBaseBoard: TGamePosition;
     FPendingBasePly: Integer;
     FPendingDepth: string;
     FPendingScore: string;
@@ -52,14 +52,14 @@ type
     procedure MemoKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure RenderBoard;
     procedure RenderMemo(const AText: string);
-    procedure SetDataInternal(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+    procedure SetDataInternal(ABaseBoard: TGamePosition; ABasePly: Integer;
       const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
-    procedure StorePendingData(ABaseBoard: TDraughtsBoard; ABasePly: Integer;
+    procedure StorePendingData(ABaseBoard: TGamePosition; ABasePly: Integer;
       const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
     procedure UnlockUpdates;
     procedure ValidateVariation;
   public
-    constructor Create(ABoard: TDraughtsBoard; ABoardControl: TDraughtsBoardControl;
+    constructor Create(AVariant: TGameVariant; ABoardControl: TGameBoardControl;
       AInfoLabel: TLabel; APvMemo: TMemo);
     destructor Destroy; override;
 
@@ -68,6 +68,7 @@ type
     procedure SetData(ABasePosition: TGamePosition; ABasePly: Integer;
       const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
 
+    property Position: TGamePosition read FBoard; // read-only, owned by browser
     property PrincipalVariation: string read FVariation;
     property Score: string read FScore;
     property Depth: string read FDepth;
@@ -77,57 +78,27 @@ type
 
 implementation
 
-uses uDraughtsPosition;
-
-function DraughtsBoardOf(APosition: TGamePosition): TDraughtsBoard;
-begin
-  if APosition is TDraughtsPosition then
-    Result := TDraughtsPosition(APosition).Board
-  else
-    Result := nil;
-end;
-
-function FenSideToMove(const AFEN: string): TDraughtsSide;
-begin
-  if (Trim(AFEN) <> '') and (UpCase(Trim(AFEN)[1]) = 'B') then
-    Result := dsBlack
-  else
-    Result := dsWhite;
-end;
-
 function MoveSegmentText(APly, ADisplayedIndex: Integer; const AMove: string;
-  AStartingSide: TDraughtsSide): string;
-var
-  LMoveNumber: Integer;
-  LSide: TDraughtsSide;
+  AStartingSide: TGameSide; AStartingNumber: Integer): string;
+var LMoveNumber: Integer; LSide: TGameSide;
 begin
-  // Draughts FEN has no move number: the start is move 1.
-  if AStartingSide = dsBlack then
-    LMoveNumber := GameMoveNumberForPly(gsBlack, 1, APly)
-  else
-    LMoveNumber := GameMoveNumberForPly(gsWhite, 1, APly);
-  if ((AStartingSide = dsWhite) and Odd(APly)) or
-    ((AStartingSide = dsBlack) and (not Odd(APly))) then
-    LSide := dsWhite
-  else
-    LSide := dsBlack;
-
-  if LSide = dsWhite then
-    Result := IntToStr(LMoveNumber) + '.' + AMove
-  else if ADisplayedIndex = 0 then
-    Result := IntToStr(LMoveNumber) + '...' + AMove
-  else
-    Result := AMove;
+  LMoveNumber := GameMoveNumberForPly(AStartingSide,AStartingNumber,APly);
+  LSide := GameSideForPly(AStartingSide,APly);
+  if LSide = gsWhite then Result := IntToStr(LMoveNumber)+'.'+AMove
+  else if ADisplayedIndex = 0 then Result := IntToStr(LMoveNumber)+'...'+AMove
+  else Result := AMove;
 end;
 
-constructor TPvBrowser.Create(ABoard: TDraughtsBoard;
-  ABoardControl: TDraughtsBoardControl; AInfoLabel: TLabel; APvMemo: TMemo);
+constructor TPvBrowser.Create(AVariant: TGameVariant;
+  ABoardControl: TGameBoardControl; AInfoLabel: TLabel; APvMemo: TMemo);
 begin
   inherited Create;
-  FBaseBoard := TDraughtsBoard.Create;
-  FPendingBaseBoard := TDraughtsBoard.Create;
+  if AVariant = nil then AVariant := DefaultGameVariant;
+  FVariant := AVariant;
+  FBaseBoard := FVariant.CreatePosition;
+  FPositionClass := FBaseBoard.ClassType;
   FBrowsePly := -1;
-  FBoard := ABoard;
+
   FBoardControl := ABoardControl;
   FInfoLabel := AInfoLabel;
   FPvMemo := APvMemo;
@@ -141,6 +112,8 @@ end;
 
 destructor TPvBrowser.Destroy;
 begin
+  if FBoardControl <> nil then FBoardControl.SetPosition(nil);
+  FBoard.Free;
   FPendingBaseBoard.Free;
   FBaseBoard.Free;
   inherited Destroy;
@@ -148,6 +121,9 @@ end;
 
 procedure TPvBrowser.Clear;
 begin
+  FreeAndNil(FBaseBoard);
+  FreeAndNil(FPendingBaseBoard);
+  FreeAndNil(FBoard);
   FBasePly := 0;
   FStartingFEN := '';
   FVariation := '';
@@ -194,14 +170,18 @@ var
   I: Integer;
   LMoves: TStringList;
   LSegment: string;
-  LStartingSide: TDraughtsSide;
+  LStartingSide: TGameSide;
+  LPosition: TGamePosition;
+  LNotation,Canonical: string;
 begin
   AText := '';
   SetLength(AStarts, 0);
   SetLength(ALengths, 0);
 
   LMoves := TStringList.Create;
+  LPosition := nil;
   try
+    if FBaseBoard <> nil then LPosition := FBaseBoard.Clone;
     TextToMoveList(FVariation, LMoves);
     if LMoves.Count = 0 then
     begin
@@ -211,13 +191,22 @@ begin
 
     SetLength(AStarts, LMoves.Count);
     SetLength(ALengths, LMoves.Count);
-    LStartingSide := FenSideToMove(FStartingFEN);
+    LStartingSide := FVariant.SideFromFEN(FStartingFEN);
     for I := 0 to LMoves.Count - 1 do
     begin
       if AText <> '' then
         AText += ' ';
-      LSegment := MoveSegmentText(FBasePly + I + 1, I, LMoves[I],
-        LStartingSide);
+      LNotation := LMoves[I];
+      if (I < FValidMoveCount) and (LPosition <> nil) then
+      begin
+        if LPosition.TryParseMove(LMoves[I],Canonical) then
+        begin
+          LNotation := LPosition.MoveNotation(Canonical);
+          LPosition.PlayTrustedMove(Canonical);
+        end;
+      end;
+      LSegment := MoveSegmentText(FBasePly + I + 1, I, LNotation,
+        LStartingSide, FVariant.StartingMoveNumberFromFEN(FStartingFEN));
       AStarts[I] := Length(AText);
       ALengths[I] := Length(LSegment);
       AText += LSegment;
@@ -227,6 +216,7 @@ begin
         IntToStr(FBasePly + FValidMoveCount + 1) + ': ' + FInvalidMove +
         '. Showing the last legal position.';
   finally
+    LPosition.Free;
     LMoves.Free;
   end;
 end;
@@ -237,10 +227,13 @@ var
   LMoves: TStringList;
   LPly: Integer;
 begin
-  if FBoard = nil then
+  if FBaseBoard = nil then
+  begin
+    if FBoardControl <> nil then FBoardControl.SetPosition(nil);
+    if Assigned(FOnBoardChanged) then FOnBoardChanged(Self);
     Exit;
-
-  FBoard.AssignFrom(FBaseBoard);
+  end;
+  AssignGamePosition(FBoard,FBaseBoard);
   LMoves := TStringList.Create;
   try
     TextToMoveList(FVariation, LMoves);
@@ -248,13 +241,13 @@ begin
     if (LPly < 0) or (LPly > FValidMoveCount) then
       LPly := FValidMoveCount;
     for I := 0 to LPly - 1 do
-      FBoard.PlayMove(LMoves[I], True, True);
+      FBoard.PlayMoveText(LMoves[I]);
   finally
     LMoves.Free;
   end;
 
   if FBoardControl <> nil then
-    FBoardControl.Invalidate;
+    FBoardControl.SetPosition(FBoard);
   if Assigned(FOnBoardChanged) then
     FOnBoardChanged(Self);
 end;
@@ -274,25 +267,27 @@ end;
 
 procedure TPvBrowser.ValidateVariation;
 var
-  Candidate: TDraughtsBoard;
+  Canonical: string;
+  Candidate: TGamePosition;
   Moves: TStringList;
   I: Integer;
 begin
   FValidMoveCount := 0;
   FInvalidMove := '';
-  Candidate := TDraughtsBoard.Create;
+  if FBaseBoard = nil then Exit;
+  Candidate := FBaseBoard.Clone;
   Moves := TStringList.Create;
   try
     Candidate.AssignFrom(FBaseBoard);
     TextToMoveList(FVariation, Moves);
     for I := 0 to Moves.Count - 1 do
     begin
-      if not Candidate.IsLegalMove(Moves[I]) then
+      if not Candidate.TryParseMove(Moves[I],Canonical) then
       begin
         FInvalidMove := Moves[I];
         Break;
       end;
-      Candidate.PlayMove(Moves[I], True, True);
+      Candidate.PlayTrustedMove(Canonical);
       Inc(FValidMoveCount);
     end;
   finally
@@ -392,12 +387,12 @@ begin
   end;
 end;
 
-procedure TPvBrowser.StorePendingData(ABaseBoard: TDraughtsBoard;
+procedure TPvBrowser.StorePendingData(ABaseBoard: TGamePosition;
   ABasePly: Integer; const AStartingFEN, APv, AScore, ADepth,
   ATimeText: string);
 begin
   if ABaseBoard <> nil then
-    FPendingBaseBoard.AssignFrom(ABaseBoard);
+    AssignGamePosition(FPendingBaseBoard,ABaseBoard);
   FPendingBasePly := ABasePly;
   FPendingStartingFEN := AStartingFEN;
   FPendingVariation := Trim(APv);
@@ -430,14 +425,14 @@ begin
   end;
 end;
 
-procedure TPvBrowser.SetDataInternal(ABaseBoard: TDraughtsBoard;
+procedure TPvBrowser.SetDataInternal(ABaseBoard: TGamePosition;
   ABasePly: Integer; const AStartingFEN, APv, AScore, ADepth,
   ATimeText: string);
 var
   LText: string;
 begin
   if ABaseBoard <> nil then
-    FBaseBoard.AssignFrom(ABaseBoard);
+    AssignGamePosition(FBaseBoard,ABaseBoard);
   FBasePly := ABasePly;
   FStartingFEN := AStartingFEN;
   FVariation := Trim(APv);
@@ -456,16 +451,19 @@ end;
 
 procedure TPvBrowser.SetData(ABasePosition: TGamePosition; ABasePly: Integer;
   const AStartingFEN, APv, AScore, ADepth, ATimeText: string);
-var
-  ABaseBoard: TDraughtsBoard;
+var Start: TGamePosition;
 begin
-  ABaseBoard := DraughtsBoardOf(ABasePosition);
+  // Never retain a previous game's board when a bad/stale base arrives.
+  if (ABasePosition = nil) or (ABasePosition.ClassType <> FPositionClass) then
+  begin Clear; Exit; end;
+  Start := nil;
+  try
+    try Start := FVariant.CreatePositionFromFEN(AStartingFEN);
+    except on E: EConvertError do begin Clear; Exit; end; end;
+  finally Start.Free; end;
   if FBrowsePly >= 0 then
-    StorePendingData(ABaseBoard, ABasePly, AStartingFEN, APv, AScore, ADepth,
-      ATimeText)
-  else
-    SetDataInternal(ABaseBoard, ABasePly, AStartingFEN, APv, AScore, ADepth,
-      ATimeText);
+    StorePendingData(ABasePosition, ABasePly, AStartingFEN, APv, AScore, ADepth, ATimeText)
+  else SetDataInternal(ABasePosition, ABasePly, AStartingFEN, APv, AScore, ADepth, ATimeText);
 end;
 
 procedure TPvBrowser.SetSnapshot(ASnapshot: TPvSnapshot;

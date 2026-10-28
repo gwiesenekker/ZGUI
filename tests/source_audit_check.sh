@@ -52,6 +52,8 @@ GENERIC_UNITS=(
   uGameTreeBuilder
   uGameTreeCursor
   uDisplayedPosition
+  uGameBoardControl
+  uPvBrowser
   uMoveInteraction
   uPdnText
   uGameTreePdn
