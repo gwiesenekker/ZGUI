@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reviewed UCI pondering and annotator information — 2026-10-28
 
+Commit: `481aa77`.
+
 - Implement the approved UCI pondering design and M4/M5/D5 through the existing
   engine adapter, game orchestrator, clocks, snapshots and process worker.
   Enable only a saved true Ponder check option in game sessions; discovery and
