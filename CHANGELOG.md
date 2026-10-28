@@ -4,6 +4,42 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed pondering infrastructure — 2026-10-28
+
+- Apply the shared seams approved in Claude review b833e78: one default-no-op
+  accepted-move notification and a reused side-specific clock-record builder.
+  Notify only the mover after accepted nonterminal moves without a stop request.
+- Add an optional owner-thread idle callback to the existing process worker.
+  Preserve the infinite-wait path for Hub/DXP; add no process reader or worker.
+  Leave platform-process reads unchanged, as requested in the review.
+- Validation: application build, full headless regression suite and all seven
+  GTK GUI suites pass with the integration. Existing Hub worker and clocked
+  command streams remain byte-identical to their recorded baselines.
+
+### Local UCI engine installation — 2026-10-28
+
+- Install Stockfish 19, Koivisto 9.0, Arasan 26.1, RubiChess 20240817 and
+  Igel 3.8.0 in engine1 through engine5 and register them using the existing
+  registry API. Keep executables, networks and machine-specific configuration
+  locally ignored. Record official sources, licenses and SHA-256 checksums.
+- Use official Linux releases for the first four; build Igel from its release
+  source/network. Its benchmark matches the reference 2325568 nodes. Configure
+  one thread and 64 MB hash per engine; pondering remains disabled.
+- Validation: all five initialize, analyze and play legal clocked moves as both
+  colours through the existing UCI adapter/orchestrator. Registry save/reload
+  and executable checks pass; the checked harness reports no memory leaks.
+  No application source or GUI changes.
+
+### UCI pondering design review — 2026-10-28
+
+- Prepare a proposal against `b833e78` for Claude to review before implementation.
+  Reuse the existing engine, game, clock and process infrastructure and preserve
+  GUI layout. Explicitly identify the accepted-move notification, idle worker
+  servicing and bounded process-read extensions requiring shared-code approval.
+- Specify opt-in configuration, legal predictions, hit/miss completion fences,
+  clock attribution, speculative-output isolation, failure handling and tests.
+  No production code or GUI behaviour changed in this proposal step.
+
 ### Reviewed clocked UCI games — 2026-10-28
 
 Commit: `62b20b9`.

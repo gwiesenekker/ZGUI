@@ -80,6 +80,7 @@ type
     procedure RefreshMovesPlayedCache;
     procedure SetEngine(ASide: TGameSide; AEngine: TGameEngine);
     procedure StartEngineSessions;
+    function EngineClock(Side: TGameSide): TEngineGameClockState;
   public
     // AVariant: the game; nil uses the registered default game.
     constructor Create(AVariant: TGameVariant = nil);
@@ -483,6 +484,16 @@ begin
 
 end;
 
+function TGameOrchestrator.EngineClock(Side: TGameSide): TEngineGameClockState;
+var S: TGameSide;
+begin
+  Result.SideToMove:=Side; Result.MovesRemaining:=GetMovesRemaining(Side);
+  for S:=Low(TGameSide) to High(TGameSide) do begin
+    Result.Remaining[S]:=FRemainingSeconds[S]; Result.Used[S]:=FUsedSeconds[S];
+    Result.Increment[S]:=ActiveIncrement(S);
+  end;
+end;
+
 function TGameOrchestrator.PlayNextMove: string;
 var
   LElapsedSeconds: Double;
@@ -491,7 +502,6 @@ var
   LStartTick: QWord;
   LAvailableSeconds: Double;
   Clock: TEngineGameClockState;
-  Side: TGameSide;
   LTimeoutMs: Integer;
   LSearchStarted: Boolean;
   LOutcome: TGameOutcome;
@@ -547,11 +557,7 @@ begin
       '; moves_remaining=' + IntToStr(GetMovesRemaining(LSide)) +
       '; remaining_seconds=' + FormatHubSeconds(FRemainingSeconds[LSide]) +
       '; total_used_seconds=' + FormatHubSeconds(FUsedSeconds[LSide]));
-    Clock.SideToMove:=LSide; Clock.MovesRemaining:=GetMovesRemaining(LSide);
-    for Side:=Low(TGameSide) to High(TGameSide) do begin
-      Clock.Remaining[Side]:=FRemainingSeconds[Side]; Clock.Used[Side]:=FUsedSeconds[Side];
-      Clock.Increment[Side]:=ActiveIncrement(Side);
-    end;
+    Clock:=EngineClock(LSide);
     LEngine.SetGameClockState(Clock);
     LAvailableSeconds:=AvailableSeconds(LSide);
     // Match the clock's increment allowance; the margin only bounds transport
@@ -665,6 +671,9 @@ begin
     SideToString(ASide) + '; move=' + LMove + '; annotation=' +
     LMoveAnnotation + '; move_number=' + IntToStr(FMoveHistory.Count));
   CheckOutcomeAfterMove;
+  if (FState=gosRunning) and (FEngines[ASide]<>nil) and
+    not FEngines[ASide].StopRequested then
+    FEngines[ASide].GameMoveAccepted(FStartingFEN,FMovesPlayed,EngineClock(ASide));
 end;
 
 function TGameOrchestrator.GetRemainingSeconds(ASide: TGameSide): Double;

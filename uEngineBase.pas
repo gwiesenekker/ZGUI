@@ -106,6 +106,9 @@ type
     function ReceiveMessage(const AMessage: string): string; virtual;
     procedure RequestStop; virtual;
     procedure SetGameClockState(const Clock: TEngineGameClockState); virtual;
+    // Notification only: a subclass may queue optional background work.
+    procedure GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
+      const NextOwnClock: TEngineGameClockState); virtual;
     procedure SetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double); virtual;
     procedure SetClockInfoWithIncrement(AMovesRemaining: Integer;
@@ -553,6 +556,11 @@ procedure TGameEngine.SetGameClockState(const Clock: TEngineGameClockState);
 begin
   SetClockInfoWithIncrement(Clock.MovesRemaining,Clock.Remaining[Clock.SideToMove],
     Clock.Used[Clock.SideToMove],Clock.Increment[Clock.SideToMove]);
+end;
+
+procedure TGameEngine.GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
+  const NextOwnClock: TEngineGameClockState);
+begin
 end;
 
 procedure TGameEngine.SetClockInfo(AMovesRemaining: Integer;

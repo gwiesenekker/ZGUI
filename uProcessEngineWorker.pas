@@ -21,6 +21,7 @@ type
   TWorkerExecute=procedure(Command: TObject) of object;
   TWorkerLog=procedure(const Text: string) of object;
   TWorkerStopping=function: Boolean of object;
+  TWorkerIdle=procedure of object;
   TProcessEngineWorker=class
   private
     FQueue: TThreadMessageQueue;
@@ -31,6 +32,7 @@ type
     FExecute: TWorkerExecute;
     FLog: TWorkerLog;
     FIsStopping: TWorkerStopping;
+    FIdle: TWorkerIdle;
     FBuffer: string;
     FDroppingOutputLine: Boolean;
     FLineLock: TCriticalSection;
@@ -40,7 +42,8 @@ type
     procedure Log(const Text: string);
     procedure WaitForWorkerCommand(ACommand: TThreadMessage; ACompleted: TSimpleEvent; const AErrorText: string);
   public
-    constructor Create(AExecute: TWorkerExecute; ALog: TWorkerLog; AStopping: TWorkerStopping; const AProtocol: string);
+    constructor Create(AExecute: TWorkerExecute; ALog: TWorkerLog; AStopping: TWorkerStopping; const AProtocol: string;
+      AIdle: TWorkerIdle=nil);
     destructor Destroy; override;
     function IsWorkerThread: Boolean;
     function IsClosed: Boolean;
@@ -76,7 +79,16 @@ var Obj: TObject; C: TProcessEngineCommand; Release: Boolean;
 begin
   Owner.FThreadId:=System.GetCurrentThreadId; Owner.FThreadIdValid:=True;
   try
-    while not Terminated and Owner.FQueue.WaitPop(Obj) do begin
+    while not Terminated do begin
+      if Assigned(Owner.FIdle) then begin
+        if not Owner.FQueue.WaitPop(Obj,25) then begin
+          if Owner.FQueue.IsClosed then Break;
+          // The protocol callback handles its own session faults. Keep the
+          // queue alive even if an idle callback unexpectedly raises.
+          try Owner.FIdle; except on E:Exception do Owner.Log('idle service error; '+E.Message); end;
+          Continue;
+        end;
+      end else if not Owner.FQueue.WaitPop(Obj) then Break;
       if not (Obj is TProcessEngineCommand) then Continue;
       C:=TProcessEngineCommand(Obj); Release:=C.AutoFree;
       try Owner.FExecute(C); except on E:Exception do C.ErrorMessage:=E.Message; end;
@@ -85,10 +97,11 @@ begin
     end;
   finally Owner.FThreadIdValid:=False; end;
 end;
-constructor TProcessEngineWorker.Create(AExecute: TWorkerExecute; ALog: TWorkerLog; AStopping: TWorkerStopping; const AProtocol: string);
+constructor TProcessEngineWorker.Create(AExecute: TWorkerExecute; ALog: TWorkerLog; AStopping: TWorkerStopping; const AProtocol: string;
+  AIdle: TWorkerIdle);
 var Thread: TProcessWorkerThread;
 begin
-  inherited Create; FExecute:=AExecute; FLog:=ALog; FIsStopping:=AStopping; FProtocol:=AProtocol;
+  inherited Create; FExecute:=AExecute; FLog:=ALog; FIsStopping:=AStopping; FProtocol:=AProtocol; FIdle:=AIdle;
   FProcess:=TPlatformProcess.Create; FProcess.SynchronizeData:=False;
   FReceivedLines:=TStringList.Create; FLineLock:=TCriticalSection.Create;
   FQueue:=TThreadMessageQueue.Create(False);
