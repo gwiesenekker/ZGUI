@@ -1,9 +1,10 @@
 # ZGUI
 
 ZGUI starts from the unmodified GWDGUI 3.4 source at upstream commit
-`61c6cef894e18544d18e7e761143de47ef492226`. This baseline changes application
-branding only; it still runs international draughts. Chess and UCI are not yet
-implemented. See [the chess preparation review](CHESS_PORT_REVIEW.md).
+`61c6cef894e18544d18e7e761143de47ef492226`. The application still runs
+international draughts with ZGUI branding. A chess position/rules adapter is
+implemented and tested in isolation; chess GUI integration and UCI remain
+future work. See [the chess preparation review](CHESS_PORT_REVIEW.md).
 
 
 ZGUI is a desktop application for **international draughts (10×10)**. It lets

@@ -195,3 +195,49 @@ identical engine/annotator/Auto Play PVs, empty/White/Black-start games, score a
 annotation hiding, and every PV filter combination. The preferences GUI check
 also covers separate source colours, legacy migration, font accept/cancel/Save/
 Defaults, font JSON validation and native clicks before/after font changes.
+
+## Chess adapter checks
+
+`position_contract_check.pas` also runs the existing abstract contract checks on
+`TChessVariant`: transactional FEN loading, cloning, legal/SAN round trips,
+trusted replay, square mapping, deterministic random lines and perft. Six
+standard perft positions cover castling, en passant, pins and promotions; the
+fixture positions also appear in [Stockfish's own perft tests](https://github.com/official-stockfish/Stockfish/blob/master/tests/perft.sh).
+Initial-position depth 4 is 197281; the remaining fixtures run through depth
+3, with the rook/pawn ending also checked at depth 4.
+
+`chess_position_check.pas` is part of the normal regression sweep. It tests chess
+FEN validation, repetition identity, SAN ambiguity (including `B1c3` versus
+`b1c3`), all special moves, terminal results and draw claims. It injects chess
+into the existing tree/actor and orchestrator, checking replay, checkmate and
+both timeout outcomes without changing those units. Chess remains unregistered,
+so these tests also verify that draughts stays the application's default.
+
+For range/overflow and heap checks, build the standalone suite with:
+
+```sh
+mkdir -p /tmp/zgui-chess-tests
+fpc -B -Cr -Co -gl -gh -Fu. -FU/tmp/zgui-chess-tests -FE/tmp/zgui-chess-tests tests/chess_position_check.pas
+/tmp/zgui-chess-tests/chess_position_check
+```
+
+The optional independent check uses [python-chess](https://github.com/niklasf/python-chess)
+(tested reference version: `chess` 1.11.2). Install it in an isolated test
+environment, then compile the probe and run:
+
+```sh
+fpc -B -Cr -Co -gl -Fu. -FU/tmp/zgui-chess-tests -FE/tmp/zgui-chess-tests tests/chess_oracle_probe.pas
+python3 tests/chess_differential_check.py /tmp/zgui-chess-tests/chess_oracle_probe
+```
+
+It compares legal move sets, SAN, every child FEN, check status, position keys
+and per-side insufficient-material classification on fixed fixtures and 40
+seeded random games. It is optional; ZGUI has no python-chess dependency.
+
+Rules reference: [FIDE Laws of Chess](https://handbook.fide.com/chapter/e012023).
+The adapter follows the existing automatic-claim contract, including available
+claims based on intended moves. Material detection proves standard dead-material
+cases conservatively; it does not solve arbitrary dead positions such as locked
+pawn fortresses. FEN accepts six fields for orthodox chess, checks local validity
+and coherent castling/en-passant state, but does not prove historical reachability.
+Chess960 and other variants are outside this adapter.

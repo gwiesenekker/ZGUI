@@ -6,6 +6,26 @@ and implementation details are available in the [commit history](https://github.
 
 ## Unreleased
 
+### Chess position and rules adapter — 2026-10-28
+
+- Add `uChessPosition.pas` implementing the existing position, variant and rules
+  interfaces for orthodox chess: transactional six-field FEN, legal UCI moves,
+  SAN, castling, en passant, promotions and repetition identity.
+- Add checkmate/stalemate, automatic acceptance of available threefold/50-move
+  claims (including intended moves), fivefold/75-move outcomes, and standard
+  insufficient-material and timeout handling. Arbitrary dead-position
+  fortresses are not solved; FEN checks do not prove historical reachability.
+- Keep chess opt-in and unregistered: no GUI, default-variant, game runner,
+  tree, tournament, database or engine infrastructure changes.
+- Extend the existing interface contract tests with chess/perft fixtures and
+  add focused rules and shared-core integration tests to the regression suite.
+  Supply an optional independent python-chess differential check.
+- Validation: application build and full regression suite passed, including
+  643238 interface-contract checks and 226 focused chess checks. Range/overflow
+  and heap checks passed. The independent oracle matched 6143 positions and
+  180183 legal moves, SAN strings and resulting FENs. All existing production
+  Pascal units and application composition remain byte-for-byte unchanged.
+
 ### ZGUI baseline — 2026-10-28
 
 - Import GWDGUI 3.4 from upstream commit

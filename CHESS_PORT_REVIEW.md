@@ -10,6 +10,23 @@ rules, SAN/PGN, a chess board or UCI. The application still plays draughts.
 Claude's local position-interface proposal in the independent GWDGUI checkout
 was also consulted; the checked-in implementation is the authority below.
 
+## Adapter implementation status — 2026-10-28
+
+`uChessPosition.pas` now implements `TChessPosition`, `TChessVariant` and
+`TChessRules` through the existing contracts. It supplies orthodox FEN, legal
+moves, canonical UCI move text, SAN, repetition identity, draw claims and
+material-aware timeout outcomes. It is not linked into `zgui.lpr` and does not
+register as the default; the application and GUI still run draughts. PGN, UCI
+engine communication and GUI integration remain future work.
+
+Tests inject chess into the existing tree/actor and orchestrator without changing
+those units. The contract suite, fixed perft fixtures, focused rule tests and an
+optional python-chess differential check are documented in `tests/README.md`.
+Material detection is conservative: arbitrary dead-position fortresses are not
+solved. FEN validation does not attempt full retrograde reachability analysis.
+The baseline observations below describe the imported source; the new adapter
+completes the isolated chess core step only.
+
 ## Prepared contracts to reuse
 
 | Boundary | Existing implementation | Chess work within that boundary |

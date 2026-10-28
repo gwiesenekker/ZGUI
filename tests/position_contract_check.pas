@@ -12,7 +12,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils, uGamePosition, uDraughtsPosition, uCounterGamePosition;
+  Classes, SysUtils, uGamePosition, uDraughtsPosition, uCounterGamePosition, uChessPosition;
 
 type
   TPerftFixture = record
@@ -369,10 +369,51 @@ begin
   end;
 end;
 
+{ Chess runs through the same abstract contract checks as the baseline games. }
+procedure RunChess;
+var V: TChessVariant; Fixtures: TPerftFixtures; P: TGamePosition;
+begin
+  V := TChessVariant.Create;
+  try
+    Variant := V;
+    WriteLn('-- ', V.Name);
+    Check(DefaultGameVariant = DraughtsVariant, 'chess does not replace draughts');
+    Fixtures := nil;
+    AddFixture(Fixtures, ChessStartingFEN, [20,400,8902,197281]);
+    AddFixture(Fixtures, 'r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1',
+      [48,2039,97862]);
+    AddFixture(Fixtures, '8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1', [14,191,2812,43238]);
+    AddFixture(Fixtures, 'r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1', [6,264,9467]);
+    AddFixture(Fixtures, 'rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8', [44,1486,62379]);
+    AddFixture(Fixtures, 'r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10', [46,2079,89890]);
+    CheckPerft(V, Fixtures);
+    CheckFen(V, [ChessStartingFEN, '4k3/8/8/8/3pP3/8/8/4K3 b - e3 0 37',
+      '4k3/8/8/8/8/8/8/4K3 b - - 23 37'],
+      ['', '8/8/8/8/8/8/8/8 w - - 0 1',
+       '4k3/8/8/8/8/8/8/4K3 x - - 0 1',
+       '4k3/8/8/8/8/8/8/4K3 w K - 0 1',
+       '4k3/8/8/8/8/8/8/4K3 w - e6 0 1',
+       '4k3/8/8/8/8/8/8/4K3 w - - -1 1',
+       '4k3/8/8/8/8/8/8/4K3 w - - 0 0',
+       '4k3/8/8/8/8/8/8/P3K3 w - - 0 1',
+       '8/8/8/8/8/8/4k3/4K3 w - - 0 1']);
+    CheckSpellings(ChessStartingFEN, ['e2e4',' E2E4 ', 'a7a8q','a7a8Q', '0-0','O-O'],
+      ['e2e4','e2e3','a7a8q','a7a8n','O-O','O-O-O']);
+    P := V.CreatePositionFromFEN('4k3/1P6/8/8/8/8/6p1/4K3 w - - 0 1');
+    try CheckMovesOf(P,'chess promotions'); finally P.Free; end;
+    CheckRandomLines(V, [ChessStartingFEN,
+      'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1',
+      '4k3/8/8/8/3pP3/8/8/4K3 b - e3 0 37'], 2, 30);
+  finally
+    Variant := nil; V.Free;
+  end;
+end;
+
 begin
   PrintPerft := ParamStr(1) = '--print-perft';
   RunDraughts;
   RunCounter;
+  RunChess;
   if Failures > 0 then
   begin
     WriteLn(Failures, ' of ', Checks, ' position contract checks failed');
