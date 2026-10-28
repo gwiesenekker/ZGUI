@@ -243,6 +243,20 @@ and coherent castling/en-passant state, but does not prove historical reachabili
 Chess960 and other variants are outside this adapter.
 
 
+## PGN syntax foundation
+
+`chess_pgn_lexer_check.pas` runs in the standard headless sweep. Its 1,193
+checks cover tag-string escapes, UTF-8/BOM, CR/LF/CRLF source locations,
+comments, move numbers, nested variation delimiters, result tokens, numerical
+and traditional NAGs, token limits, malformed input and deterministic random
+input progress. Run it with the same range/overflow/heap flags shown above,
+substituting `chess_pgn_lexer_check.pas` and its executable name.
+
+The scanner retains text and supplies tokens only: it does not validate legal
+SAN or game grammar, build another game tree, or enable PGN Open/Save. Its
+input is one in-memory string; large-file/deferred reading is a separate
+integration task. The project has no new external library dependency.
+
 ## Shared board and chess GUI checks
 
 `run_gui_checks.sh` now also runs `chess_board_check` after the five existing

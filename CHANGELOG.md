@@ -4,6 +4,21 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### PGN adapter foundation — 2026-10-28
+
+- Start the chess PGN file adapter with an independent text scanner for tags,
+  comments, move symbols/numbers, NAGs, variations and results. Retain UTF-8,
+  report source locations and bound token sizes. This is syntax scanning;
+  semantic game parsing and GUI Open/Save are not enabled yet.
+- Add 1,193 scanner checks to the normal regression suite, including escaped
+  strings, line endings, traditional annotations, malformed input and bounded
+  progress. The standalone suite also passes range/overflow and heap checks.
+- Prepare `chatgpt/PGN_INTEGRATION_PROPOSAL.md` for Claude: extend existing
+  metadata/actor seams, notation export, file browser and GUI policy (U9).
+  Shared production code remains unchanged in this step, pending that review.
+- Validation: full headless regression sweep, source audit, build-info/archive
+  checks and application compilation pass.
+
 ### Review fix U10 — 2026-10-28
 
 - U10: add an optional Cancel-default setting to the existing confirmation
