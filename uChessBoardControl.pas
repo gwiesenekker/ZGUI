@@ -27,10 +27,15 @@ begin
   inherited SetPosition(APosition);
 end;
 procedure TChessBoardControl.DrawCoordinates(ASquare, ARow, ACol: Integer; const ACell: TRect);
-var LText: string;
+var LText: string; Background: TColor;
 begin
   Canvas.Brush.Style := bsClear;
-  Canvas.Font.Color := clWhite;
+  if (ARow+ACol) mod 2 = 0 then Background := BoardLightColor
+  else Background := BoardDarkColor;
+  Background := ColorToRGB(Background);
+  if 299*Red(Background)+587*Green(Background)+114*Blue(Background) >= 128000 then
+    Canvas.Font.Color := clBlack
+  else Canvas.Font.Color := clWhite;
   Canvas.Font.Size := Max(6,BoardSquareSize div 7);
   if ACol = 0 then Canvas.TextOut(ACell.Left+2,ACell.Top+1,IntToStr((ASquare-1) div 8+1));
   if ARow = 7 then

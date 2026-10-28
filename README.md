@@ -13,7 +13,8 @@ The legal list uses UCI coordinates; notation and PV views use SAN.
 PGN, UCI engines, clocked games, position setup, tournaments and databases are
 not yet connected for chess. Their existing controls stay in place but are
 disabled, including automatic database search. Exploration is not saved as a
-game yet; copy FEN to retain the displayed position. The existing score-history
+game yet; copy FEN to retain the displayed position. Replacing or closing an
+exploration asks for Discard / Cancel confirmation. The existing score-history
 view is retained, without changing its implementation.
 
 Chess pieces are original, scalable Canvas vector artwork in

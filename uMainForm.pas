@@ -288,6 +288,7 @@ type
     function DisplayedMoveContext(AGameTree: TGameTree;
       out AMovesText: string; out AMoveCount: Integer): Boolean;
     function HasDisplayedGameToSave: Boolean;
+    function ConfirmDiscardExploration(const ACaption: string): Boolean;
     function ConfirmReplaceStandaloneGame: Boolean;
     procedure ShowStandaloneGame(Sender: TObject);
     function EngineSupportsMcts(AEngine: TExternalEngineDefinition): Boolean;
@@ -2771,6 +2772,9 @@ begin
     Exit;
   end;
 
+  if not GameSupports(gfPdn) and
+    not ConfirmDiscardExploration('Close ZGUI') then Exit;
+
   if (FTournamentDialog <> nil) and FTournamentDialog.HasTournamentData then
   begin
     LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
@@ -3154,11 +3158,19 @@ begin
   Result := GameTreeHasContent(ActiveGameTree);
 end;
 
+function TMainForm.ConfirmDiscardExploration(const ACaption: string): Boolean;
+begin
+  if not GameTreeHasContent(FGameTree) then Exit(True);
+  Result := ShowGuiConfirmationDialog(Self, ACaption,
+    'Discard the explored moves?', 'Discard', '', mrNo) = mrYes;
+end;
+
 function TMainForm.ConfirmReplaceStandaloneGame: Boolean;
 var
   Response: Integer;
 begin
-  if not GameSupports(gfPdn) then Exit(True);
+  if not GameSupports(gfPdn) then
+    Exit(ConfirmDiscardExploration('Replace board'));
   Result := True;
   if not GameTreeHasContent(FGameTree) then
     Exit;

@@ -4,6 +4,22 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Review fixes U7 and U8 — 2026-10-28
+
+- U7: reuse the existing confirmation dialog to ask Discard / Cancel before
+  replacing or closing a chess exploration. Protect moves, variations and
+  custom FEN roots without offering unavailable PDN saving. Cancel leaves the
+  tree, node identities, navigation selection and displayed position intact;
+  an untouched standard board does not prompt. Draughts save prompts remain.
+- U8: choose black or white chess-coordinate text from the actual square
+  background, preserving layout and improving contrast with custom themes.
+- Extend GUI tests for cancellation, explicit discard, invalid replacement,
+  custom roots and rendered coordinate contrast in both orientations.
+- Validation: application build, all six GUI suites (647 chess checks with
+  range/overflow checking and zero unfreed heap blocks), manual document checks
+  and the source audit pass. Existing draughts save/close tests remain intact.
+- U9 remains deferred to PGN integration, as agreed with Claude's review.
+
 ### Select standalone chess exploration — 2026-10-28
 
 - C1: explicitly select chess in `zgui.lpr` before form creation, retaining the

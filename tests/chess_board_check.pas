@@ -118,6 +118,53 @@ begin
     for I:=64 to 160 do if I mod 16=0 then begin B.SetBounds(0,0,I,I); B.Render(Image); end;
   finally Bad.Free; PNG.Free; Image.Free; P.Free; F.Free; end;
 end;
+procedure CheckCoordinateContrast;
+var F: TForm; Board: TPaintChess; Image: TBitmap; Theme,Flip,Row,Col: Integer;
+    Expected: TColor;
+  function HasInk(ARow,ACol: Integer; Colour: TColor): Boolean;
+  var X,Y,Brightness: Integer; Pixel: TColor;
+  begin
+    for Y:=ARow*50+1 to (ARow+1)*50-2 do
+      for X:=ACol*50+1 to (ACol+1)*50-2 do
+      begin
+        Pixel:=ColorToRGB(Image.Canvas.Pixels[X,Y]);
+        Brightness:=299*Red(Pixel)+587*Green(Pixel)+114*Blue(Pixel);
+        // Antialiased small glyphs need not contain a pure foreground pixel.
+        if ((Colour=clBlack) and (Brightness<128000)) or
+          ((Colour=clWhite) and (Brightness>128000)) then Exit(True);
+      end;
+    Result:=False;
+  end;
+begin
+  F:=TForm.CreateNew(nil); Board:=TPaintChess.Create(F); Board.Parent:=F;
+  Image:=TBitmap.Create;
+  try
+    Board.SetBounds(0,0,400,400); Image.SetSize(400,400);
+    // With no pieces/highlights, contrasting ink comes from the cell label.
+    for Theme:=0 to 2 do
+    begin
+      case Theme of
+        0: begin Board.BoardLightColor:=RGBToColor(228,207,176); Board.BoardDarkColor:=RGBToColor(98,73,53); end;
+        1: begin Board.BoardLightColor:=RGBToColor(250,250,250); Board.BoardDarkColor:=RGBToColor(220,220,220); end;
+        2: begin Board.BoardLightColor:=RGBToColor(30,30,30); Board.BoardDarkColor:=RGBToColor(60,60,60); end;
+      end;
+      for Flip:=0 to 1 do
+      begin
+        Board.BoardFlipped:=Flip=1; Board.Render(Image);
+        for Row:=0 to 7 do
+          for Col:=0 to 7 do
+            if (Col=0) or (Row=7) then
+            begin
+              if Theme=1 then Expected:=clBlack
+              else if Theme=2 then Expected:=clWhite
+              else if (Row+Col) mod 2=0 then Expected:=clBlack else Expected:=clWhite;
+              Check(HasInk(Row,Col,Expected),Format('Coordinate contrast theme %d flip %d row %d col %d',[Theme,Flip,Row,Col]));
+            end;
+      end;
+    end;
+  finally Image.Free; F.Free; end;
+end;
+
 procedure CheckPV;
 var F: TForm; Board: TChessBoardControl; Memo: TMemo; Info: TLabel;
     Browser: TPvBrowser; P,Q: TChessPosition; Bad: TDraughtsPosition; Key: Word;
@@ -271,12 +318,97 @@ begin
     Check(Clipboard.AsText='sentinel','Unsupported handlers cannot export chess as PDN');
     Menu(Main,'Copy FEN position to clipboard').Click;
     Check(Clipboard.AsText=B.Position.ToFEN,'Existing copy FEN exports displayed position');
+    GuiTestConfirmationResult:=mrYes;
     Clipboard.AsText:=ChessStartingFEN; Menu(Main,'Paste FEN position from clipboard').Click;
+    GuiTestConfirmationResult:=0;
     Check((Main.ActiveGameTree.MainlineCount=0) and (B.Position.ToFEN=ChessStartingFEN),'Existing paste FEN loads chess');
     Check(Main.CurrentGameTreePdnText('')='','Direct PDN export is guarded');
     Main.Close; // No misleading PDN save dialog in standalone chess mode.
   finally GuiTestChoiceOnShow:=nil; Actor.Free; Choice.Free; Expected.Free; Main.Free; end;
 end;
+procedure CheckDiscardProtection;
+var Main: TMainForm; Board: TGameBoardControl; Memo: TGameNotationView;
+    Actor: TGameTreeActor; Command: TGameTreeCommand; CanClose: Boolean;
+    BeforeFEN,BeforeText,BeforeLegal,Selection: string; Key: Word;
+    TreeId,TipId,BranchId: Int64; BeforeCount,BeforeBranches,BeforeSelStart,BeforeSelLength: Integer;
+    BeforeNode,BeforeBranch: TGameTreePlyNode;
+begin
+  Main:=TMainForm.Create(nil); Actor:=nil;
+  try
+    Main.Show; Application.ProcessMessages;
+    Board:=TGameBoardControl(Main.FindComponent('MainBoard'));
+    Memo:=TGameNotationView(Main.FindComponent('GameMoveMemo')); Memo.Enabled:=False;
+    // An untouched standard board neither blocks Paste nor asks on close.
+    GuiTestConfirmationResult:=0; GuiTestLastConfirmationText:='';
+    CanClose:=False; Main.OnCloseQuery(Main,CanClose); Check(CanClose,'Empty initial board closes without a prompt');
+    Check(GuiTestLastConfirmationText='','No initial-board discard prompt');
+    Clipboard.AsText:=ChessStartingFEN; Menu(Main,'Paste FEN position from clipboard').Click;
+    Check(GuiTestLastConfirmationText='','Empty initial board can be replaced without a prompt');
+    Click(Board,13); Click(Board,29); Click(Board,53); Click(Board,37);
+    Actor:=TGameTreeActor.Create(Main.ActiveGameTree,False);
+    BeforeNode:=Main.ActiveGameTree.MainlineNode[1];
+    Command:=Actor.CreateStoreMoveVariationCommand(BeforeNode.NodeId,'c7c5',gmsHuman);
+    try
+      Actor.ExecuteCommand(Command); Check(Command.Accepted,'Create branch for discard tests');
+      BranchId:=Command.CreatedNodeId;
+    finally Command.Free; end;
+    Command:=Actor.CreateStoreMoveVariationCommand(BranchId,'g1f3',gmsHuman);
+    try Actor.ExecuteCommand(Command); Check(Command.Accepted,'Create nested branch'); finally Command.Free; end;
+    BeforeBranch:=Main.ActiveGameTree.FindNodeById(BranchId);
+    Key:=VK_LEFT; Memo.OnKeyDown(Memo,Key,[]); // Freeze at mainline tip.
+    Key:=VK_LEFT; Memo.OnKeyDown(Memo,Key,[]); // Select e4, not the live tip.
+    TreeId:=Main.ActiveGameTree.GameTreeId; BeforeCount:=Main.ActiveGameTree.MainlineCount;
+    BeforeBranches:=Main.ActiveGameTree.BranchCount; TipId:=Main.ActiveGameTree.MainlineNode[2].NodeId;
+    BeforeFEN:=Board.Position.ToFEN; BeforeText:=Memo.Text;
+    BeforeLegal:=TMemo(Main.FindComponent('LegalMovesMemo')).Text;
+    BeforeSelStart:=Memo.SelStart; BeforeSelLength:=Memo.SelLength; Selection:=Memo.SelText;
+    Check(Selection<>'','Cancel test has a real notation selection');
+    GuiTestConfirmationResult:=mrCancel;
+    Clipboard.AsText:=ChessStartingFEN; Menu(Main,'Paste FEN position from clipboard').Click;
+    Check(GuiTestLastConfirmationText='Discard the explored moves?','Paste asks about discarding');
+    Check((Main.ActiveGameTree.GameTreeId=TreeId) and
+      (Main.ActiveGameTree.MainlineCount=BeforeCount) and (Main.ActiveGameTree.BranchCount=BeforeBranches),
+      'Cancelled Paste preserves tree and branches');
+    Check((Main.ActiveGameTree.MainlineNode[2].NodeId=TipId) and
+      (Main.ActiveGameTree.FindNodeById(BeforeNode.NodeId)=BeforeNode) and
+      (Main.ActiveGameTree.FindNodeById(BranchId)=BeforeBranch), 'Cancelled Paste preserves node identity');
+    Check((Board.Position.ToFEN=BeforeFEN) and (Memo.Text=BeforeText) and
+      (Memo.SelStart=BeforeSelStart) and (Memo.SelLength=BeforeSelLength) and (Memo.SelText=Selection) and
+      (TMemo(Main.FindComponent('LegalMovesMemo')).Text=BeforeLegal), 'Cancelled Paste preserves view, cursor and legal list');
+    GuiTestLastConfirmationText:=''; Main.OnCloseQuery(Main,CanClose);
+    Check(not CanClose,'Cancel vetoes close');
+    Check(GuiTestLastConfirmationText='Discard the explored moves?','Close asks about discarding');
+    Check((Main.ActiveGameTree.GameTreeId=TreeId) and (Main.ActiveGameTree.BranchCount=BeforeBranches) and
+      (Main.ActiveGameTree.MainlineNode[2].NodeId=TipId) and
+      (Main.ActiveGameTree.FindNodeById(BranchId)=BeforeBranch), 'Cancelled close preserves entire tree');
+    Check((Board.Position.ToFEN=BeforeFEN) and (Memo.Text=BeforeText) and
+      (Memo.SelStart=BeforeSelStart) and (Memo.SelLength=BeforeSelLength), 'Cancelled close preserves view and selection');
+    GuiTestConfirmationResult:=mrNo; Main.OnCloseQuery(Main,CanClose);
+    Check(not CanClose,'Only explicit Discard accepts close');
+    GuiTestConfirmationResult:=mrYes; Main.OnCloseQuery(Main,CanClose);
+    Check(CanClose,'Explicit Discard allows close');
+    Check(Main.ActiveGameTree.MainlineNode[2].NodeId=TipId,'Close query does not mutate the tree');
+    Clipboard.AsText:='not a chess FEN'; Menu(Main,'Paste FEN position from clipboard').Click;
+    Check(Pos('Invalid FEN:',GuiTestLastConfirmationText)>0,'Invalid replacement is reported');
+    Check((Main.ActiveGameTree.MainlineNode[2].NodeId=TipId) and
+      (Main.ActiveGameTree.FindNodeById(BranchId)=BeforeBranch) and
+      (Board.Position.ToFEN=BeforeFEN),'Invalid replacement preserves explored tree');
+    Check((Memo.Text=BeforeText) and (Memo.SelStart=BeforeSelStart) and
+      (Memo.SelLength=BeforeSelLength),'Invalid replacement preserves displayed notation');
+    // Releasing a test-only observer before replacing the tree keeps ownership explicit.
+    Actor.Free; Actor:=nil;
+    Clipboard.AsText:=ChessStartingFEN; Menu(Main,'Paste FEN position from clipboard').Click;
+    Check((Main.ActiveGameTree.MainlineCount=0) and (Main.ActiveGameTree.BranchCount=0) and
+      (Board.Position.ToFEN=ChessStartingFEN),'Explicit Discard allows FEN replacement');
+    // A custom root FEN is valuable even when it has no played moves.
+    Main.LoadStandaloneFen('4k3/8/8/8/8/8/8/R3K3 b - - 0 37');
+    BeforeFEN:=Board.Position.ToFEN; GuiTestConfirmationResult:=mrCancel;
+    Menu(Main,'Paste FEN position from clipboard').Click;
+    Check(Board.Position.ToFEN=BeforeFEN,'Cancel protects a custom root position');
+    Main.OnCloseQuery(Main,CanClose); Check(not CanClose,'Custom root also protected on close');
+  finally GuiTestConfirmationResult:=0; Actor.Free; Main.Free; end;
+end;
+
 var Errors: TErrors;
 begin
   RequireDerivedFormResource:=False; Application.Initialize; Errors:=TErrors.Create;
@@ -284,7 +416,7 @@ begin
   Variant:=TChessVariant.Create;
   try
     RegisterDefaultGameVariant(Variant);
-    CheckView; CheckPV; CheckLayout; CheckMain;
+    CheckView; CheckCoordinateContrast; CheckPV; CheckLayout; CheckMain; CheckDiscardProtection;
     WriteLn('Chess board/PV/GUI checks passed (',Checks,' checks)');
   finally RegisterDefaultGameVariant(DraughtsVariant); Variant.Free; Errors.Free; end;
 end.

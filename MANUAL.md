@@ -14,7 +14,9 @@ rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
 ```
 
 Explore mainlines and variations through the existing notation and game-tree
-views. This step does not save chess games; copy FEN to retain a position.
+views. This step does not save chess games; copy FEN to retain a position. Replacing
+or closing an explored tree asks **Discard / Cancel**. Cancel preserves the
+position, moves and variations.
 PGN, UCI, clocked games, setup, tournaments and databases are not yet connected.
 Their controls remain visible in their original locations but are disabled,
 with automatic database search also guarded.
