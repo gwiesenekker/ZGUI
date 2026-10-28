@@ -114,6 +114,7 @@ begin
   Result.Offset:=FOffset; Result.Line:=FLine; Result.Column:=FColumn;
   if FOffset>Length(FText) then begin Result.Kind:=ptEnd; Exit; end;
   Start:=FOffset;
+  if Copy(FText,FOffset,2)='--' then Error('null moves are not supported');
   case Peek of
     '[': begin Result.Kind:=ptTagOpen; Advance; end;
     ']': begin Result.Kind:=ptTagClose; Advance; end;

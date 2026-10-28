@@ -6,33 +6,40 @@ interface
 
 uses
   Classes, Controls, Forms, Graphics, Grids, StdCtrls, SysUtils, uGuiDialogs,
-  uDraughtsPdn;
+  uDraughtsPdn, uGameFileReader;
 
 type
   TPdnGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
 
+  TFileGameSelectedEvent = procedure(Sender: TObject; Entry: TGameFileEntry) of object;
+
   TPdnOpenDialog = class(TForm)
   private
     FFileName: string;
-    FGames: TList;
+    FReader: TGameFileReader;
+    FOnFileGameSelected: TFileGameSelectedEvent;
     FGrid: TStringGrid;
     FOnGameSelected: TPdnGameSelectedEvent;
     FStatusLabel: TLabel;
     FWarningLabel: TLabel;
     procedure GridSelectCell(Sender: TObject; ACol, ARow: Integer; var CanSelect: Boolean);
     procedure ShowGameWarnings(ARow: Integer);
-    function GameAtRow(ARow: Integer): TPdnGame;
+    function GameAtRow(ARow: Integer): TGameFileEntry;
     procedure GridDblClick(Sender: TObject);
     procedure PopulateGrid;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure OpenPdnFile(const AFileName: string);
+    procedure OpenGameFile(const AFileName, AFormatName: string; AReader: TGameFileReader);
+    property OnFileGameSelected: TFileGameSelectedEvent read FOnFileGameSelected write FOnFileGameSelected;
     property OnGameSelected: TPdnGameSelectedEvent read FOnGameSelected
       write FOnGameSelected;
   end;
 
 implementation
+
+uses uPdnFileReader;
 
 constructor TPdnOpenDialog.Create(AOwner: TComponent);
 begin
@@ -45,7 +52,7 @@ begin
   Constraints.MinWidth := 520;
   Constraints.MinHeight := 260;
 
-  FGames := TList.Create;
+  FReader := TPdnFileReader.Create;
 
   FStatusLabel := TLabel.Create(Self);
   FStatusLabel.Name := 'PdnImportStatus';
@@ -92,51 +99,46 @@ begin
 end;
 
 destructor TPdnOpenDialog.Destroy;
-var
-  I: Integer;
-begin
-  for I := 0 to FGames.Count - 1 do
-    TObject(FGames[I]).Free;
-  FGames.Free;
-  inherited Destroy;
-end;
+begin FReader.Free; inherited Destroy; end;
 
-function TPdnOpenDialog.GameAtRow(ARow: Integer): TPdnGame;
+function TPdnOpenDialog.GameAtRow(ARow: Integer): TGameFileEntry;
 begin
-  Result := nil;
-  if (ARow <= 0) or (ARow > FGames.Count) then
-    Exit;
-  Result := TPdnGame(FGames[ARow - 1]);
-  Result.ParseDeferredMoves;
+  Result:=nil;
+  if (ARow<=0) or (ARow>FReader.Entries.Count) then Exit;
+  Result:=TGameFileEntry(FReader.Entries[ARow-1]);
+  Result.Validate;
 end;
 
 procedure TPdnOpenDialog.GridDblClick(Sender: TObject);
-var
-  LGame: TPdnGame;
+var Entry: TGameFileEntry;
 begin
-  LGame := GameAtRow(FGrid.Row);
-  if (LGame <> nil) and Assigned(FOnGameSelected) then
-    FOnGameSelected(Self, LGame);
+  Entry:=GameAtRow(FGrid.Row);
+  if Entry=nil then Exit;
+  if Entry.ErrorText<>'' then begin
+    ShowGuiOkDialog(Self,Caption,Entry.ErrorText); Exit;
+  end;
+  if Entry is TPdnFileEntry then begin
+    if Assigned(FOnGameSelected) then FOnGameSelected(Self,TPdnFileEntry(Entry).Game);
+  end else if Assigned(FOnFileGameSelected) then FOnFileGameSelected(Self,Entry);
 end;
 
 procedure TPdnOpenDialog.ShowGameWarnings(ARow: Integer);
 var
-  Game: TPdnGame;
+  Game: TGameFileEntry;
   Warnings: TStringList;
 begin
   Game := GameAtRow(ARow);
   FWarningLabel.Caption := '';
   if Game <> nil then
   begin
-    Game.ValidateMoveTree;
-    FWarningLabel.Caption := Trim(StringReplace(Game.ImportWarningsText,
+    FWarningLabel.Caption := Trim(StringReplace(Game.ErrorText+LineEnding+Game.WarningsText,
       LineEnding, ' ', [rfReplaceAll]));
     Warnings := TStringList.Create;
     try
-      Warnings.Text := Game.ImportWarningsText;
+      Warnings.Text := Game.WarningsText;
       FGrid.Cells[4, ARow] := '';
       if Warnings.Count > 0 then FGrid.Cells[4, ARow] := IntToStr(Warnings.Count);
-      FStatusLabel.Caption := IntToStr(FGames.Count) + ' game(s) found in ' +
+      FStatusLabel.Caption := IntToStr(FReader.Entries.Count) + ' game(s) found in ' +
         ExtractFileName(FFileName) + ' — selected game: ' + IntToStr(Warnings.Count) +
         ' import warning(s); other games checked on selection';
     finally Warnings.Free; end;
@@ -153,14 +155,14 @@ end;
 
 procedure TPdnOpenDialog.PopulateGrid;
 var
-  Game: TPdnGame;
+  Game: TGameFileEntry;
   Row, WarningCount: Integer;
   Warnings: TStringList;
 begin
-  if FGames.Count = 0 then
+  if FReader.Entries.Count = 0 then
     FGrid.RowCount := 2
   else
-    FGrid.RowCount := FGames.Count + 1;
+    FGrid.RowCount := FReader.Entries.Count + 1;
   for Row := 1 to FGrid.RowCount - 1 do
   begin
     FGrid.Cells[0, Row] := '';
@@ -173,14 +175,14 @@ begin
   WarningCount := 0;
   Warnings := TStringList.Create;
   try
-    for Row := 1 to FGames.Count do
+    for Row := 1 to FReader.Entries.Count do
     begin
-      Game := TPdnGame(FGames[Row - 1]);
+      Game := TGameFileEntry(FReader.Entries[Row - 1]);
       FGrid.Cells[0, Row] := Game.WhiteName;
       FGrid.Cells[1, Row] := Game.BlackName;
       FGrid.Cells[2, Row] := Game.EventName;
       FGrid.Cells[3, Row] := Game.ResultText;
-      Warnings.Text := Game.ImportWarningsText;
+      Warnings.Text := Game.WarningsText;
       Inc(WarningCount, Warnings.Count);
       if Game.Deferred then FGrid.Cells[4, Row] := 'On selection'
       else if Warnings.Count > 0 then FGrid.Cells[4, Row] := IntToStr(Warnings.Count);
@@ -189,7 +191,7 @@ begin
     Warnings.Free;
   end;
 
-  FStatusLabel.Caption := IntToStr(FGames.Count) + ' game(s) found in ' +
+  FStatusLabel.Caption := IntToStr(FReader.Entries.Count) + ' game(s) found in ' +
     ExtractFileName(FFileName);
   if WarningCount > 0 then
     FStatusLabel.Caption := FStatusLabel.Caption + ' — ' + IntToStr(WarningCount) + ' import warning(s)';
@@ -197,9 +199,13 @@ begin
 end;
 
 procedure TPdnOpenDialog.OpenPdnFile(const AFileName: string);
+begin OpenGameFile(AFileName,'PDN',TPdnFileReader.Create); end;
+
+procedure TPdnOpenDialog.OpenGameFile(const AFileName,AFormatName: string; AReader: TGameFileReader);
 begin
-  FFileName := AFileName;
-  LoadPdnGamesFromFile(FFileName, FGames, True);
+  try AReader.OpenFile(AFileName); except AReader.Free; raise; end;
+  FReader.Free; FReader:=AReader;
+  FFileName:=AFileName; Caption:='Open '+AFormatName;
   PopulateGrid;
   {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}
   if Owner is TCustomForm then

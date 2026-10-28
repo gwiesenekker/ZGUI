@@ -5,15 +5,18 @@ unit uGuiDialogs;
 interface
 
 uses
-  Classes, Forms, Types;
+  Classes, Forms, Types, Dialogs;
 
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
 var GuiTestConfirmationResult: Integer = 0;
     GuiTestChoiceOnShow: TNotifyEvent = nil;
     GuiTestConfirmationOnShow: TNotifyEvent = nil;
     GuiTestLastConfirmationText: string = '';
+    GuiTestFileDialogResult: Integer = -1;
+    GuiTestFileName, GuiTestFileTitle, GuiTestFileFilter, GuiTestFileExtension: string;
 {$ENDIF}
 
+function ExecuteGuiFileDialog(Dialog: TOpenDialog): Boolean;
 function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
   AText: string; AChoices: TStrings): Integer;
 function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,
@@ -36,6 +39,18 @@ implementation
 
 uses
   Controls, ExtCtrls, Graphics, Math, Process, StdCtrls, SysUtils, uPlatformProcess;
+
+function ExecuteGuiFileDialog(Dialog: TOpenDialog): Boolean;
+begin
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+  GuiTestFileTitle:=Dialog.Title; GuiTestFileFilter:=Dialog.Filter; GuiTestFileExtension:=Dialog.DefaultExt;
+  if GuiTestFileDialogResult<0 then raise EInvalidOperation.Create('Unexpected file dialog: '+Dialog.Title);
+  Result:=GuiTestFileDialogResult=1;
+  if Result then Dialog.FileName:=GuiTestFileName;
+  {$ELSE}
+  Result:=Dialog.Execute;
+  {$ENDIF}
+end;
 
 const
   DialogWidth = 400;

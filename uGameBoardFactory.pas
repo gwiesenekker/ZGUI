@@ -5,11 +5,9 @@ interface
 uses Classes, uGamePosition, uGameBoardControl;
 function CreateGameBoardControl(AOwner: TComponent; AVariant: TGameVariant): TGameBoardControl;
 implementation
-uses uChessPosition, uChessBoardControl, uDraughtsPosition, uDraughtsBoardControl;
+uses uGameGuiProfile;
 function CreateGameBoardControl(AOwner: TComponent; AVariant: TGameVariant): TGameBoardControl;
 begin
-  if AVariant is TChessVariant then Result := TChessBoardControl.Create(AOwner)
-  else if AVariant is TDraughtsVariant then Result := TDraughtsBoardControl.Create(AOwner)
-  else raise EGamePositionError.Create('No board view for '+AVariant.Name);
+  Result := GameGuiProfileFor(AVariant).BoardClass.Create(AOwner);
 end;
 end.

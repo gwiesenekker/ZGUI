@@ -10,13 +10,15 @@ FEN copying/pasting, mainline and variation navigation, highlights and board
 flipping. Click both source and destination, including for a piece with one move.
 The legal list uses UCI coordinates; notation and PV views use SAN.
 
-PGN, UCI engines, clocked games, position setup, tournaments and databases are
-not yet connected for chess. Their existing controls stay in place but are
-disabled, including automatic database search. Exploration is not saved as a
-game yet; copy FEN to retain the displayed position. Replacing or closing an
-exploration asks for Discard / Cancel confirmation. The existing score-history
-view is retained, without changing its implementation.
+**Ctrl+O** opens PGN collections in the existing game browser; **Ctrl+S**
+appends the displayed game to a PGN file. Headers, comments, NAGs and nested
+variations are retained. Repeated equivalent variations are merged with an
+import warning. Replacing or closing a board offers the existing save prompt;
+Cancel or failed saving preserves it. The score-history view is retained.
 
+UCI engines, clocked games, position setup, tournaments and databases are not
+yet connected for chess. Their controls stay in place but remain disabled,
+including automatic database search.
 Chess pieces are original, scalable Canvas vector artwork in
 `uChessBoardControl.pas`, distributed under the project's **GPLv3** licence.
 No system chess glyphs, external artwork or additional chess font is needed.
@@ -79,7 +81,7 @@ retain their GWDGUI name.
    navigate the focused notation, tree or PV view.
 4. Use **Tournament...** for engine competitions, or the **Database** menu for
    collections and position searches.
-5. Press **F1** for the full manual. **Ctrl+O** opens PDN, **Ctrl+S** saves PDN,
+5. Press **F1** for the full manual. **Ctrl+O** opens the selected game format (PGN for chess), **Ctrl+S** saves it,
    **Ctrl+,** opens preferences and **Ctrl+Q** quits with the normal save prompts.
 
 ## Settings and saved files

@@ -4,6 +4,41 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed PGN integration — 2026-10-28
+
+- Apply Claude's approved proposal with G1/P2–P7/U9 changes: preserve existing
+  tree/actor, notation traversal, file browser and atomic append/save workflow.
+- Add owned header-tag arrays, typed NAGs and leading comments. Merge repeated
+  variations and their annotations with warnings; keep one child per move (G1).
+  Import comments literally through typed node data, never free-text draughts
+  score recognition (P3).
+- Read and write PGN with legal SAN, custom FENs, nested variations, all results,
+  unknown tags, escaped strings and UTF-8. Convert CP1252 with a warning (P5).
+  Reject null moves clearly; accept e.p. only after en passant (P7).
+- Add standard evaluation/clock/elapsed-time commands without projection prose;
+  keep unknown commands literal. Offer an API option for lossless typed metadata,
+  preserving PV/depth without turning analysis into variations (P2).
+- Validate in a temporary existing tree, then replay immutable text through the
+  displayed actor before one refresh (P4). Invalid input preserves tree identity.
+  A checked 200-ply two-pass import takes about four seconds with debug checks.
+- Reuse the existing multi-game browser and deferred selection, with a 16 MiB
+  per-game limit. Supply file capabilities, reader/export policy, board factory
+  and click policy through a GUI composition profile (U9); enable PGN Open/Save
+  while keeping the existing layout and other pending chess features disabled.
+- Use the Seven Tag Roster, matching termination result, paired SetUp/FEN tags,
+  numeric NAGs and token-boundary wrapping near column 80 (P6). Indivisible
+  comments/tokens may exceed that width; their literal text is preserved.
+- Extend headless and existing GUI tests for round trips, literal annotations,
+  metadata isolation, malformed imports, deferred collections, save/append,
+  replacement/close cancellation and failed saves. Reuse the existing standalone
+  display transition; cancelled saves retain the browsed position and view.
+  Update README and manual.
+- Validation: application compilation, full headless regression and all six GUI
+  suites pass (691 chess GUI checks). The 96 PGN adapter checks also pass with
+  range/overflow/heap checks and zero unfreed blocks. Independent python-chess
+  comparison matches 80 games / 3,650 nodes, including SAN, headers, comments,
+  NAGs, variations, evaluations and clocks.
+
 ### PGN adapter foundation — 2026-10-28
 
 Commit: `d082285`.

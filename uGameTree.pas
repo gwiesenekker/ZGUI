@@ -5,7 +5,7 @@ unit uGameTree;
 interface
 
 uses
-  Classes, Contnrs, SysUtils, uGamePosition, uGameOrchestrator, uGameMoveHistory, uGameTreeNodeData;
+  Classes, Contnrs, SysUtils, uGamePosition, uGameOrchestrator, uGameMoveHistory, uGameTreeNodeData, uGameFileMetadata;
 
 type
   TGameTreePlyNode = class
@@ -19,6 +19,8 @@ type
     FBlackRemainingSeconds: Double;
     FBlackUsedSeconds: Double;
     FCommentText: string;
+    FBeforeCommentText: string;
+    FNags: TGameTreeNags;
     FEnginePV: string;
     FEnginePVDepth: string;
     FEnginePVTimeText: string;
@@ -94,6 +96,7 @@ type
     FBlackRemainingSeconds: Double;
     FBlackUsedSeconds: Double;
     FEventName: string;
+    FExtraTags: TGameFileTags;
     FGameTreeId: Int64;
     FGameState: TGameOrchestratorState;
     FHasClockInfo: Boolean;
@@ -116,6 +119,7 @@ type
     FWhiteName: string;
     FWhiteRemainingSeconds: Double;
     FWhiteUsedSeconds: Double;
+    function GetExtraTags: TGameFileTags;
     procedure ApplyAnnotationText(ANode: TGameTreePlyNode;
       const AAnnotationText: string);
     procedure ClearStructure;
@@ -164,6 +168,8 @@ type
     constructor Create(AVariant: TGameVariant = nil);
     destructor Destroy; override;
     procedure Clear;
+    procedure SetExtraTags(const ATags: TGameFileTags; out AChanged: Boolean);
+    property ExtraTags: TGameFileTags read GetExtraTags;
     procedure BeginRebuild(const ASignature, AEventName, AWhiteName,
       ABlackName, AResultText, AStartingFEN: string);
     procedure SetHeader(const AEventName, AWhiteName, ABlackName, AResultText,
@@ -273,6 +279,8 @@ end;
 
 function TGameTreePlyNode.GetNodeData: TGameTreeNodeData;
 begin
+  Result.BeforeCommentText:=FBeforeCommentText;
+  Result.Nags:=Copy(FNags,0,Length(FNags));
   Result.CommentText := FCommentText;
   Result.OriginText := FOriginText;
   Result.EnginePV := FEnginePV;
@@ -299,6 +307,8 @@ begin
   Node := FindNodeById(ANodeId);
   Result := Node <> nil;
   if not Result then Exit;
+  Node.FBeforeCommentText:=Data.BeforeCommentText;
+  Node.FNags:=Copy(Data.Nags,0,Length(Data.Nags));
   Node.FCommentText := Data.CommentText;
   Node.FOriginText := Data.OriginText;
   Node.FEnginePV := Data.EnginePV;
@@ -395,8 +405,18 @@ begin
   ClearTreeMetadata;
 end;
 
+function TGameTree.GetExtraTags: TGameFileTags;
+begin Result:=CopyGameFileTags(FExtraTags); end;
+
+procedure TGameTree.SetExtraTags(const ATags: TGameFileTags; out AChanged: Boolean);
+begin
+  AChanged:=not GameFileTagsEqual(FExtraTags,ATags);
+  FExtraTags:=CopyGameFileTags(ATags);
+end;
+
 procedure TGameTree.ClearTreeMetadata;
 begin
+  FExtraTags:=nil;
   FEventName := '?';
   FWhiteName := 'White';
   FBlackName := 'Black';

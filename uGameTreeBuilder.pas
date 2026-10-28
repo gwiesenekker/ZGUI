@@ -5,7 +5,7 @@ unit uGameTreeBuilder;
 interface
 
 uses
-  Classes, SysUtils, uGameMoveHistory, uGameOrchestrator, uGameTree;
+  Classes, SysUtils, uGameMoveHistory, uGameOrchestrator, uGameTree, uGameFileMetadata;
 
 type
   TGameTreePvInput = record
@@ -17,6 +17,7 @@ type
     TimeText: string;
   end;
   TGameTreeHeaderInput = record
+    ExtraTags: TGameFileTags;
     Signature: string;
     EventName: string;
     WhiteName: string;
@@ -90,6 +91,7 @@ function GameTreeHeaderInput(const ASignature, AEventName, AWhiteName,
   AGameState: TGameOrchestratorState;
   const AStatusText: string; const AInitialCommentText: string): TGameTreeHeaderInput;
 begin
+  Result.ExtraTags:=nil;
   Result.Signature := ASignature;
   Result.EventName := AEventName;
   Result.WhiteName := AWhiteName;
@@ -128,6 +130,7 @@ begin
   AGameTree.BeginRebuild(AHeader.Signature, AHeader.EventName,
     AHeader.WhiteName, AHeader.BlackName, AHeader.ResultText,
     AHeader.StartingFEN);
+  AGameTree.SetExtraTags(AHeader.ExtraTags,Changed);
   AGameTree.RecordMainlineAnnotation(0, AHeader.InitialCommentText);
   AGameTree.SetStatusText(AHeader.StatusText, Changed);
   AGameTree.SetGameState(AHeader.GameState, Changed);

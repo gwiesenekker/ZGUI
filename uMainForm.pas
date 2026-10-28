@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
-  LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uChessPosition,
+  LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uGameGuiProfile, uGameFileReader,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
   uEngineParamsJson, uEngineRegistry, uDraughtsPdn, uPdnOpenDialog, uThreadMessageQueue, uGameGuiMessages, uAnalysisCoordinator,
@@ -16,8 +16,6 @@ uses
   uPreferences, uPreferencesForm, uScoreHistoryControl, uScoreHistoryForm, uGameMoveHistory;
 
 type
-  TGuiGameFeature = (gfPdn, gfPositionSetup, gfDatabase, gfTournament,
-    gfEngines, gfNewGame);
 
   TPvHintSource = (phsMain, phsAnalyzer, phsNone);
 
@@ -387,6 +385,7 @@ type
     procedure OpenPdnClick(Sender: TObject);
     procedure PasteFenClick(Sender: TObject);
     procedure PdnGameSelected(Sender: TObject; AGame: TPdnGame);
+    procedure FileGameSelected(Sender: TObject; Entry: TGameFileEntry);
     function PlayerNameOrFallback(const AName, AFallback: string): string;
     function PostGuiEvent(AEvent: TObject): Boolean;
     procedure PreferencesAccepted(Sender: TObject;
@@ -618,13 +617,13 @@ begin
   LFileMenu.Caption := '&File';
   LMainMenu.Items.Add(LFileMenu);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := '&Open PDN...';
+  LMenuItem.Caption := '&Open '+GameGuiProfileFor(DefaultGameVariant).FormatName+'...';
   LMenuItem.ShortCut := ShortCut(Ord('O'), [ssCtrl]);
   LMenuItem.OnClick := @OpenPdnClick;
   ApplyFeature(LMenuItem, gfPdn);
   LFileMenu.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := '&Save PDN...';
+  LMenuItem.Caption := '&Save '+GameGuiProfileFor(DefaultGameVariant).FormatName+'...';
   LMenuItem.ShortCut := ShortCut(Ord('S'), [ssCtrl]);
   LMenuItem.OnClick := @SavePdnClick;
   ApplyFeature(LMenuItem, gfPdn);
@@ -1321,12 +1320,7 @@ end;
 
 function TMainForm.GameSupports(AFeature: TGuiGameFeature): Boolean;
 begin
-  // GUI composition policy for this standalone-exploration step. Game rules
-  // and shared runners do not know which UI/file/engine adapters are ready.
-  case AFeature of
-    gfPdn, gfPositionSetup, gfDatabase, gfTournament, gfEngines, gfNewGame:
-      Result := not (DefaultGameVariant is TChessVariant);
-  end;
+  Result:=AFeature in GameGuiProfileFor(DefaultGameVariant).Features;
 end;
 
 procedure TMainForm.ApplyFeature(AComponent: TComponent; AFeature: TGuiGameFeature);
@@ -1914,7 +1908,7 @@ begin
   try
     if not TryBuildDisplayedPosition(ActiveGameTree, LPosition) then Exit;
     Move := FMoveInteraction.SelectSource(LPosition, ASourceSquare,
-      not (ActiveGameTree.Variant is TChessVariant));
+      GameGuiProfileFor(ActiveGameTree.Variant).SourceClickSingleMove);
   finally
     LPosition.Free;
   end;
@@ -2788,7 +2782,7 @@ begin
   if HasDisplayedGameToSave then
   begin
     LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
-      'Save the currently displayed game as PDN before closing?', 'Yes',
+      'Save the currently displayed game as '+GameGuiProfileFor(DefaultGameVariant).FormatName+' before closing?', 'Yes',
       'No', mrNo);
     if LResponse = mrCancel then
       Exit;
@@ -2799,7 +2793,7 @@ begin
   if GameSupports(gfPdn) and FGameActive and GameTreeHasContent(FGameTree) then
   begin
     LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
-      'Save the standalone board as PDN before closing?', 'Yes', 'No', mrNo);
+      'Save the standalone board as '+GameGuiProfileFor(DefaultGameVariant).FormatName+' before closing?', 'Yes', 'No', mrNo);
     if LResponse = mrCancel then
       Exit;
     if LResponse = mrYes then
@@ -3175,12 +3169,12 @@ begin
   if not GameTreeHasContent(FGameTree) then
     Exit;
   Response := ShowGuiConfirmationDialog(Self, 'Replace board',
-    'Save the standalone board as PDN before replacing it?', 'Yes', 'No', mrNo);
+    'Save the standalone board as '+GameGuiProfileFor(DefaultGameVariant).FormatName+' before replacing it?', 'Yes', 'No', mrNo);
   if Response = mrCancel then
     Exit(False);
   if Response = mrYes then
   begin
-    ShowStandaloneGame(nil);
+    if SelectedDisplayedGame<>nil then ShowStandaloneGame(nil);
     Result := SaveCurrentGameWithDialog;
   end;
 end;
@@ -3675,6 +3669,7 @@ begin
       EventNameForTree(AGameTree), LWhiteName, LBlackName,
       LResultText, LStartingFEN,
       LRecordTimeControl, LTimeControl, LState, LStatusText);
+  if AGameTree<>nil then Result.ExtraTags:=AGameTree.ExtraTags;
 end;
 
 function TMainForm.RunningSnapshotTreeInput(AGame: TRunningGame;
@@ -4418,6 +4413,7 @@ end;
 function TMainForm.CurrentFilteredGameTreePdnOptions: TGameTreePdnRenderOptions;
 begin
   Result := DefaultGameTreePdnRenderOptions;
+  Result.FileFormat:=GameGuiProfileFor(ActiveGameTree.Variant).FileFormat;
   Result.HideAnnotations := FHideMoveAnnotations;
   Result.ShowEngineScore := FMoveShowEngineScore;
   Result.ShowEnginePVMove := FMoveShowEnginePVMove;
@@ -4468,6 +4464,7 @@ begin
     Exit;
 
   LOptions := DefaultGameTreePdnRenderOptions;
+  LOptions.FileFormat:=GameGuiProfileFor(LGameTree.Variant).FileFormat;
   Result := GameTreeToPdnTextEx(LGameTree, LOptions, AEventName);
 end;
 
@@ -4678,7 +4675,7 @@ begin
 
     LPopup := TPopupMenu.Create(FGameTreeForm);
     LMenuItem := TMenuItem.Create(FGameTreeForm);
-    LMenuItem.Caption := 'Copy tree PDN to clipboard';
+    LMenuItem.Caption := 'Copy tree '+GameGuiProfileFor(DefaultGameVariant).FormatName+' to clipboard';
     LMenuItem.OnClick := @CopyGameTreePdnClick;
     ApplyFeature(LMenuItem, gfPdn);
     LPopup.Items.Add(LMenuItem);
@@ -4921,27 +4918,45 @@ begin
   if not GameSupports(gfPdn) then Exit;
   Dialog := TOpenDialog.Create(Self);
   try
-    Dialog.Title := 'Open PDN';
-    Dialog.Filter := 'PDN files (*.pdn)|*.pdn|All files (*)|*';
+    Dialog.Title := 'Open '+GameGuiProfileFor(DefaultGameVariant).FormatName;
+    Dialog.Filter := GameGuiProfileFor(DefaultGameVariant).FileFilter;
     Dialog.Options := Dialog.Options + [ofFileMustExist, ofEnableSizing];
-    if not Dialog.Execute then
+    if not ExecuteGuiFileDialog(Dialog) then
       Exit;
 
     if FPdnOpenDialog = nil then
     begin
       FPdnOpenDialog := TPdnOpenDialog.Create(Self);
       FPdnOpenDialog.OnGameSelected := @PdnGameSelected;
+      FPdnOpenDialog.OnFileGameSelected := @FileGameSelected;
     end;
     try
-      FPdnOpenDialog.OpenPdnFile(Dialog.FileName);
+      FPdnOpenDialog.OpenGameFile(Dialog.FileName,GameGuiProfileFor(DefaultGameVariant).FormatName,
+        CreateProfileReader(GameGuiProfileFor(DefaultGameVariant),DefaultGameVariant));
     except
       on E: Exception do
-        ShowGuiOkDialog(Self, 'Open PDN',
-          'Could not open PDN: ' + E.Message);
+        ShowGuiOkDialog(Self,Dialog.Title,'Could not open file: '+E.Message);
     end;
   finally
     Dialog.Free;
   end;
+end;
+
+procedure TMainForm.FileGameSelected(Sender: TObject; Entry: TGameFileEntry);
+begin
+  if not GameSupports(gfPdn) or (Entry=nil) then Exit;
+  Entry.Validate;
+  if Entry.ErrorText<>'' then begin ShowGuiOkDialog(Self,'Open game',Entry.ErrorText); Exit; end;
+  if not ConfirmReplaceStandaloneGame then Exit;
+  try
+    Entry.ImportInto(FGameTreeActor);
+    FStandaloneWhitePlayerName:=FGameTree.WhiteName;
+    FStandaloneBlackPlayerName:=FGameTree.BlackName;
+    FStandaloneEventName:=FGameTree.EventName;
+    ClearDisplayedPvCache('',0);
+    // Reuse the existing standalone display transition and refresh.
+    ShowStandaloneGame(nil);
+  except on E:Exception do ShowGuiOkDialog(Self,'Open game',E.Message); end;
 end;
 
 procedure TMainForm.PdnGameSelected(Sender: TObject; AGame: TPdnGame);
@@ -4981,15 +4996,17 @@ begin
     LPdnText := CurrentGameTreePdnText(EventNameForTree(FGameTree));
   Dialog := TSaveDialog.Create(Self);
   try
-    Dialog.Title := 'Save PDN';
-    Dialog.Filter := 'PDN files (*.pdn)|*.pdn|All files (*)|*';
-    Dialog.DefaultExt := 'pdn';
+    Dialog.Title := 'Save '+GameGuiProfileFor(DefaultGameVariant).FormatName;
+    Dialog.Filter := GameGuiProfileFor(DefaultGameVariant).FileFilter;
+    Dialog.DefaultExt := GameGuiProfileFor(DefaultGameVariant).FileExtension;
     Dialog.Options := Dialog.Options + [ofPathMustExist, ofEnableSizing];
-    if not Dialog.Execute then
+    if not ExecuteGuiFileDialog(Dialog) then
       Exit;
 
-    AppendPdnTextToFile(Dialog.FileName, LPdnText);
-    Result := True;
+    try
+      AppendPdnTextToFile(Dialog.FileName, LPdnText);
+      Result := True;
+    except on E:Exception do ShowGuiOkDialog(Self,Dialog.Title,'Could not save file: '+E.Message); end;
   finally
     Dialog.Free;
   end;

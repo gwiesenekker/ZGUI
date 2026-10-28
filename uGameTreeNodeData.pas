@@ -3,11 +3,15 @@ unit uGameTreeNodeData;
 interface
 uses SysUtils;
 type
+  TGameTreeNags = array of Byte;
   TGameTreeNodeData = record
+    BeforeCommentText: string;
+    Nags: TGameTreeNags;
     CommentText, OriginText, EnginePV, EngineScore, EnginePVDepth, EnginePVTimeText, AnnotatorPV, AnnotatorScore, AnnotatorPVDepth, AnnotatorPVTimeText, AutoPlayPV: string;
     HasClockInfo, HasMoveTime: Boolean;
     SecondsUsed, WhiteRemainingSeconds, BlackRemainingSeconds, WhiteUsedSeconds, BlackUsedSeconds: Double;
   end;
+function CopyGameTreeNodeData(const Data: TGameTreeNodeData): TGameTreeNodeData;
 function EncodeNodeData(const Data: TGameTreeNodeData; const Projection: string): string;
 function DecodeNodeData(const Text: string; out Data: TGameTreeNodeData;
   out Projection: string): Boolean;
@@ -18,6 +22,9 @@ function DecodeNodeDataComment(const Text, VisibleComment: string;
   out Data: TGameTreeNodeData; out Edited: Boolean): Boolean;
 implementation
 uses Classes, FPJSON, JSONParser, Base64, Math, SHA1;
+function CopyGameTreeNodeData(const Data: TGameTreeNodeData): TGameTreeNodeData;
+begin Result:=Data; Result.Nags:=Copy(Data.Nags,0,Length(Data.Nags)); end;
+
 function NormalizeNodeComment(const Text: string): string;
 var I, Count: Integer; PendingSpace: Boolean;
 begin
@@ -56,7 +63,7 @@ function NodeCommentChecksum(const Text: string): string;
 begin Result := Copy(SHA1Print(SHA1String(NormalizeNodeComment(Text))), 1, 12); end;
 
 function EncodeNodeData(const Data: TGameTreeNodeData; const Projection: string): string;
-var FS: TFormatSettings; Value: TJSONString; Note: string;
+var FS: TFormatSettings; Value: TJSONString; Note, NagsText: string; I: Integer;
   procedure Add(const Key, Text: string);
   var Encoded: string;
   begin
@@ -83,12 +90,18 @@ begin
     (Data.WhiteRemainingSeconds = 0) and (Data.BlackRemainingSeconds = 0) and
     (Data.WhiteUsedSeconds = 0) and (Data.BlackUsedSeconds = 0) and
     ((Data.OriginText = '') or SameText(Data.OriginText, 'Human')) and
-    (Data.CommentText = Note) then Exit;
+    (Data.CommentText = Note) and (Data.BeforeCommentText='') and (Length(Data.Nags)=0) then Exit;
   FS := DefaultFormatSettings; FS.DecimalSeparator := '.';
   Result := '[%gwd h=' + NodeCommentChecksum(Projection);
   if Note <> '' then Result += ' n=' + IntToStr(Length(Note));
   if (Data.CommentText <> Note) or (Copy(NormalizeNodeComment(Projection), 1, Length(Note)) <> Note) then
     Add('note', Data.CommentText); // Exceptional layout only; ordinary comments are never duplicated.
+  Add('before',Data.BeforeCommentText);
+  NagsText:='';
+  for I:=0 to High(Data.Nags) do begin
+    if I>0 then NagsText+=','; NagsText+=IntToStr(Data.Nags[I]);
+  end;
+  Add('nags',NagsText);
   Add('origin', Data.OriginText); Add('pv', Data.EnginePV); Add('eval', Data.EngineScore);
   Add('depth', Data.EnginePVDepth); Add('time', Data.EnginePVTimeText);
   Add('apv', Data.AnnotatorPV); Add('aeval', Data.AnnotatorScore);
@@ -184,6 +197,16 @@ begin
         Edited := Obj.Get('h', '') <> NodeCommentChecksum(Actual);
         Data.CommentText := Copy(Actual, 1, NoteLength);
         if Obj.Find('note') <> nil then Data.CommentText := Obj.Get('note', '');
+        Data.BeforeCommentText:=Obj.Get('before','');
+        if Obj.Find('nags')<>nil then begin
+          Parts.StrictDelimiter:=True; Parts.Delimiter:=','; Parts.DelimitedText:=Obj.Get('nags','');
+          SetLength(Data.Nags,Parts.Count);
+          for Start:=0 to Parts.Count-1 do begin
+            PrefixLength:=StrToInt(Parts[Start]);
+            if (PrefixLength<0) or (PrefixLength>255) then Exit;
+            Data.Nags[Start]:=PrefixLength;
+          end;
+        end;
         Data.OriginText := Obj.Get('origin', '');
         Data.EnginePV := Obj.Get('pv', ''); Data.EngineScore := Obj.Get('eval', '');
         Data.EnginePVDepth := Obj.Get('depth', ''); Data.EnginePVTimeText := Obj.Get('time', '');

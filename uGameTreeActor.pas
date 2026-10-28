@@ -224,7 +224,7 @@ type
 implementation
 
 uses
-  uGamePosition, Math;
+  uGamePosition, Math, uGameFileMetadata;
 
 function TGameTreeSearchRecord.SearchRef: TGameTreeSearchRef;
 begin
@@ -394,6 +394,8 @@ var
 begin
   FGameTree.SetHeader(AHeader.EventName, AHeader.WhiteName, AHeader.BlackName,
     AHeader.ResultText, AHeader.StartingFEN, Changed);
+  FGameTree.SetExtraTags(AHeader.ExtraTags,FieldChanged);
+  Changed:=Changed or FieldChanged;
   FGameTree.SetStatusText(AHeader.StatusText, FieldChanged);
   Changed := Changed or FieldChanged;
   FGameTree.SetGameState(AHeader.GameState, FieldChanged);
@@ -506,6 +508,7 @@ function TGameTreeActor.CreateAppendMainlineSnapshotMoveCommand(
 begin
   Result := CreateCommand(gtcAppendMainlineSnapshotMove);
   Result.HeaderInput := AHeader;
+  Result.HeaderInput.ExtraTags:=CopyGameFileTags(AHeader.ExtraTags);
   Result.MoveText := Trim(AMoveText);
   Result.AnnotationText := AAnnotationText;
   CopyMainlineInputToCommand(Result, AMainline, False);
@@ -582,7 +585,7 @@ function TGameTreeActor.CreateRestoreNodeDataCommand(ANodeId: Int64;
 begin
   Result := CreateCommand(gtcRestoreNodeData);
   Result.NodeId := ANodeId;
-  Result.NodeData := Data;
+  Result.NodeData := CopyGameTreeNodeData(Data);
 end;
 
 function TGameTreeActor.CreateRecordEnginePVCommand(ANodeId: Int64;
@@ -665,6 +668,14 @@ function TGameTreeActor.CommandRebuildSignature(
       AddLine(AStrings[J]);
   end;
 
+  procedure AddTags;
+  var Tag: TGameFileTag;
+  begin
+    for Tag in ACommand.HeaderInput.ExtraTags do begin
+      AddLine(IntToStr(Length(Tag.Name))+':'+Tag.Name);
+      AddLine(IntToStr(Length(Tag.Value))+':'+Tag.Value);
+    end;
+  end;
   function BoolText(AValue: Boolean): string;
   begin
     if AValue then
@@ -682,6 +693,7 @@ begin
   if ACommand = nil then
     Exit;
 
+  AddTags;
   AddLine(ACommand.HeaderInput.Signature);
   AddLine(ACommand.HeaderInput.EventName);
   AddLine(ACommand.HeaderInput.WhiteName);
@@ -764,6 +776,7 @@ function TGameTreeActor.CreateRebuildFromInputsCommand(
 begin
   Result := CreateCommand(gtcRebuildFromInputs);
   Result.HeaderInput := AHeader;
+  Result.HeaderInput.ExtraTags:=CopyGameFileTags(AHeader.ExtraTags);
   CopyMainlineInputToCommand(Result, AMainline, True);
   Result.NodeId := AAnalysisNodeId;
   Result.EnginePvInput := AEnginePV;
@@ -787,6 +800,7 @@ function TGameTreeActor.CreateSetHeaderCommand(
 begin
   Result := CreateCommand(gtcSetHeader);
   Result.HeaderInput := AHeader;
+  Result.HeaderInput.ExtraTags:=CopyGameFileTags(AHeader.ExtraTags);
   CopyMainlineInputToCommand(Result, AMainline, False);
 end;
 

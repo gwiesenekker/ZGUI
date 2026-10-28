@@ -16,7 +16,10 @@ type
   TNotationAnalysisSource = (nasNone, nasEngine, nasAnnotator, nasAutoPlay);
   TNotationAnalysisSources = array of TNotationAnalysisSource;
 
+  TGameFileFormat = (gffPdn, gffPgn);
   TGameTreePdnRenderOptions = record
+    FileFormat: TGameFileFormat;
+    LosslessPgn: Boolean;
     HideAnnotations: Boolean;
     ShowEngineScore: Boolean;
     ShowClocks: Boolean;
@@ -57,7 +60,7 @@ function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 
 implementation
 
-uses uPdnText, uGameTreeNodeData;
+uses uPdnText, uGameTreeNodeData, uGameFileMetadata, uChessPgnAnnotations;
 
 function GameTreeHasContent(AGameTree: TGameTree): Boolean;
 begin
@@ -68,6 +71,8 @@ begin
     (AGameTree.StartingFEN <> AGameTree.Variant.DefaultStartingFEN) or
     (AGameTree.ResultText <> '*') or (AGameTree.EventName <> '?') or
     (AGameTree.WhiteName <> 'White') or (AGameTree.BlackName <> 'Black') or
+    (Length(AGameTree.ExtraTags)>0) or
+    (AGameTree.Root.NodeData.BeforeCommentText<>'') or (Length(AGameTree.Root.NodeData.Nags)>0) or
     (AGameTree.Root.CommentText <> '') or (AGameTree.Root.EnginePV <> '') or
     (AGameTree.Root.AnnotatorPV <> '') or (AGameTree.Root.AutoPlayPV <> '') or
     (AGameTree.Root.EngineScore <> '') or (AGameTree.Root.AnnotatorScore <> '');
@@ -75,6 +80,7 @@ end;
 
 function DefaultGameTreePdnRenderOptions: TGameTreePdnRenderOptions;
 begin
+  Result.FileFormat:=gffPdn; Result.LosslessPgn:=False;
   Result.HideAnnotations := False;
   Result.ShowEngineScore := True;
   Result.ShowClocks := True;
@@ -168,12 +174,43 @@ function NodeAnnotation(AVariant: TGameVariant; ANode: TGameTreePlyNode;
 var
   LClockText, Projection, Encoded: string;
   Data: TGameTreeNodeData;
+  N: Byte;
+  procedure FilterFileData;
+  begin
+    if not AOptions.ShowEngineScore then Data.EngineScore := '';
+    if not AOptions.ShowAnnotatorScore then Data.AnnotatorScore := '';
+    if not AOptions.ShowEngineFullPV then
+      if AOptions.ShowEnginePVMove then Data.EnginePV := FirstPvMove(AVariant, Data.EnginePV)
+      else Data.EnginePV := '';
+    if not AOptions.ShowAnnotatorFullPV then
+      if AOptions.ShowAnnotatorPVMove then Data.AnnotatorPV := FirstPvMove(AVariant, Data.AnnotatorPV)
+      else Data.AnnotatorPV := '';
+    if not AOptions.ShowEngineFullPV and not AOptions.ShowEnginePVMove then
+    begin Data.EnginePVDepth := ''; Data.EnginePVTimeText := ''; end;
+    if not AOptions.ShowAnnotatorFullPV and not AOptions.ShowAnnotatorPVMove then
+    begin Data.AnnotatorPVDepth := ''; Data.AnnotatorPVTimeText := ''; end;
+    if not AOptions.ShowClocks then
+    begin
+      Data.HasClockInfo := False; Data.HasMoveTime := False; Data.SecondsUsed := 0;
+      Data.WhiteRemainingSeconds := 0; Data.BlackRemainingSeconds := 0;
+      Data.WhiteUsedSeconds := 0; Data.BlackUsedSeconds := 0;
+    end;
+  end;
 begin
   Result := '';
   if ANode = nil then
     Exit;
   if AOptions.HideAnnotations then
     Exit;
+  Data:=ANode.NodeData;
+  if AForFile then FilterFileData;
+  if AForFile and (AOptions.FileFormat=gffPgn) then begin
+    for N in Data.Nags do Result+=' $'+IntToStr(N);
+    Encoded:=PgnNodeComment(Data,ANode.SideToMove,AOptions.ShowEngineScore or AOptions.ShowAnnotatorScore,
+      AOptions.ShowClocks,AOptions.LosslessPgn);
+    if Encoded<>'' then Result+=' '+Encoded;
+    Exit;
+  end;
   if Trim(ANode.CommentText) <> '' then
     Result := Trim(ANode.CommentText);
   if AOptions.ShowEngineScore and (Trim(ANode.EngineScore) <> '') then
@@ -198,34 +235,28 @@ begin
       Result += LClockText;
     end;
   end;
+  if not AForFile then begin
+    Encoded:=''; for N in Data.Nags do Encoded+=' $'+IntToStr(N);
+  end else Encoded:='';
   Projection := Result;
   if Result <> '' then
     if AForFile then Result := ' {' + EscapePdnLiteralComment(Result) + '}'
     else Result := ' {' + EscapePdnComment(Result) + '}';
+  Result:=Encoded+Result;
   if AForFile then
   begin
-    Data := ANode.NodeData;
-    if not AOptions.ShowEngineScore then Data.EngineScore := '';
-    if not AOptions.ShowAnnotatorScore then Data.AnnotatorScore := '';
-    if not AOptions.ShowEngineFullPV then
-      if AOptions.ShowEnginePVMove then Data.EnginePV := FirstPvMove(AVariant, Data.EnginePV)
-      else Data.EnginePV := '';
-    if not AOptions.ShowAnnotatorFullPV then
-      if AOptions.ShowAnnotatorPVMove then Data.AnnotatorPV := FirstPvMove(AVariant, Data.AnnotatorPV)
-      else Data.AnnotatorPV := '';
-    if not AOptions.ShowEngineFullPV and not AOptions.ShowEnginePVMove then
-    begin Data.EnginePVDepth := ''; Data.EnginePVTimeText := ''; end;
-    if not AOptions.ShowAnnotatorFullPV and not AOptions.ShowAnnotatorPVMove then
-    begin Data.AnnotatorPVDepth := ''; Data.AnnotatorPVTimeText := ''; end;
-    if not AOptions.ShowClocks then
-    begin
-      Data.HasClockInfo := False; Data.HasMoveTime := False; Data.SecondsUsed := 0;
-      Data.WhiteRemainingSeconds := 0; Data.BlackRemainingSeconds := 0;
-      Data.WhiteUsedSeconds := 0; Data.BlackUsedSeconds := 0;
-    end;
     Encoded := EncodeNodeData(Data, Projection);
     if Encoded <> '' then Result += ' {' + EscapePdnComment(Encoded) + '}';
   end;
+end;
+
+function BeforeNode(ANode: TGameTreePlyNode; const Options: TGameTreePdnRenderOptions): string;
+begin
+  Result:='';
+  if (ANode=nil) or Options.HideAnnotations or
+    ((Options.FileFormat=gffPgn) and Options.LosslessPgn) then Exit;
+  Result:=PgnBraceComment(ANode.NodeData.BeforeCommentText);
+  if Result<>'' then Result+=' ';
 end;
 
 function NodeIsAnnotatorAlternative(AVariant: TGameVariant; APrevious, ANode: TGameTreePlyNode): Boolean;
@@ -555,13 +586,15 @@ begin
   if ANode = nil then
     Exit;
 
+  LNested:='';
   LContinuation := FindContinuationChild(ANode);
   if APreviousPosition <> nil then
     if ACompact and NodeIsAnnotatorAlternative(AGameTree.Variant, APreviousPosition, ANode) and
       (not AOptions.ShowAnnotatorFullPV) then
       LContinuation := nil;
 
-  Result := NodeMoveCaption(ABoard, ANode, AForceMoveNumber, ACompact, LRenderedMove) +
+  Result := BeforeNode(ANode,AOptions)+NodeMoveCaption(ABoard, ANode, AForceMoveNumber or
+    (ANode.NodeData.BeforeCommentText<>''), ACompact, LRenderedMove) +
     NodeAnnotation(AGameTree.Variant, ANode, AOptions, not ACompact);
   if APreviousPosition <> nil then
     if ACompact and NodeIsAnnotatorAlternative(AGameTree.Variant, APreviousPosition, ANode) and
@@ -573,7 +606,7 @@ begin
   LBasePlyNumber := APreviousPosition.PlyNumber;
   LVariationPlyNumber := 1;
   begin
-    LMoveStart := Pos(LRenderedMove, Result);
+    LMoveStart := PosEx(LRenderedMove, Result,Length(BeforeNode(ANode,AOptions))+1);
     if LMoveStart > 0 then
     begin
       AddNodeHit(ARenderResult, ANode.NodeId, False);
@@ -600,7 +633,8 @@ begin
     if Result <> '' then
       Result += ' ';
     Result += RenderVariationLine(AGameTree, LContinuation, ANode, AOptions,
-      ACompact, ARenderResult, ABaseOffset + Length(Result), ABoard, True, False);
+      ACompact, ARenderResult, ABaseOffset + Length(Result), ABoard, True,
+      (AOptions.FileFormat=gffPgn) and ((ANode.CommentText<>'') or (LNested<>'')));
   end;
 end;
 
@@ -616,6 +650,7 @@ var
   LResultText: string;
   LSegment, LRenderedMove: string;
   Board: TGamePosition;
+  ForceNext: Boolean;
 
   procedure AppendAnalysisVariation(ABaseNode: TGameTreePlyNode;
     const APv, AScore, AScorePrefix: string; ASource: TNotationAnalysisSource; AShowMove, AShowFull,
@@ -659,6 +694,7 @@ begin
     try Board := AGameTree.Variant.CreatePositionFromFEN(AGameTree.StartingFEN);
     except Board := nil; end;
   Result := Trim(NodeAnnotation(AGameTree.Variant, AGameTree.Root, AOptions, not ACompact));
+  ForceNext:=True;
   for I := 1 to AGameTree.MainlineCount do
   begin
     LChild := AGameTree.MainlineNode[I];
@@ -672,11 +708,13 @@ begin
       LPreviousPosition := AGameTree.MainlineNode[LChild.PlyNumber - 1];
     // The first move always carries its number, also after a root comment
     // ('{...} 37... e5' for a Black-to-move start).
-    LSegment := NodeMoveCaption(Board, LChild, (I = 1) or (Result = ''), ACompact,
+    LSegment := BeforeNode(LChild,AOptions)+NodeMoveCaption(Board, LChild, (I = 1) or (Result = '') or
+      ((AOptions.FileFormat=gffPgn) and (ForceNext or (LChild.NodeData.BeforeCommentText<>''))), ACompact,
       LRenderedMove) +
-      NodeAnnotation(AGameTree.Variant, LChild, AOptions, not ACompact) +
-      PreviousPositionAnnotation(LPreviousPosition, LChild, AOptions);
-    LMoveStart := Pos(LRenderedMove, LSegment);
+      NodeAnnotation(AGameTree.Variant, LChild, AOptions, not ACompact);
+    if ACompact or (AOptions.FileFormat<>gffPgn) then
+      LSegment+=PreviousPositionAnnotation(LPreviousPosition,LChild,AOptions);
+    LMoveStart := PosEx(LRenderedMove, LSegment,Length(BeforeNode(LChild,AOptions))+1);
     if LMoveStart > 0 then
     begin
       AddInt(ARenderResult.MoveStarts, Length(Result) + LMoveStart - 1);
@@ -689,6 +727,7 @@ begin
       Result += ' ' + LNested;
     // Analysis belongs to the position before this played move. Present it
     // after that move, while retaining its original base for preview navigation.
+    ForceNext:=(LNested<>'') or (NodeAnnotation(AGameTree.Variant,LChild,AOptions,not ACompact)<>'');
     AppendPositionAnalysis(LPreviousPosition);
     AdvanceRenderBoard(Board, LChild.MoveText, ARenderResult);
   end;
@@ -709,8 +748,9 @@ begin
   // At the tip (or in an empty game), no played continuation exists yet.
   AppendPositionAnalysis(LChild);
 
-  LResultText := PdnExportResult(AResultText);
-  if LResultText <> '*' then
+  if AOptions.FileFormat=gffPgn then LResultText:=AResultText
+  else LResultText := PdnExportResult(AResultText);
+  if (AOptions.FileFormat=gffPgn) or (LResultText <> '*') then
   begin
     if Result <> '' then
       Result += ' ';
@@ -719,11 +759,51 @@ begin
   finally Board.Free; end;
 end;
 
+// Wrap at PGN token boundaries. Never split a symbol, an embedded command or
+// a comment word. As with common PGN writers, an indivisible item may exceed
+// the column limit; silently changing a literal comment is worse than that.
+function WrapPgnMoves(const Text: string): string;
+var I,Start,Column: Integer; Brace,LineComment: Boolean; Chunk: string;
+  procedure Add(const S: string);
+  var J: Integer;
+  begin
+    if S='' then Exit;
+    if (Column>0) and (Column+1+Length(S)>80) then begin Result+=LineEnding; Column:=0; end;
+    if Column>0 then begin Result+=' '; Inc(Column); end;
+    Result+=S;
+    for J:=1 to Length(S) do
+      if S[J] in [#10,#13] then Column:=0 else Inc(Column);
+  end;
+begin
+  Result:=''; I:=1; Column:=0;
+  while I<=Length(Text) do begin
+    while (I<=Length(Text)) and (Text[I] in [' ',#9,#10,#13]) do Inc(I);
+    if I>Length(Text) then Break;
+    Start:=I; Brace:=Text[I]='{'; LineComment:=Text[I]=';';
+    if Text[I] in ['(',')'] then Inc(I)
+    else if Brace then begin
+      Inc(I); while (I<=Length(Text)) and (Text[I]<>'}') do Inc(I);
+      if I<=Length(Text) then Inc(I);
+    end else if LineComment then begin
+      while (I<=Length(Text)) and not (Text[I] in [#10,#13]) do Inc(I);
+      if I<=Length(Text) then Inc(I);
+    end else while (I<=Length(Text)) and not (Text[I] in [' ',#9,#10,#13,'(',')','{',';']) do Inc(I);
+    Chunk:=Copy(Text,Start,I-Start); Add(Chunk);
+  end;
+end;
+
 function GameTreeToPdnTextEx(AGameTree: TGameTree;
   const AOptions: TGameTreePdnRenderOptions; const AEventName: string): string;
 var
   Lines: TStringList;
   RenderResult: TGameTreePdnRenderResult;
+  Tags: TGameFileTags; Tag: TGameFileTag; Name,Value: string; RosterIndex: Integer;
+  const Roster: array[0..6] of string=('Event','Site','Date','Round','White','Black','Result');
+  function Quote(const S: string): string;
+  begin
+    Result:=StringReplace(S,'\','\\',[rfReplaceAll]);
+    Result:=StringReplace(Result,'"','\"',[rfReplaceAll]);
+  end;
 begin
   Result := '';
   if AGameTree = nil then
@@ -731,6 +811,27 @@ begin
 
   Lines := TStringList.Create;
   try
+    if AOptions.FileFormat=gffPgn then begin
+      Tags:=AGameTree.ExtraTags;
+      for RosterIndex:=0 to High(Roster) do begin
+        Name:=Roster[RosterIndex];
+        if Name='Event' then begin Value:=AGameTree.EventName; if AEventName<>'' then Value:=AEventName; end
+        else if Name='White' then Value:=AGameTree.WhiteName
+        else if Name='Black' then Value:=AGameTree.BlackName
+        else if Name='Result' then Value:=AGameTree.ResultText
+        else if Name='Date' then Value:=GameFileTagValue(Tags,Name,'????.??.??')
+        else Value:=GameFileTagValue(Tags,Name,'?');
+        Lines.Add('['+Name+' "'+Quote(Value)+'"]');
+      end;
+      for Tag in Tags do
+        if (Tag.Name<>'Site') and (Tag.Name<>'Date') and (Tag.Name<>'Round') and
+          (Tag.Name<>'Event') and (Tag.Name<>'White') and (Tag.Name<>'Black') and
+          (Tag.Name<>'Result') and (Tag.Name<>'FEN') and (Tag.Name<>'SetUp') then
+          Lines.Add('['+Tag.Name+' "'+Quote(Tag.Value)+'"]');
+      if AGameTree.StartingFEN<>AGameTree.Variant.DefaultStartingFEN then begin
+        Lines.Add('[SetUp "1"]'); Lines.Add('[FEN "'+Quote(AGameTree.StartingFEN)+'"]');
+      end;
+    end else begin
     if Trim(AEventName) <> '' then
       Lines.Add('[Event "' + PdnQuote(AEventName) + '"]')
     else
@@ -740,10 +841,12 @@ begin
     Lines.Add('[Result "' + PdnQuote(PdnExportResult(AGameTree.ResultText)) + '"]');
     if AGameTree.StartingFEN <> AGameTree.Variant.DefaultStartingFEN then Lines.Add('[SetUp "1"]');
     Lines.Add('[FEN "' + PdnQuote(AGameTree.StartingFEN) + '"]');
+    end;
     Lines.Add('');
     ClearRenderResult(RenderResult);
-    Lines.Text := Lines.Text + RenderMainline(AGameTree, AGameTree.ResultText,
-      AOptions, False, RenderResult);
+    Value:=RenderMainline(AGameTree, AGameTree.ResultText,AOptions,False,RenderResult);
+    if AOptions.FileFormat=gffPgn then Value:=WrapPgnMoves(Value);
+    Lines.Text := Lines.Text + Value;
     Result := Lines.Text;
   finally
     Lines.Free;

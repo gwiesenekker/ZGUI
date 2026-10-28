@@ -252,10 +252,22 @@ and traditional NAGs, token limits, malformed input and deterministic random
 input progress. Run it with the same range/overflow/heap flags shown above,
 substituting `chess_pgn_lexer_check.pas` and its executable name.
 
-The scanner retains text and supplies tokens only: it does not validate legal
-SAN or game grammar, build another game tree, or enable PGN Open/Save. Its
-input is one in-memory string; large-file/deferred reading is a separate
-integration task. The project has no new external library dependency.
+The scanner supplies tokens only. `chess_pgn_check.pas` exercises the file
+adapter through the existing actor/tree: repeated-variation merging, typed
+literal comments, NAGs, custom tags/FEN, special moves, results, standard
+embedded commands, optional lossless metadata, CP1252 conversion, deferred
+multi-game indexing, failed-import identity preservation and metadata ownership.
+It also reports a two-pass 200-ply timing. Both suites run in the normal sweep
+and can be compiled with `-Cr -Co -gl -gh` for range/overflow/heap checks.
+
+`chess_board_check` tests PGN in the original browser and main form, including
+Open/Save filter selection, warnings, saving before replacement, cancelled/failed
+Save, append saving and close. It retains the U10 discard-default tests using
+a GUI composition with file saving disabled. No new GUI layout is introduced.
+
+The optional `chess_pgn_differential_check.py` compares exported trees and SAN
+with python-chess, using `chess_pgn_oracle_probe` as the file adapter probe.
+The application has no python-chess dependency.
 
 ## Shared board and chess GUI checks
 

@@ -8,6 +8,7 @@ CHECKS=(
   position_contract_check.pas
   chess_position_check.pas
   chess_pgn_lexer_check.pas
+  chess_pgn_check.pas
   game_tree_variant_check.pas
   runner_early_stop_check.pas
   analyzer_runner_shutdown_check.pas

@@ -5,7 +5,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils, Types,
   Controls, Graphics, Math, StdCtrls, Menus, LCLType, Clipbrd, uGamePosition,
   uChessPosition, uDraughtsPosition, uGameBoardControl, uChessBoardControl,
   uPvBrowser, uMainForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameNotationView, uGuiDialogs, uScoreHistoryControl;
+  uGameNotationView, uGuiDialogs, uGameGuiProfile, uPdnOpenDialog, Grids, uChessPgn, uGameFileReader, uScoreHistoryControl;
 type
   TPaintChess = class(TChessBoardControl)
     procedure Render(B: TBitmap);
@@ -279,7 +279,7 @@ var Main: TMainForm; B: TGameBoardControl; Legal: TMemo; Memo: TGameNotationView
     Key: Word; Before: string; Actor: TGameTreeActor; C: TGameTreeCommand;
     Score: TScoreHistoryControl; Value: Double;
 const Promotions: array[0..3] of string=('a7a8q','a7a8r','a7a8b','a7a8n');
-  Unsupported: array[0..6] of string = ('&Open PDN...','&Save PDN...',
+  Unsupported: array[0..4] of string = (
     'Setup position...','&Database','Search position in database',
     'Open Annotator','Open MCTS annotator');
 begin
@@ -350,27 +350,90 @@ begin
     Check(Pos('37...Ke7',Memo.Text)>0,'Main notation uses black fullmove 37');
     for I:=Low(Unsupported) to High(Unsupported) do
       Check(not Menu(Main,Unsupported[I]).Enabled,'Unsupported action disabled: '+Unsupported[I]);
-    // Test handlers too, not only disabled visual menu items.
-    Clipboard.AsText:='sentinel'; Menu(Main,'&Open PDN...').OnClick(nil);
-    Menu(Main,'&Save PDN...').OnClick(nil); Menu(Main,'Setup position...').OnClick(nil);
-    Check(Clipboard.AsText='sentinel','Unsupported handlers cannot export chess as PDN');
+    Check(Menu(Main,'&Open PGN...').Enabled and Menu(Main,'&Save PGN...').Enabled,'PGN file actions enabled');
+    Clipboard.AsText:='sentinel'; Menu(Main,'Setup position...').OnClick(nil);
+    Check(Clipboard.AsText='sentinel','Pending setup remains guarded');
     Menu(Main,'Copy FEN position to clipboard').Click;
     Check(Clipboard.AsText=B.Position.ToFEN,'Existing copy FEN exports displayed position');
-    GuiTestConfirmationResult:=mrYes;
+    GuiTestConfirmationResult:=mrNo;
     Clipboard.AsText:=ChessStartingFEN; Menu(Main,'Paste FEN position from clipboard').Click;
     GuiTestConfirmationResult:=0;
     Check((Main.ActiveGameTree.MainlineCount=0) and (B.Position.ToFEN=ChessStartingFEN),'Existing paste FEN loads chess');
-    Check(Main.CurrentGameTreePdnText('')='','Direct PDN export is guarded');
+    Check(Pos('[Result',Main.CurrentGameTreePdnText(''))>0,'Existing export entry supplies PGN');
     Main.Close; // No misleading PDN save dialog in standalone chess mode.
   finally GuiTestChoiceOnShow:=nil; Actor.Free; Choice.Free; Expected.Free; Main.Free; end;
 end;
+procedure CheckPgnFiles;
+var Main: TMainForm; Browser: TPdnOpenDialog; Grid: TStringGrid; Data: TStringList;
+  Name,SavedName,BeforeFEN,BeforeText: string; Board: TGameBoardControl; Memo: TGameNotationView;
+  I: Integer; RootId: Int64; CanClose: Boolean; Reader: TChessPgnReader; Key: Word;
+begin
+  Main:=TMainForm.Create(nil); Data:=TStringList.Create;
+  Name:=GetTempFileName(GetTempDir,'zgi'); SavedName:=GetTempFileName(GetTempDir,'zgs');
+  Reader:=nil;
+  try
+    Main.Show; Application.ProcessMessages;
+    Board:=TGameBoardControl(Main.FindComponent('MainBoard'));
+    Memo:=TGameNotationView(Main.FindComponent('GameMoveMemo'));
+    Data.Text:='[Event "GUI first"] 1.e4 {literal engine: words} e5 (1...c5 $5) *'+#10+
+      '[Event "GUI second"] 1.d4 d5 *'+#10+'[Event "bad"] 1.Ke5 *'; Data.SaveToFile(Name);
+    GuiTestFileDialogResult:=1; GuiTestFileName:=Name;
+    Menu(Main,'&Open PGN...').Click;
+    Check((GuiTestFileTitle='Open PGN') and (Pos('*.pgn',GuiTestFileFilter)>0),'Existing Open uses PGN profile');
+    Browser:=nil;
+    for I:=0 to Main.ComponentCount-1 do if Main.Components[I] is TPdnOpenDialog then Browser:=TPdnOpenDialog(Main.Components[I]);
+    Check(Browser<>nil,'Existing browser reused'); Grid:=TStringGrid(Browser.FindComponent('PdnGames'));
+    Check((Grid.RowCount=4) and (Grid.Cells[2,1]='GUI first'),'Existing multi-game grid populated');
+    Check((Grid.Cells[4,2]='On selection') and (Grid.Cells[4,3]='On selection'),'Other games remain deferred');
+    GuiTestConfirmationResult:=mrNo;
+    GuiTestFileName:=Name+'.missing'; Menu(Main,'&Open PGN...').Click;
+    Check((Grid.RowCount=4) and (Grid.Cells[2,1]='GUI first'),'Failed Open preserves browser contents');
+    GuiTestConfirmationResult:=mrNo; Grid.Row:=1; Grid.OnDblClick(Grid);
+    Check((Main.ActiveGameTree.MainlineCount=2) and (Main.ActiveGameTree.BranchCount=1),'PGN selection imports existing tree');
+    Check(Main.ActiveGameTree.MainlineNode[1].CommentText='literal engine: words','GUI retains literal comments');
+    BeforeFEN:=Board.Position.ToFEN; BeforeText:=Memo.Text; RootId:=Main.ActiveGameTree.Root.NodeId;
+    Grid.Row:=3; Grid.OnDblClick(Grid);
+    Check(Pos('illegal',GuiTestLastConfirmationText)>0,'Bad selected game reported');
+    Check((Main.ActiveGameTree.Root.NodeId=RootId) and (Board.Position.ToFEN=BeforeFEN) and
+      (Memo.Text=BeforeText),'Bad selection preserves tree and display');
+    Key:=VK_LEFT; Memo.OnKeyDown(Memo,Key,[]); Key:=VK_LEFT; Memo.OnKeyDown(Memo,Key,[]);
+    BeforeFEN:=Board.Position.ToFEN; BeforeText:=Memo.Text;
+    GuiTestConfirmationResult:=mrCancel; Grid.Row:=2; Grid.OnDblClick(Grid);
+    Check(Main.ActiveGameTree.Root.NodeId=RootId,'Cancelled replacement preserves tree');
+    GuiTestConfirmationResult:=mrYes; GuiTestFileDialogResult:=0; Grid.OnDblClick(Grid);
+    Check((Main.ActiveGameTree.Root.NodeId=RootId) and (Board.Position.ToFEN=BeforeFEN) and
+      (Memo.Text=BeforeText),'Cancelled Save preserves replacement tree, cursor and view');
+    GuiTestFileDialogResult:=1; GuiTestFileName:=SavedName+'/missing/game.pgn'; Grid.OnDblClick(Grid);
+    Check((Main.ActiveGameTree.Root.NodeId=RootId) and (Board.Position.ToFEN=BeforeFEN) and
+      (Memo.Text=BeforeText),'Failed Save preserves replacement tree, cursor and view');
+    GuiTestFileName:=SavedName; Grid.OnDblClick(Grid);
+    Check(Main.ActiveGameTree.EventName='GUI second','Successful Save then replacement');
+    Check((GuiTestFileTitle='Save PGN') and ((GuiTestFileExtension='pgn') or (GuiTestFileExtension='.pgn')),'Existing Save uses PGN profile');
+    Reader:=TChessPgnReader.Create(Variant); Reader.OpenFile(SavedName);
+    Check(Reader.Entries.Count=1,'Saved first game');
+    TGameFileEntry(Reader.Entries[0]).Validate;
+    Check(TGameFileEntry(Reader.Entries[0]).ErrorText='','Saved PGN validates');
+    Menu(Main,'&Save PGN...').Click; Reader.OpenFile(SavedName);
+    Check(Reader.Entries.Count=2,'Existing append workflow saves second game');
+    GuiTestFileDialogResult:=0; Main.OnCloseQuery(Main,CanClose);
+    Check(not CanClose,'Cancelled Save vetoes close');
+    GuiTestConfirmationResult:=mrNo; Main.OnCloseQuery(Main,CanClose);
+    Check(CanClose,'Explicit No permits close with PGN available');
+  finally
+    GuiTestFileDialogResult:=-1; GuiTestConfirmationResult:=0;
+    Reader.Free; Main.Free; Data.Free; DeleteFile(Name); DeleteFile(SavedName);
+  end;
+end;
+
 procedure CheckDiscardProtection;
 var Main: TMainForm; Board: TGameBoardControl; Memo: TGameNotationView;
     Actor: TGameTreeActor; Command: TGameTreeCommand; CanClose: Boolean;
     BeforeFEN,BeforeText,BeforeLegal,Selection: string; Key: Word;
     TreeId,TipId,BranchId: Int64; BeforeCount,BeforeBranches,BeforeSelStart,BeforeSelLength: Integer;
-    BeforeNode,BeforeBranch: TGameTreePlyNode; Confirmation: TConfirmation;
+    BeforeNode,BeforeBranch: TGameTreePlyNode; Confirmation: TConfirmation; Profile: TGameGuiProfile;
 begin
+  Profile:=ChessGuiProfile; Profile.Features:=[];
+  RegisterGameGuiProfile(DefaultGameVariant,Profile);
   Main:=TMainForm.Create(nil); Actor:=nil; Confirmation:=TConfirmation.Create;
   try
     Main.Show; Application.ProcessMessages;
@@ -463,7 +526,7 @@ begin
     Check(Board.Position.ToFEN=BeforeFEN,'Cancel protects a custom root position');
     Main.OnCloseQuery(Main,CanClose); Check(not CanClose,'Custom root also protected on close');
   finally GuiTestConfirmationOnShow:=nil; GuiTestConfirmationResult:=0;
-    Confirmation.Free; Actor.Free; Main.Free; end;
+    Confirmation.Free; Actor.Free; Main.Free; RegisterGameGuiProfile(DefaultGameVariant,ChessGuiProfile); end;
 end;
 
 var Errors: TErrors;
@@ -473,7 +536,7 @@ begin
   Variant:=TChessVariant.Create;
   try
     RegisterDefaultGameVariant(Variant);
-    CheckView; CheckCoordinateContrast; CheckPV; CheckLayout; CheckMain; CheckDiscardProtection;
+    CheckView; CheckCoordinateContrast; CheckPV; CheckLayout; CheckMain; CheckPgnFiles; CheckDiscardProtection;
     WriteLn('Chess board/PV/GUI checks passed (',Checks,' checks)');
   finally RegisterDefaultGameVariant(DraughtsVariant); Variant.Free; Errors.Free; end;
 end.

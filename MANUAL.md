@@ -14,11 +14,31 @@ rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
 ```
 
 Explore mainlines and variations through the existing notation and game-tree
-views. This step does not save chess games; copy FEN to retain a position. Replacing
-or closing an explored tree asks **Discard / Cancel**, with Cancel initially
-selected. Cancel preserves the
-position, moves and variations.
-PGN, UCI, clocked games, setup, tournaments and databases are not yet connected.
+views. **Ctrl+O** opens a PGN collection in the existing game browser; double-click
+a game to load it at its mainline tip. Games are checked on selection, with import warnings shown
+in the browser. **Ctrl+S** appends the displayed game to a PGN file. Replacing
+or closing an exploration offers **Yes / No / Cancel** to save first. Cancel or
+a failed save keeps the current tree and display. A PGN file is never partially
+loaded because of an invalid move or malformed variation.
+
+PGN preserves tag values (including custom tags), comments, NAGs and nested
+variations. Repeated moves from the same position merge their comments, NAGs
+and continuations, with a warning. Formatting and comment delimiters may be
+normalized. Orthodox chess PGN is supported; null moves are rejected, and an
+optional **e.p.** suffix is accepted after en passant. Legacy CP1252 files are
+converted to UTF-8 with a warning; saved PGN uses UTF-8 without a BOM.
+
+Standard `[%eval ...]`, `[%clk ...]` and `[%emt ...]` annotations are read and
+written as typed evaluation/clock data; unknown commands stay in the comments.
+The normal export omits ZGUI-specific PV/depth and secondary annotator metadata.
+An optional lossless mode is available through the export API using the existing
+node-data extension. Analysis PVs never become played variations. Movetext wraps
+at token boundaries near column 80; an indivisible comment or token may be longer.
+Each imported game is limited to 16 MiB, individual tokens to 1 MiB and variation
+nesting to 128 levels. Large collections are indexed a game at a time, with move
+validation deferred until selection.
+
+UCI, clocked games, setup, tournaments and databases are not yet connected.
 Their controls remain visible in their original locations but are disabled,
 with automatic database search also guarded.
 
