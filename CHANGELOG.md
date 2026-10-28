@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### PGN adapter foundation — 2026-10-28
 
+Commit: `d082285`.
+
 - Start the chess PGN file adapter with an independent text scanner for tags,
   comments, move symbols/numbers, NAGs, variations and results. Retain UTF-8,
   report source locations and bound token sizes. This is syntax scanning;
@@ -21,6 +23,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Review fix U10 — 2026-10-28
 
+Commit: `bf35f0a`.
+
 - U10: add an optional Cancel-default setting to the existing confirmation
   dialog. Chess discard prompts select and initially focus Cancel, so Enter
   keeps the exploration; explicit Discard remains available. Existing save
@@ -33,6 +37,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
   checking, zero unfreed heap blocks), plus application build and source audit.
 
 ### Review fixes U7 and U8 — 2026-10-28
+
+Commit: `202e173`.
 
 - U7: reuse the existing confirmation dialog to ask Discard / Cancel before
   replacing or closing a chess exploration. Protect moves, variations and
@@ -50,6 +56,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Select standalone chess exploration — 2026-10-28
 
+Commit: `236c904`.
+
 - C1: explicitly select chess in `zgui.lpr` before form creation, retaining the
   selected variant until all forms/views are destroyed. ZGUI opens an 8×8 board
   with the existing GUI layout, board/list input, promotions, FEN and navigation.
@@ -63,6 +71,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
   unfreed heap blocks. Native Windows GUI execution was not tested.
 
 ### Reviewed chess board and shared PV integration — 2026-10-28
+
+Commit: `f7e2e5e`.
 
 - Address U1/U2/A1: bind the main/mini/popout views to owned game-position
   snapshots and adapt the existing PV browser, retaining its navigation,
@@ -86,6 +96,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Shared board presentation extraction — 2026-10-28
 
+Commit: `f421f5b`.
+
 - Address Claude U1/U2/U4: extract the existing board rendering shell, themes,
   flip mapping and highlights into `TGameBoardControl`, with owned position
   snapshots and game-specific geometry/piece/coordinate hooks.
@@ -98,6 +110,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Chess board integration review — 2026-10-28
 
+Recorded in commit: `f421f5b`.
+
 - Inspect the board, legal-move routing and PV view connections. The move
   selection and legal list already use the existing game interfaces, but the
   main/mini board bindings and PV browser still require draughts types.
@@ -106,6 +120,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
   or GUI behaviour changed during this review.
 
 ### Chess position and rules adapter — 2026-10-28
+
+Commit: `42e0d54`.
 
 - Add `uChessPosition.pas` implementing the existing position, variant and rules
   interfaces for orthodox chess: transactional six-field FEN, legal UCI moves,
@@ -126,6 +142,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
   Pascal units and application composition remain byte-for-byte unchanged.
 
 ### ZGUI baseline — 2026-10-28
+
+Commits: `b844e0b` (upstream import), `19f767d` (ZGUI branding and adapter plan).
 
 - Import GWDGUI 3.4 from upstream commit
   `61c6cef894e18544d18e7e761143de47ef492226` as an exact, separately committed
