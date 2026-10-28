@@ -1,0 +1,7 @@
+hub
+init
+pos pos=Wbbbbbbbbbbbbbbbbbbbbeeeeeeeeeewwwwwwwwwwwwwwwwwwww
+level moves=39 time=298.500 inc=2.000
+go think
+stop
+quit

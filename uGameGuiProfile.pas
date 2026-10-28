@@ -2,12 +2,13 @@ unit uGameGuiProfile;
 {$mode objfpc}{$H+}
 { Composition policy belongs to the GUI, never to the game rules contract. }
 interface
-uses Classes, uGamePosition, uGameBoardControl, uGameTreePdn, uGameFileReader, uEngineRegistry;
+uses Classes, uGamePosition, uGameBoardControl, uGameTreePdn, uGameFileReader, uEngineRegistry, uGameOrchestrator;
 type
   TGuiGameFeature=(gfPdn,gfPositionSetup,gfDatabase,gfTournament,gfEngines,gfNewGame,gfAutoPlay,gfMcts);
   TGuiGameFeatures=set of TGuiGameFeature;
   TGameBoardClass=class of TGameBoardControl;
   TGameGuiProfile=record
+    DefaultClock: TTimeControl;
     Features: TGuiGameFeatures;
     EngineKinds: set of TExternalEngineKind;
     BoardClass: TGameBoardClass;
@@ -26,12 +27,15 @@ uses uChessPosition, uChessBoardControl, uDraughtsPosition, uDraughtsBoardContro
 var SelectedVariant: TGameVariant=nil; SelectedProfile: TGameGuiProfile;
 function ChessGuiProfile: TGameGuiProfile;
 begin
-  Result.Features:=[gfPdn,gfEngines]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
+  Result.DefaultClock:=DefaultTimeControl; Result.DefaultClock.MovesPerPeriod:=0;
+  Result.DefaultClock.MinutesPerPeriod:=5; Result.DefaultClock.IncrementSeconds:=3;
+  Result.Features:=[gfPdn,gfEngines,gfNewGame]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
   Result.SourceClickSingleMove:=False; Result.FileFormat:=gffPgn;
   Result.FormatName:='PGN'; Result.FileFilter:='PGN files (*.pgn)|*.pgn|All files (*)|*'; Result.FileExtension:='pgn';
 end;
 function DraughtsGuiProfile: TGameGuiProfile;
 begin
+  Result.DefaultClock:=DefaultTimeControl;
   Result.Features:=[Low(TGuiGameFeature)..High(TGuiGameFeature)]; Result.EngineKinds:=[eekHub,eekDxp]; Result.BoardClass:=TDraughtsBoardControl;
   Result.SourceClickSingleMove:=True; Result.FileFormat:=gffPdn;
   Result.FormatName:='PDN'; Result.FileFilter:='PDN files (*.pdn)|*.pdn|All files (*)|*'; Result.FileExtension:='pdn';

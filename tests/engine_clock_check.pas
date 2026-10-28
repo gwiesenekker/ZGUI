@@ -77,13 +77,17 @@ begin
 end;
 
 procedure CheckTypedClockCompatibility;
-var Engine: TClockProbe;
+var Engine: TClockProbe; Clock: TEngineGameClockState;
 begin
   Engine := TClockProbe.Create;
   try
     Engine.SetClockInfoWithIncrement(0, 90, 17, 2);
     Check((Engine.Used = 17) and (Engine.Calls = 1),
       'extended clock configuration must preserve used time for non-Hub adapters');
+    Clock:=Default(TEngineGameClockState); Clock.SideToMove:=gsBlack; Clock.Used[gsBlack]:=17;
+    Clock.Remaining[gsBlack]:=90; Clock.Increment[gsBlack]:=2;
+    Engine.SetGameClockState(Clock);
+    Check((Engine.Used=17) and (Engine.Calls=2),'Two-sided bridge calls existing override exactly once');
   finally Engine.Free; end;
 end;
 

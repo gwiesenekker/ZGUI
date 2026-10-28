@@ -19,7 +19,10 @@ Cancel or failed saving preserves it. The score-history view is retained.
 UCI engine configuration and analysis use the existing engine editor and
 annotator: select **UCI**, launch to discover options, save, then right-click
 the analysis area and choose **Open Annotator**. INI editing remains available.
-Clocked games, pondering, Auto Play, position setup, tournaments and databases
+**New game** now runs clocked chess through the existing game and clock
+infrastructure, with Human/UCI player choices, chess FEN input and a 5+3 default.
+Both clocks, Stop, live engine PVs and PGN saving use the existing GUI paths.
+Pondering, Auto Play, position setup, tournaments and databases
 are not yet connected for chess. Their controls stay in place but remain disabled,
 including automatic database search.
 Chess pieces are original, scalable Canvas vector artwork in

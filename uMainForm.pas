@@ -3398,7 +3398,13 @@ end;
 function TMainForm.ClockValuesForTree(AGameTree: TGameTree;
   out AWhiteRemainingSeconds, ABlackRemainingSeconds, AWhiteUsedSeconds,
   ABlackUsedSeconds: Double): Boolean;
+var Game: TRunningGame;
 begin
+  Game:=SelectedDisplayedGame;
+  if (Game<>nil) and (Game.GameTree=AGameTree) and (Game.State=gosRunning) and
+    FDisplayedPosition.Cursor.Following and (Trim(FDisplayedPosition.PreviewMoves)='') then begin
+    Game.ProjectClocks(AWhiteRemainingSeconds,ABlackRemainingSeconds,AWhiteUsedSeconds,ABlackUsedSeconds); Exit(True);
+  end;
   Result := (AGameTree <> nil) and AGameTree.HasClockInfo;
   if Result then
   begin
@@ -5078,6 +5084,7 @@ var
 begin
   if not GameSupports(gfNewGame) then
     raise EInvalidOperation.Create('Clocked chess games are not yet enabled');
+  ValidateGameSetup(ASetup,DefaultGameVariant,GameGuiProfileFor(DefaultGameVariant).EngineKinds);
   LWhiteName := PlayerSetupDisplayName(ASetup.WhitePlayer, ASetup.WhiteEngine);
   LBlackName := PlayerSetupDisplayName(ASetup.BlackPlayer, ASetup.BlackEngine);
   LTitle := Trim(ATitlePrefix);
@@ -5457,6 +5464,8 @@ begin
     FlushPendingRunnerSnapshots;
     ProcessQueuedGameTreeCommands;
   end;
+  if not FClosing and (SelectedDisplayedGame<>nil) then
+    UpdateClockLabels(ActiveGameTree,SelectedDisplayedGame.WhiteNameText,SelectedDisplayedGame.BlackNameText);
 end;
 
 procedure TMainForm.GameFinished(Sender: TObject);

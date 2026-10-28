@@ -28,7 +28,9 @@ PGN loading/saving now reuses the existing tree, actor, file browser and export
 traversal. UCI configuration and finite analysis use the existing editor, shared
 process worker, factory, analysis runner and coordinator, as approved in Claude
 review c0493e3. GUI layout is preserved; engine PVs remain typed analysis data.
-Clocked games, pondering, Auto Play, setup, tournaments and databases remain
+Clocked games now use the existing New game dialog, runner, orchestrator,
+two-sided engine clock contract and snapshot display anchors, following Claude
+review bc177c4. Pondering, Auto Play, setup, tournaments and databases remain
 future steps and stay guarded for chess. Rule limitations remain, including
 conservative dead-material detection.
 

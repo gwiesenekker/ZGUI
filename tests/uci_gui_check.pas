@@ -4,10 +4,18 @@ program uci_gui_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Controls, Classes, SysUtils,
   StdCtrls, Menus, Grids, ExtCtrls, uEngineEditForm, uEngineRegistry,
   uEngineParamsJson, uMainForm, uChessPosition, uChessUciEngine, uGamePosition,
-  uGameGuiProfile, uGameTree, uGuiDialogs, uGameTreeSearchRef;
+  uGameGuiProfile, uGameTree, uGuiDialogs, uGameTreeSearchRef,
+  uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uRunningGame, uGameBoardControl, Types, Math, uChessPgn, uGameTreePdn, uGameTreeActor;
 type TErrors=class
   procedure Report(Sender: TObject; E: Exception);
 end;
+type TGameAccept=class
+  Main: TMainForm;
+  Game: TRunningGame;
+  procedure Accept(Sender: TObject; const Setup: TGameSetup);
+end;
+procedure TGameAccept.Accept(Sender: TObject; const Setup: TGameSetup);
+begin Game:=Main.StartGameFromSetup(Setup); end;
 var Checks: Integer=0;
 procedure TErrors.Report(Sender: TObject; E: Exception);
 begin WriteLn('FAIL: ',E.Message); DumpExceptionBackTrace(Output); Flush(Output); Halt(1); end;
@@ -36,10 +44,12 @@ begin
         if N>=0 then for I:=N+1 to L.Count-1 do P.PlayMove(L[I]);
         if P.LegalMoveCount>0 then Move:=P.LegalMove(0) else Move:='0000';
       end else if Copy(Line,1,3)='go ' then begin
-        WriteLn('info depth 1 score cp 10 pv '+Move); Flush(Output); Sleep(40);
+        if ParamStr(2)='silent' then Continue;
+        WriteLn('info depth 1 score cp 10 pv '+Move); Flush(Output);
+        if ParamStr(2)='live' then Sleep(650) else Sleep(40);
         WriteLn('info depth 2 score cp 35 pv '+Move); Flush(Output); Sleep(40);
         WriteLn('info depth 99 score cp 999 upperbound pv '+Move);
-        WriteLn('bestmove '+Move);
+        if ParamStr(2)<>'live' then WriteLn('bestmove '+Move);
       end else if Line='quit' then Break;
       Flush(Output);
     end;
@@ -146,6 +156,106 @@ begin
     Keys.Clear; F.CollectBusyEngineKeys(Keys); Check(Keys.Count=0,'Shutdown releases existing reservation');
   finally F.Free; Engines.Free; Keys.Free; DeleteFile(EnginesJsonFileName); end;
 end;
+procedure Games(const Exe: string; RealEngine: Boolean=False);
+var F: TMainForm; Dialog: TGameSetupForm; D: TExternalEngineDefinition; Engines: TExternalEngineList;
+  Capture: TGameAccept; Edits: array[0..3] of TEdit; Combos: array[0..2] of TComboBox;
+  I,N,M,CountBefore: Integer; Rejected: Boolean; BadDefinition: TExternalEngineDefinition; Tick: QWord; Setup: TGameSetup; B: TGameBoardControl; P: TPoint;
+  WR,BR,WU,BU,Before: Double; LogInput: TRunningSnapshotLogInput; Keys: TStringList; A: TGameTreeActor; Text: string;
+  function SquarePoint(Square: Integer): TPoint;
+  var X,Y,Step: Integer;
+  begin
+    Step:=Max(1,B.BoardSquareSize div 2); Y:=0;
+    while Y<B.ClientHeight do begin X:=0; while X<B.ClientWidth do begin
+      if B.SquareAtPoint(X,Y)=Square then Exit(Point(X,Y)); Inc(X,Step);
+    end; Inc(Y,Step); end;
+    raise Exception.Create('Missing board square');
+  end;
+  procedure WaitPlies(Count: Integer);
+  begin
+    Tick:=GetTickCount64;
+    repeat Pump(F); until (Capture.Game.GameTree.MainlineCount>=Count) or (GetTickCount64-Tick>8000);
+    if Capture.Game.GameTree.MainlineCount<Count then begin Capture.Game.SnapshotLogInput(LogInput); WriteLn(LogInput.LogLinesText); Flush(Output); end;
+    Check(Capture.Game.GameTree.MainlineCount>=Count,'Clocked GUI game receives expected moves; actual='+IntToStr(Capture.Game.GameTree.MainlineCount)+' state='+OrchestratorStateToString(Capture.Game.State)+' error='+Capture.Game.LastErrorText);
+  end;
+begin
+  Engines:=TExternalEngineList.Create; Keys:=TStringList.Create;
+  D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=Exe; D.UciId:='Game UCI';
+  if not RealEngine then D.Arguments:='--fake-uci'; Engines.Add(D);
+  if not RealEngine then begin D:=TExternalEngineDefinition.Create; D.Kind:=eekHub; D.ExePath:=Exe; D.HubId:='Not Chess'; Engines.Add(D); end;
+  SaveExternalEngines(EnginesJsonFileName,Engines);
+  F:=TMainForm.Create(nil); Dialog:=TGameSetupForm.Create(F); Capture:=TGameAccept.Create; Capture.Main:=F;
+  try
+    Setup:=Default(TGameSetup); Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=ChessGuiProfile.DefaultClock;
+    BadDefinition:=TExternalEngineDefinition.Create;
+    try
+      BadDefinition.Kind:=eekHub; BadDefinition.ExePath:=Exe;
+      Setup.WhitePlayer:=pkRegistered; Setup.WhiteEngine:=BadDefinition;
+      CountBefore:=TListBox(F.FindComponent('GameHistoryList')).Items.Count; Rejected:=False;
+      try F.StartGameFromSetup(Setup); except on E:EConvertError do Rejected:=True; end;
+      Check(Rejected,'Programmatic game start rejects wrong protocol');
+      Check(TListBox(F.FindComponent('GameHistoryList')).Items.Count=CountBefore,'Rejected programmatic setup leaves no game/reservation');
+    finally BadDefinition.Free; end;
+    Dialog.OnAccepted:=@Capture.Accept; N:=0; M:=0;
+    for I:=0 to Dialog.ComponentCount-1 do begin
+      if Dialog.Components[I] is TEdit then begin Edits[N]:=TEdit(Dialog.Components[I]); Inc(N); end;
+      if Dialog.Components[I] is TComboBox then begin Combos[M]:=TComboBox(Dialog.Components[I]); Inc(M); end;
+    end;
+    Check((N=4) and (M=3),'Existing New game fields/layout retained');
+    Check(Edits[0].Text=ChessStartingFEN,'New game defaults to chess FEN');
+    Check((Edits[1].Text='0') and (Edits[2].Text='5') and (Edits[3].Text='3'),'Chess GUI profile defaults to 5+3 sudden death');
+    Dialog.Show; Pump(F); Check((Combos[0].Items.Count=2) and (Combos[1].Items.Count=2),'New game filters unsupported engines');
+    Edits[2].Text:='unreadable'; GuiTestConfirmationResult:=mrOk;
+    try Button(Dialog,'OK').Click; finally GuiTestConfirmationResult:=0; end;
+    Check((Capture.Game=nil) and Dialog.Visible,'Unreadable time leaves dialog open without a game');
+    Edits[2].Text:='0.05'; Edits[3].Text:='0.1'; Combos[1].ItemIndex:=1; Button(Dialog,'OK').Click;
+    Check(Capture.Game<>nil,'Existing New game callback starts clocked chess');
+    Tick:=GetTickCount64; repeat Pump(F); until ((Capture.Game.Lifecycle=rglRunning) and (Capture.Game.State=gosRunning)) or (GetTickCount64-Tick>5000);
+    B:=TGameBoardControl(F.FindComponent('MainBoard'));
+    P:=SquarePoint(13); B.OnMouseDown(B,mbLeft,[],P.X,P.Y);
+    P:=SquarePoint(29); B.OnMouseDown(B,mbLeft,[],P.X,P.Y);
+    WaitPlies(2); Check(Capture.Game.GameTree.MainlineNode[1].MoveText='e2e4','Human board input uses existing runner');
+    Check(Capture.Game.GameTree.MainlineNode[2].HasClockInfo,'GUI game move retains clock data');
+    F.CollectBusyEngineKeys(Keys); Check(Keys.Count=1,'Clocked game uses existing reservation');
+    F.MarkGameStopped(Capture.Game,'GUI acceptance stop'); Tick:=GetTickCount64;
+    repeat Pump(F); until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
+    Check((Capture.Game.Lifecycle=rglFinished) and (Capture.Game.GameTree.ResultText='*'),'Stop preserves unfinished GUI result');
+    Keys.Clear; F.CollectBusyEngineKeys(Keys); Check(Keys.Count=0,'Finished game releases reservation');
+    Text:=F.CurrentGameTreePdnText('test'); A:=TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
+    try ImportChessPgn(Text,A,nil); Check(A.GameTree.MainlineCount=2,'Clocked game PGN reloads through existing adapter'); Check(A.GameTree.MainlineNode[2].HasClockInfo,'Clock annotations survive PGN reload'); finally A.Free; end;
+    // Engine-as-White exercises a different player mapping through the same path.
+    Setup:=Default(TGameSetup); Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=ChessGuiProfile.DefaultClock;
+    Setup.TimeControl.MinutesPerPeriod:=0.05; Setup.TimeControl.IncrementSeconds:=0.1;
+    Setup.WhitePlayer:=pkRegistered; Setup.WhiteEngine:=Engines[0]; Capture.Game:=F.StartGameFromSetup(Setup); WaitPlies(1);
+    F.MarkGameStopped(Capture.Game,'done'); Tick:=GetTickCount64;
+    repeat Pump(F); until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
+    Check(Capture.Game.Lifecycle=rglFinished,'Engine-as-White shuts down');
+    if not RealEngine then begin
+      // A quiet search must count down without engine info callbacks.
+      Engines[0].Arguments:='--fake-uci silent'; Setup.WhiteEngine:=Engines[0]; Capture.Game:=F.StartGameFromSetup(Setup);
+      Tick:=GetTickCount64; repeat Pump(F); until ((Capture.Game.Lifecycle=rglRunning) and (Capture.Game.State=gosRunning)) or (GetTickCount64-Tick>5000);
+      Capture.Game.ProjectClocks(WR,BR,WU,BU); Before:=WR;
+      for I:=1 to 25 do Pump(F); Capture.Game.ProjectClocks(WR,BR,WU,BU);
+      Check((WR<Before-0.05) and (BU=0),'Quiet engine clock projects through existing snapshots');
+      F.MarkGameStopped(Capture.Game,'quiet stop'); Tick:=GetTickCount64;
+      repeat Pump(F); until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
+      Check((Capture.Game.Lifecycle=rglFinished) and (Capture.Game.GameTree.ResultText='*'),'Stop during quiet search is not a flag');
+      Engines[0].Arguments:='--fake-uci live'; Capture.Game:=F.StartGameFromSetup(Setup); Tick:=GetTickCount64;
+      repeat Pump(F); until (Capture.Game.GameTree.Root.EnginePVDepth='2') or (GetTickCount64-Tick>2500);
+      Check((Capture.Game.GameTree.Root.EnginePVDepth='2') and (Capture.Game.GameTree.MainlineCount=0),'Live UCI info reaches existing game tree with raw stdout hidden');
+      F.MarkGameStopped(Capture.Game,'live stop'); Tick:=GetTickCount64;
+      repeat Pump(F); until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
+      Check(Capture.Game.Lifecycle=rglFinished,'Live-only search cancels cleanly');
+    end;
+    D:=TExternalEngineDefinition.Create; D.Assign(Engines[0]); D.UciId:='Second game UCI';
+    if not RealEngine then begin Engines[0].Arguments:='--fake-uci'; D.Arguments:='--fake-uci'; end;
+    Engines.Add(D); SaveExternalEngines(EnginesJsonFileName,Engines);
+    Setup.BlackPlayer:=pkRegistered; Setup.BlackEngine:=D; Capture.Game:=F.StartGameFromSetup(Setup); WaitPlies(4);
+    Keys.Clear; F.CollectBusyEngineKeys(Keys); Check(Keys.Count=2,'Two registered engines use the existing runner and reservation set');
+    F.MarkGameStopped(Capture.Game,'match test done'); Tick:=GetTickCount64;
+    repeat Pump(F); until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
+    Check(Capture.Game.Lifecycle=rglFinished,'Two-engine game joins both workers');
+  finally Dialog.Free; Capture.Free; F.Free; Engines.Free; Keys.Free; DeleteFile(EnginesJsonFileName); end;
+end;
 procedure RealAnalysis(const Path: string);
 var F: TMainForm; Engines: TExternalEngineList; D: TExternalEngineDefinition;
   Item: TMenuItem; Popup: TPopupMenu; Tick: QWord;
@@ -175,7 +285,8 @@ begin
   Application.Initialize; Application.ShowMainForm:=False; Errors:=TErrors.Create; Application.OnException:=@Errors.Report; V:=TChessVariant.Create;
   RegisterDefaultGameVariant(V); RegisterGameGuiProfile(V,ChessGuiProfile);
   try Editor(ExpandFileName(ParamStr(0))); Analysis(ExpandFileName(ParamStr(0)));
-    if ParamStr(1)<>'' then RealAnalysis(ParamStr(1));
+    Games(ExpandFileName(ParamStr(0)));
+    if ParamStr(1)<>'' then begin RealAnalysis(ParamStr(1)); Games(ExpandFileName(ParamStr(1)),True); end;
     WriteLn('UCI GUI checks passed (',Checks,' checks)');
   finally RegisterDefaultGameVariant(nil); V.Free; Errors.Free; end;
 end.

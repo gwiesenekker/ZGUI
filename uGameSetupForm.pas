@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, ExtCtrls, Forms, StdCtrls, SysUtils,
-  uEngineRegistry, uGameOrchestrator, uGameSetupTypes, uPreferences;
+  uEngineRegistry, uGameOrchestrator, uGameSetupTypes, uPreferences, uGameGuiProfile, uGamePosition, uGuiDialogs;
 
 type
   TGameSetupForm = class(TForm)
@@ -69,7 +69,7 @@ begin
   FBusyEngineKeys := TStringList.Create;
   FBusyEngineKeys.Sorted := True;
   FBusyEngineKeys.Duplicates := dupIgnore;
-  FDefaultTimeControl := DefaultTimeControl;
+  FDefaultTimeControl := GameGuiProfileFor(DefaultGameVariant).DefaultClock;
   FRegisteredEngines := TExternalEngineList.Create;
   LoadExternalEngines(EnginesJsonFileName, FRegisteredEngines);
 
@@ -82,7 +82,7 @@ begin
   LTop := 0;
 
   FStartingFENEdit := TEdit.Create(Self);
-  FStartingFENEdit.Text := 'W:W31-50:B1-20';
+  FStartingFENEdit.Text := DefaultGameVariant.DefaultStartingFEN;
   AddLabelledEdit(LContentPanel, 'Starting position (FEN)', FStartingFENEdit, LTop);
 
   FWhitePlayerCombo := TComboBox.Create(Self);
@@ -149,7 +149,7 @@ end;
 
 procedure TGameSetupForm.ApplyPreferences(const APreferences: TGuiPreferences);
 begin
-  FDefaultTimeControl := DefaultTimeControl;
+  FDefaultTimeControl := GameGuiProfileFor(DefaultGameVariant).DefaultClock;
   if FMinutesEdit <> nil then
     FMinutesEdit.Text := FormatFloat('0.###',
       FDefaultTimeControl.MinutesPerPeriod);
@@ -258,7 +258,7 @@ begin
   for I := 0 to FRegisteredEngines.Count - 1 do
   begin
     EngineKey := EngineIdentityKey(FRegisteredEngines[I]);
-    if (not IsEngineBusy(FRegisteredEngines[I])) and
+    if (FRegisteredEngines[I].Kind in GameGuiProfileFor(DefaultGameVariant).EngineKinds) and (not IsEngineBusy(FRegisteredEngines[I])) and
       ((AExcludeEngineKey = '') or (EngineKey <> AExcludeEngineKey)) then
       ACombo.Items.AddObject(EnginePickerDisplayName(FRegisteredEngines[I],
         ASlotIndex), FRegisteredEngines[I]);
@@ -334,27 +334,23 @@ procedure TGameSetupForm.OkClick(Sender: TObject);
 var
   LSetup: TGameSetup;
 begin
-  LSetup.StartingFEN := Trim(FStartingFENEdit.Text);
-  LSetup.WhitePlayer := SelectedPlayer(FWhitePlayerCombo);
-  LSetup.BlackPlayer := SelectedPlayer(FBlackPlayerCombo);
-  LSetup.WhiteEngine := CopySelectedEngine(FWhitePlayerCombo);
-  LSetup.BlackEngine := CopySelectedEngine(FBlackPlayerCombo);
-  LSetup.TimeControl.MovesPerPeriod := StrToIntDef(Trim(FMovesEdit.Text),
-    FDefaultTimeControl.MovesPerPeriod);
-  LSetup.TimeControl.MinutesPerPeriod := StrToFloatDef(Trim(FMinutesEdit.Text),
-    FDefaultTimeControl.MinutesPerPeriod);
-  LSetup.TimeControl.IncrementSeconds := StrToFloatDef(Trim(FIncrementEdit.Text),
-    FDefaultTimeControl.IncrementSeconds);
-  if FIncrementModeCombo.ItemIndex = 1 then
-    LSetup.TimeControl.IncrementMode := cimAfterMoveLimit
-  else
-    LSetup.TimeControl.IncrementMode := cimFromStart;
-
-  if Assigned(FOnAccepted) then
-    FOnAccepted(Self, LSetup);
-  LSetup.WhiteEngine.Free;
-  LSetup.BlackEngine.Free;
-  Close;
+  LSetup:=Default(TGameSetup);
+  try
+    try
+      LSetup.StartingFEN:=Trim(FStartingFENEdit.Text);
+      LSetup.WhitePlayer:=SelectedPlayer(FWhitePlayerCombo); LSetup.BlackPlayer:=SelectedPlayer(FBlackPlayerCombo);
+      LSetup.WhiteEngine:=CopySelectedEngine(FWhitePlayerCombo); LSetup.BlackEngine:=CopySelectedEngine(FBlackPlayerCombo);
+      if not TryStrToInt(Trim(FMovesEdit.Text),LSetup.TimeControl.MovesPerPeriod) or
+        not TryStrToFloat(Trim(FMinutesEdit.Text),LSetup.TimeControl.MinutesPerPeriod) or
+        not TryStrToFloat(Trim(FIncrementEdit.Text),LSetup.TimeControl.IncrementSeconds) then
+        raise EConvertError.Create('Enter valid numbers for moves, minutes and increment');
+      if FIncrementModeCombo.ItemIndex=1 then LSetup.TimeControl.IncrementMode:=cimAfterMoveLimit
+      else LSetup.TimeControl.IncrementMode:=cimFromStart;
+      ValidateGameSetup(LSetup,DefaultGameVariant,GameGuiProfileFor(DefaultGameVariant).EngineKinds);
+      if Assigned(FOnAccepted) then FOnAccepted(Self,LSetup);
+      Close;
+    except on E:Exception do ShowGuiOkDialog(Self,'New game',E.Message); end;
+  finally LSetup.WhiteEngine.Free; LSetup.BlackEngine.Free; end;
 end;
 
 procedure TGameSetupForm.RefillPlayerCombos(AChangedCombo: TComboBox);

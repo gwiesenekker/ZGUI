@@ -62,13 +62,43 @@ values. Only exact primary-line scores with a legal PV are stored; bounded and
 secondary lines remain in the engine log. A score/depth update still appears when
 its PV is unchanged. PVs and hints use existing navigation and never become
 played moves or variations. The managed options Ponder and UCI_Chess960 are forced
-off, MultiPV to 1, and UCI_AnalyseMode on when advertised. Other saved options match
+off, MultiPV to 1, and UCI_AnalyseMode on for analysis and off for games when advertised. Other saved options match
 names without case sensitivity, while commands use the engine's spelling.
 Unknown saved options are retained but not sent. Initialization accepts only
 empty lines, `debug on`, `debug off` or `register later`; use the grid for options.
 Hub, DXP and UCI settings remain in separate JSON sections.
 
-Clocked games, pondering, Auto Play, setup, tournaments and databases are not yet connected.
+Clocked games now use the existing **New game** dialog. Choose Human or a
+registered UCI engine for each colour and enter a chess FEN if a custom start is
+wanted. Chess defaults to **5 minutes + 3 seconds**, with zero moves per period
+(sudden death). Positive moves per period retain the existing repeating equal
+periods. The fullmove number in a custom FEN does not count as moves already
+played in the new clock session. Unreadable or invalid time fields are reported;
+they are not silently replaced by defaults. Busy engine registrations stay out
+of the player lists, including an engine already used as an annotator.
+
+The existing board, legal-moves list, promotion chooser, game list, clocks,
+**Stop**, replay and PGN save paths are reused. Engine PVs can update during a
+search with raw stdout hidden; they remain analysis rather than played moves.
+Both human and engine clocks count down, including for an engine that emits no
+output. Viewing clocks never changes game-tree data or adjudicates a flag.
+
+The inherited clock policy adds the increment due on a completed move before
+checking expiry; the idle-human allowance uses that same policy. **After move
+limit** starts increment credit at the threshold move and keeps it thereafter.
+A new period is earned only by an on-time completed move. Human flags are checked
+on the existing polling cadence. Stopping a search retains an unfinished `*`
+result and accounts for elapsed engine time without accepting a move. An engine
+crash or invalid protocol response stops the game with an error and `*`, with
+the reason in the game log; it is not awarded as a time loss. Ordinary flag
+results use the existing chess timeout/material rules.
+
+Initial terminal positions finish without waiting for a move. The existing chess
+rules automatically accept threefold/50-move draw claims as soon as available,
+including a legal intended move; there is no new claim dialog. Conservative
+insufficient-material/dead-position limitations remain as documented.
+
+Pondering, Auto Play, setup, tournaments and databases are not yet connected.
 Their controls remain visible in their original locations but are disabled,
 with automatic database search also guarded.
 

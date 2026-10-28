@@ -9,6 +9,7 @@ uses
 
 type
   TExternalEngineKind = (eekHub, eekDxp, eekUci);
+  TExternalEngineKinds=set of TExternalEngineKind;
   TDxpEngineRole = (derListen, derConnect);
 
   TExternalEngineDefinition = class

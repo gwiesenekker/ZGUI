@@ -5,7 +5,7 @@ unit uGameRunnerThread;
 interface
 
 uses
-  Classes, SyncObjs, SysUtils,
+  Classes, SyncObjs, SysUtils, Math,
   uCancellationToken,
   uEngineBase, uEngineRegistry,
   uGameOrchestrator, uGameMoveHistory, uGamePosition, uGameSetupTypes, uPvSnapshot,
@@ -14,6 +14,7 @@ uses
 type
   TGameRunnerSnapshot = class
   private
+    FClockAnchorTick: QWord;
     FBlackRemainingSeconds: Double;
     FBlackPlayerName: string;
     FBlackUsedSeconds: Double;
@@ -43,6 +44,7 @@ type
     constructor Create;
     destructor Destroy; override;
 
+    procedure ProjectClocks(Tick: QWord; out WhiteRemaining,BlackRemaining,WhiteUsed,BlackUsed: Double);
     procedure AssignFrom(ASource: TGameRunnerSnapshot);
     procedure MarkStopped(const AReason: string);
 
@@ -83,7 +85,7 @@ type
     FCommandQueue: TThreadMessageQueue;
     FGameLog: TStringList;
     FGameId: Integer;
-    FHumanTurnStartTick: QWord;
+    FHumanTurnStartTick,FEngineTurnStartTick: QWord;
     FOnFinished: TGameRunnerFinishedEvent;
     FOnSnapshot: TGameRunnerSnapshotEvent;
     FOrchestrator: TGameOrchestrator;
@@ -237,6 +239,7 @@ procedure TGameRunnerSnapshot.AssignFrom(ASource: TGameRunnerSnapshot);
 begin
   if ASource = nil then
     Exit;
+  FClockAnchorTick:=ASource.FClockAnchorTick;
   FLiveUpdate := ASource.FLiveUpdate;
   FBlackPlayerName := ASource.FBlackPlayerName;
   FBlackRemainingSeconds := ASource.FBlackRemainingSeconds;
@@ -266,10 +269,23 @@ begin
   FWhiteUsedSeconds := ASource.FWhiteUsedSeconds;
 end;
 
+procedure TGameRunnerSnapshot.ProjectClocks(Tick: QWord; out WhiteRemaining,BlackRemaining,WhiteUsed,BlackUsed: Double);
+var Elapsed: Double;
+begin
+  WhiteRemaining:=FWhiteRemainingSeconds; BlackRemaining:=FBlackRemainingSeconds;
+  WhiteUsed:=FWhiteUsedSeconds; BlackUsed:=FBlackUsedSeconds;
+  if (FState<>gosRunning) or (FClockAnchorTick=0) or (Tick<FClockAnchorTick) then Exit;
+  Elapsed:=(Tick-FClockAnchorTick)/1000;
+  if FCurrentSide=gsWhite then begin WhiteRemaining:=Max(0,WhiteRemaining-Elapsed); WhiteUsed+=Elapsed; end
+  else begin BlackRemaining:=Max(0,BlackRemaining-Elapsed); BlackUsed+=Elapsed; end;
+end;
+
 procedure TGameRunnerSnapshot.MarkStopped(const AReason: string);
 begin
   if FState in [gosGameOver, gosError] then
     Exit;
+  ProjectClocks(GetTickCount64,FWhiteRemainingSeconds,FBlackRemainingSeconds,FWhiteUsedSeconds,FBlackUsedSeconds);
+  FClockAnchorTick:=0;
   FState := gosStopped;
   FGameResult := '*';
   FLastError := AReason;
@@ -391,6 +407,8 @@ begin
           PublishSnapshot;
           Exit;
         end;
+        FOrchestrator.CheckCurrentTurnTimeout((GetTickCount64-FHumanTurnStartTick)/1000);
+        if FOrchestrator.State<>gosRunning then begin PublishSnapshot; Exit; end;
         FOrchestrator.PlayMove(LegalMove, FOrchestrator.CurrentSide,
           (GetTickCount64 - FHumanTurnStartTick) / 1000, 'human');
         FHumanTurnStartTick := 0;
@@ -660,6 +678,11 @@ begin
         Result.FBlackRemainingSeconds := 0;
     end;
   end;
+  if Result.FState=gosRunning then begin
+    if CurrentPlayerKind=pkHuman then begin
+      if FHumanTurnStartTick>0 then Result.FClockAnchorTick:=GetTickCount64;
+    end else Result.FClockAnchorTick:=FEngineTurnStartTick;
+  end;
   Result.FWhitePlayerName := PlayerDisplayName(FSetup.WhitePlayer,
     FWhiteEngine);
   Result.FBlackPlayerName := PlayerDisplayName(FSetup.BlackPlayer,
@@ -789,7 +812,7 @@ begin
 
         if CurrentPlayerKind = pkRegistered then
         begin
-          FHumanTurnStartTick := 0;
+          FHumanTurnStartTick := 0; FEngineTurnStartTick:=GetTickCount64;
           AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
             ' [runner] engine to move; side=' + SideToString(FOrchestrator.CurrentSide));
           PublishSnapshot;
@@ -799,7 +822,7 @@ begin
           try FOrchestrator.PlayNextMove;
           finally
             FSnapshotLock.Acquire;
-            try FActiveSearchEngine := nil;
+            try FActiveSearchEngine := nil; FEngineTurnStartTick:=0;
             finally FSnapshotLock.Release; end;
           end;
           DrainCommands;
@@ -807,13 +830,15 @@ begin
         end
         else
         begin
-          FHumanTurnStartTick := GetTickCount64;
+          FEngineTurnStartTick:=0; FHumanTurnStartTick := GetTickCount64;
           AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
             ' [runner] human to move; waiting');
           PublishSnapshot;
           while (not Terminated) and (FOrchestrator.State = gosRunning) and
             (CurrentPlayerKind = pkHuman) do
           begin
+            if not FStopToken.IsCancelled then
+              FOrchestrator.CheckCurrentTurnTimeout((GetTickCount64-FHumanTurnStartTick)/1000);
             DrainCommands;
             if (FOrchestrator.State <> gosRunning) or
               (CurrentPlayerKind <> pkHuman) then

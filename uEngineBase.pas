@@ -22,6 +22,11 @@ type
     esError
   );
 
+  TEngineGameClockState=record
+    SideToMove: TGameSide;
+    Remaining,Used,Increment: array[TGameSide] of Double;
+    MovesRemaining: Integer;
+  end;
   TEngineCapability=(ecAnalysis,ecHubMcts);
   TEngineCapabilities=set of TEngineCapability;
   TEngineLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
@@ -76,9 +81,9 @@ type
     procedure Log(const AMessage: string);
     procedure MarkMoveTimedOut;
     procedure SetGameResult(const AResult: string);
-    function StopRequested: Boolean;
     property State: TEngineState read GetCurrentState;
   public
+    function StopRequested: Boolean;
     constructor Create(const AEngineName: string = 'Engine'); virtual;
     destructor Destroy; override;
 
@@ -100,6 +105,7 @@ type
     procedure LogCurrentState(const AReason: string = ''); virtual;
     function ReceiveMessage(const AMessage: string): string; virtual;
     procedure RequestStop; virtual;
+    procedure SetGameClockState(const Clock: TEngineGameClockState); virtual;
     procedure SetClockInfo(AMovesRemaining: Integer; ARemainingSeconds,
       ATotalUsedSeconds: Double); virtual;
     procedure SetClockInfoWithIncrement(AMovesRemaining: Integer;
@@ -541,6 +547,12 @@ begin
   Log('position received; fen=' + FStartingFEN + '; move_count=' +
     IntToStr(FMovesPlayed.Count));
   ChangeState(esReady, 'position received');
+end;
+
+procedure TGameEngine.SetGameClockState(const Clock: TEngineGameClockState);
+begin
+  SetClockInfoWithIncrement(Clock.MovesRemaining,Clock.Remaining[Clock.SideToMove],
+    Clock.Used[Clock.SideToMove],Clock.Increment[Clock.SideToMove]);
 end;
 
 procedure TGameEngine.SetClockInfo(AMovesRemaining: Integer;

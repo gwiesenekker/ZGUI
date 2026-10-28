@@ -311,3 +311,13 @@ and a custom Black-to-move root. Build `uci_gui_check.lpi` with the existing
 `build_lazarus_check.py` helper and run with a GTK display. Range, overflow and
 heap checks are enabled in that project. Stockfish is only a test dependency;
 no engine binary is committed or installed by these scripts.
+
+
+`uci_game_check` adds clocked UCI wire/period tests, Stop-versus-timeout checks for
+UCI and Hub, crash classification, idle-human expiry, terminal roots and the
+existing runner. Pass a Stockfish executable to add real two-engine period,
+custom Black-root and promotion-root games. The GUI UCI suite also exercises
+New game validation/defaults, both player colours, board input, quiet clocks,
+live PVs with stdout hidden, two registrations, reservations, Stop and PGN reload.
+The clocked Hub fixture is recorded against bc177c4 independently of the new
+clock-record bridge; both old and new API paths must match its exact bytes.

@@ -74,6 +74,8 @@ type
     function GetUsedSeconds(ASide: TGameSide): Double;
     procedure LogMessage(const AMessage: string);
     procedure ReleaseEngines;
+    function ActiveIncrement(Side: TGameSide): Double;
+    function AvailableSeconds(Side: TGameSide): Double;
     procedure ResetClocks;
     procedure RefreshMovesPlayedCache;
     procedure SetEngine(ASide: TGameSide; AEngine: TGameEngine);
@@ -84,6 +86,7 @@ type
     destructor Destroy; override;
 
     procedure NewGame(const AStartingFEN: string);
+    procedure CheckCurrentTurnTimeout(Elapsed: Double);
     procedure PlayMove(const AMove: string; ASide: TGameSide;
       ASecondsUsed: Double; const ASource: string = 'move');
     function PlayNextMove: string;
@@ -298,7 +301,8 @@ begin
     '; moves_per_period=' + IntToStr(FTimeControl.MovesPerPeriod) +
     '; minutes=' + FloatToStr(FTimeControl.MinutesPerPeriod) +
     '; increment_seconds=' + FloatToStr(FTimeControl.IncrementSeconds));
-  StartEngineSessions;
+  CheckOutcomeAfterMove;
+  if FState=gosRunning then StartEngineSessions;
 end;
 
 procedure TGameOrchestrator.StartEngineSessions;
@@ -425,27 +429,33 @@ begin
   FinishGame(FVariant.ResultText(AOutcome), AReason);
 end;
 
+function TGameOrchestrator.ActiveIncrement(Side: TGameSide): Double;
+begin
+  Result:=0;
+  if (FTimeControl.IncrementMode=cimFromStart) or
+    ((FTimeControl.MovesPerPeriod>0) and (FTotalMovesBySide[Side]+1>=FTimeControl.MovesPerPeriod)) then
+    Result:=FTimeControl.IncrementSeconds;
+end;
+function TGameOrchestrator.AvailableSeconds(Side: TGameSide): Double;
+begin Result:=FRemainingSeconds[Side]+ActiveIncrement(Side); end;
+procedure TGameOrchestrator.CheckCurrentTurnTimeout(Elapsed: Double);
+var Side: TGameSide;
+begin
+  if FState<>gosRunning then Exit;
+  Side:=FPosition.SideToMove;
+  if Elapsed<AvailableSeconds(Side) then Exit;
+  FUsedSeconds[Side]+=Elapsed; FRemainingSeconds[Side]:=0;
+  FinishOnTimeout(Side,'flag fell for '+SideToString(Side)+'; idle move deadline expired');
+end;
 procedure TGameOrchestrator.ApplyTimeUsed(ASide: TGameSide; ASecondsUsed: Double);
 var
-  LApplyIncrement: Boolean;
+  LAvailableSeconds: Double;
 begin
+  LAvailableSeconds := AvailableSeconds(ASide);
   FUsedSeconds[ASide] := FUsedSeconds[ASide] + ASecondsUsed;
-  FRemainingSeconds[ASide] := FRemainingSeconds[ASide] - ASecondsUsed;
+  FRemainingSeconds[ASide] := LAvailableSeconds - ASecondsUsed;
   Inc(FMovesInPeriod[ASide]);
   Inc(FTotalMovesBySide[ASide]);
-
-  LApplyIncrement := False;
-  if FTimeControl.IncrementSeconds > 0 then
-    case FTimeControl.IncrementMode of
-      cimFromStart:
-        LApplyIncrement := True;
-      cimAfterMoveLimit:
-        LApplyIncrement := (FTimeControl.MovesPerPeriod > 0) and
-          (FTotalMovesBySide[ASide] >= FTimeControl.MovesPerPeriod);
-    end;
-
-  if LApplyIncrement then
-    FRemainingSeconds[ASide] := FRemainingSeconds[ASide] + FTimeControl.IncrementSeconds;
 
   // The next period is earned only by completing this one in time. Keep the
   // applicable increment policy aligned with the engine's search deadline.
@@ -479,11 +489,23 @@ var
   LEngine: TGameEngine;
   LSide: TGameSide;
   LStartTick: QWord;
-  LAvailableSeconds, LActiveIncrement: Double;
+  LAvailableSeconds: Double;
+  Clock: TEngineGameClockState;
+  Side: TGameSide;
   LTimeoutMs: Integer;
   LSearchStarted: Boolean;
   LOutcome: TGameOutcome;
   LReason: string;
+
+  procedure FinishStopped;
+  begin
+    if LSearchStarted then begin
+      LElapsedSeconds:=(GetTickCount64-LStartTick)/1000;
+      FUsedSeconds[LSide]+=LElapsedSeconds; FRemainingSeconds[LSide]-=LElapsedSeconds;
+      if FRemainingSeconds[LSide]<0 then FRemainingSeconds[LSide]:=0;
+    end;
+    ChangeState(gosStopped,'stop requested'); Result:='';
+  end;
 
   procedure FinishOnEngineTimeout;
   begin
@@ -525,20 +547,13 @@ begin
       '; moves_remaining=' + IntToStr(GetMovesRemaining(LSide)) +
       '; remaining_seconds=' + FormatHubSeconds(FRemainingSeconds[LSide]) +
       '; total_used_seconds=' + FormatHubSeconds(FUsedSeconds[LSide]));
-    LActiveIncrement := 0;
-    if (FTimeControl.IncrementMode = cimFromStart) or
-      ((FTimeControl.MovesPerPeriod > 0) and
-       (FTotalMovesBySide[LSide] + 1 >= FTimeControl.MovesPerPeriod)) then
-      LActiveIncrement := FTimeControl.IncrementSeconds;
-    LEngine.SetClockInfoWithIncrement(GetMovesRemaining(LSide), FRemainingSeconds[LSide],
-      FUsedSeconds[LSide], LActiveIncrement);
-
-    LAvailableSeconds := FRemainingSeconds[LSide];
-    if (FTimeControl.IncrementMode = cimFromStart) or
-      ((FTimeControl.MovesPerPeriod > 0) and
-       (FTotalMovesBySide[LSide] + 1 >= FTimeControl.MovesPerPeriod)) then
-      if FTimeControl.IncrementSeconds > 0 then
-        LAvailableSeconds := LAvailableSeconds + FTimeControl.IncrementSeconds;
+    Clock.SideToMove:=LSide; Clock.MovesRemaining:=GetMovesRemaining(LSide);
+    for Side:=Low(TGameSide) to High(TGameSide) do begin
+      Clock.Remaining[Side]:=FRemainingSeconds[Side]; Clock.Used[Side]:=FUsedSeconds[Side];
+      Clock.Increment[Side]:=ActiveIncrement(Side);
+    end;
+    LEngine.SetGameClockState(Clock);
+    LAvailableSeconds:=AvailableSeconds(LSide);
     // Match the clock's increment allowance; the margin only bounds transport
     // and polling overhead. It does not add time to the player's clock.
     if LAvailableSeconds >= (High(Integer) - 250) / 1000 then
@@ -554,6 +569,7 @@ begin
     LSearchStarted := True;
     Result := LEngine.StartThinking;
     LElapsedSeconds := (GetTickCount64 - LStartTick) / 1000;
+    if LEngine.StopRequested then begin FinishStopped; Exit; end;
     if LEngine.MoveTimedOut then
     begin
       FinishOnEngineTimeout;
@@ -574,7 +590,8 @@ begin
   except
     on E: Exception do
     begin
-      if LSearchStarted and LEngine.MoveTimedOut then
+      if LEngine.StopRequested then FinishStopped
+      else if LSearchStarted and LEngine.MoveTimedOut then
         FinishOnEngineTimeout
       else
       begin

@@ -4,7 +4,45 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed clocked UCI games — 2026-10-28
+
+- Apply Claude review bc177c4 through the existing New game dialog, game runner,
+  orchestrator, clocks, snapshots, actors, engine factory and process worker.
+  Preserve GUI layout; no replacement game loop, clock, tree or process manager.
+- Add a complete two-sided clock value with a default bridge to the existing
+  single-side virtual method. Hub/DXP remain on their existing protocol paths.
+  Independently record a clocked Hub go-think trace against bc177c4; old and new
+  API paths match its exact bytes, alongside the original worker trace.
+- Extend UCI with explicit game/analysis context, both clocks/increments and
+  moves-to-go, fresh-clock validation, mode-aware deadlines and AnalyseMode.
+  Keep finite analysis, exact primary PV tuples, option persistence and INI editing.
+  Remove duplicate first-game ucinewgame (D4). Retain live search-info updates
+  when the existing game runner hides raw stdout.
+- M1: distinguish real deadline expiry from cancellation/process failure. Guard
+  both orchestrator return and exception paths before timeout adjudication.
+  Stop retains * and charges elapsed engine time without accepting a move.
+  M2: a crash/protocol failure stops with an explicit error and unfinished *;
+  it is not awarded as a time loss.
+- M3: use one available-time policy for moves, engine deadlines and idle-human
+  expiry, retaining the inherited increment/period semantics. Adjudicate terminal
+  starting positions with existing rules. Add view-only snapshot clock anchors
+  and update existing labels through the existing GUI timer, including quiet
+  engines; U12 uses the runner's anchor with no new orchestrator event.
+- U13: supply chess 5+3 sudden-death defaults through the GUI profile. Validate
+  FEN, numeric fields, player kinds and engine definitions through one shared
+  setup path before creating a game; keep invalid dialogs open. Enable only
+  gfNewGame; pondering, Auto Play, setup, tournaments and databases stay guarded.
+- Validation: application compiles; full headless regression and all seven GTK GUI
+  suites pass. New game tests pass 69 deterministic checks / 73 with Stockfish 16;
+  expanded UCI GUI tests pass 54 deterministic checks / 80 with Stockfish. Cover
+  both colours, period transitions, custom roots, promotion, Stop, idle flags,
+  crash policy, quiet clocks, live PVs, reservations, two engines and PGN reload.
+  Checked UCI game/GUI runs report no unfreed heap blocks.
+
+
 ### PGN recovery and actor validation cache review — 2026-10-28
+
+Commit: `d7bc078`.
 
 - Fix P11: require a real tag-line prefix for damaged-game recovery; keep column-1
   embedded commands inside comments. Indent bracket/percent comment continuation

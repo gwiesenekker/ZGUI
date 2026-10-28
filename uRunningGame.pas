@@ -100,6 +100,7 @@ type
     function State: TGameOrchestratorState;
     function BranchCount: Integer;
     function WhiteNameText: string;
+    procedure ProjectClocks(out WhiteRemaining,BlackRemaining,WhiteUsed,BlackUsed: Double);
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
     procedure AddReservationKeysTo(AKeys: TStrings);
@@ -428,6 +429,9 @@ begin
   if Result = '' then
     Result := 'White';
 end;
+
+procedure TRunningGame.ProjectClocks(out WhiteRemaining,BlackRemaining,WhiteUsed,BlackUsed: Double);
+begin FSnapshot.ProjectClocks(GetTickCount64,WhiteRemaining,BlackRemaining,WhiteUsed,BlackUsed); end;
 
 procedure TRunningGame.AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
 begin
