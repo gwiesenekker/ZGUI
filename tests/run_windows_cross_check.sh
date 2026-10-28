@@ -44,7 +44,7 @@ fpc -B -Twin64 -Px86_64 -FU"$OUT_DIR/probe" -FE"$OUT_DIR/probe" \
   { cat "$OUT_DIR/generator.log"; exit 1; }
 
 if ! GWDGUI_LAZBUILD_TARGET=win64:x86_64 python3 "$ROOT_DIR/tests/build_lazarus_check.py" \
-  win32 "$OUT_DIR/app" "$ROOT_DIR/gwdgui.lpi" > "$OUT_DIR/app.log" 2>&1; then
+  win32 "$OUT_DIR/app" "$ROOT_DIR/zgui.lpi" > "$OUT_DIR/app.log" 2>&1; then
   grep -E 'Error|Fatal' "$OUT_DIR/app.log" || tail -40 "$OUT_DIR/app.log"
   exit 1
 fi
@@ -73,19 +73,19 @@ FAKE
 chmod +x "$OUT_DIR/fakebin/cmd.exe"
 # build.bat builds into lib/candidate/ through the Windows mode's target
 # ($Env(GWDGUI_BUILD_DIR)gwdgui, review C12).
-rm -f "$COPY_DIR/gwdgui.exe"
+rm -f "$COPY_DIR/zgui.exe"
 if ! PATH="$OUT_DIR/fakebin:$PATH" GWDGUI_CROSS_ROOT="$COPY_DIR" \
   GWDGUI_BUILD_DIR=lib/candidate/ lazbuild --build-all \
   --build-mode=Windows --no-write-project --os=win64 --cpu=x86_64 --ws=win32 \
-  --pcp="$OUT_DIR/app/config" "$COPY_DIR/gwdgui.lpi" > "$OUT_DIR/mode.log" 2>&1; then
+  --pcp="$OUT_DIR/app/config" "$COPY_DIR/zgui.lpi" > "$OUT_DIR/mode.log" 2>&1; then
   grep -E 'Error|Fatal|unexpected|did not' "$OUT_DIR/mode.log" || tail -40 "$OUT_DIR/mode.log"
   exit 1
 fi
 [[ -f "$COPY_DIR/lib/build-info/gwdgui-build.inc" ]] ||
   { echo "the Windows build mode did not run its pre-build step"; exit 1; }
-[[ -f "$COPY_DIR/lib/candidate/gwdgui.exe" ]] ||
-  { echo "the Windows build mode produced no lib/candidate/gwdgui.exe"; exit 1; }
-[[ ! -e "$COPY_DIR/gwdgui.exe" ]] ||
-  { echo "the Windows build mode wrote gwdgui.exe instead of the candidate path"; exit 1; }
+[[ -f "$COPY_DIR/lib/candidate/zgui.exe" ]] ||
+  { echo "the Windows build mode produced no lib/candidate/zgui.exe"; exit 1; }
+[[ ! -e "$COPY_DIR/zgui.exe" ]] ||
+  { echo "the Windows build mode wrote zgui.exe instead of the candidate path"; exit 1; }
 
-echo "Windows cross-compile check passed (gwdgui.exe built in both modes, not run)"
+echo "Windows cross-compile check passed (zgui.exe built in both modes, not run)"

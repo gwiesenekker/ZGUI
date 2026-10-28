@@ -19,7 +19,7 @@ function AppBuildCommit: string;
 begin Result := BuildCommit; end;
 function AppAboutText: string;
 begin
-  Result := 'GWDGUI' + LineEnding + 'International draughts' + LineEnding +
+  Result := 'ZGUI' + LineEnding + 'International draughts' + LineEnding +
     LineEnding + 'Build: ' + BuildRevision + LineEnding + 'Commit: ' + BuildCommit;
   if BuildHasChanges then Result += LineEnding + 'Includes uncommitted changes.';
 end;

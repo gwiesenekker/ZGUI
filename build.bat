@@ -1,5 +1,5 @@
 @echo off
-rem Builds gwdgui.exe on Windows with Lazarus (the Windows build mode).
+rem Builds zgui.exe on Windows with Lazarus (the Windows build mode).
 rem
 rem Usage:  build.bat [path\to\lazbuild.exe]
 rem
@@ -7,8 +7,8 @@ rem The Windows build mode embeds MANUAL.md and the Git commit (shown in
 rem Help > About); install Git for Windows and have git on PATH for the commit.
 rem Lazarus is found as the argument, the LAZBUILD environment variable,
 rem lazbuild on PATH, or a standard installation folder, in that order.
-rem A running gwdgui.exe can be rebuilt: the old executable is renamed to
-rem gwdgui.old.exe first and restored if the build fails.
+rem A running zgui.exe can be rebuilt: the old executable is renamed to
+rem zgui.old.exe first and restored if the build fails.
 setlocal EnableExtensions
 cd /d "%~dp0"
 
@@ -37,74 +37,74 @@ if errorlevel 1 (
   echo Warning: git is not on PATH; Help ^> About will report the commit as unavailable.
 )
 if not exist "draughts.ttf" (
-  echo Warning: draughts.ttf is missing; keep it beside gwdgui.exe.
+  echo Warning: draughts.ttf is missing; keep it beside zgui.exe.
 )
 
 set "CANDIDATE_DIR=lib\candidate\"
 
 rem Repair an interrupted replacement: only the previous executable is left.
-if not exist "gwdgui.exe" if exist "gwdgui.old.exe" (
-  move /y "gwdgui.old.exe" "gwdgui.exe" >nul
+if not exist "zgui.exe" if exist "zgui.old.exe" (
+  move /y "zgui.old.exe" "zgui.exe" >nul
   if errorlevel 1 (
-    echo gwdgui.exe is missing and gwdgui.old.exe could not be renamed back.
-    echo Rename gwdgui.old.exe to gwdgui.exe and retry.
+    echo zgui.exe is missing and zgui.old.exe could not be renamed back.
+    echo Rename zgui.old.exe to zgui.exe and retry.
     exit /b 1
   )
-  echo Restored gwdgui.exe from gwdgui.old.exe ^(an earlier build was interrupted^).
+  echo Restored zgui.exe from zgui.old.exe ^(an earlier build was interrupted^).
 )
 
 if not exist "%CANDIDATE_DIR%" mkdir "%CANDIDATE_DIR%"
-if exist "%CANDIDATE_DIR%gwdgui.exe" del /f /q "%CANDIDATE_DIR%gwdgui.exe" >nul 2>nul
-if exist "%CANDIDATE_DIR%gwdgui.exe" (
-  echo Could not remove the old build output %CANDIDATE_DIR%gwdgui.exe.
+if exist "%CANDIDATE_DIR%zgui.exe" del /f /q "%CANDIDATE_DIR%zgui.exe" >nul 2>nul
+if exist "%CANDIDATE_DIR%zgui.exe" (
+  echo Could not remove the old build output %CANDIDATE_DIR%zgui.exe.
   exit /b 1
 )
 
 echo Building with "%LAZBUILD%" ...
 set "GWDGUI_BUILD_DIR=%CANDIDATE_DIR%"
 rem call also runs a lazbuild wrapper script (and the build check's stand-in).
-call "%LAZBUILD%" --build-all --build-mode=Windows --no-write-project gwdgui.lpi
+call "%LAZBUILD%" --build-all --build-mode=Windows --no-write-project zgui.lpi
 set "RESULT=%ERRORLEVEL%"
 set "GWDGUI_BUILD_DIR="
 if not "%RESULT%"=="0" goto failed
-if not exist "%CANDIDATE_DIR%gwdgui.exe" goto failed
+if not exist "%CANDIDATE_DIR%zgui.exe" goto failed
 
-rem Replace gwdgui.exe. gwdgui.exe is good here (only a successful build is
+rem Replace zgui.exe. zgui.exe is good here (only a successful build is
 rem ever moved in), so a backup left beside it by an earlier build can go.
-if exist "gwdgui.old.exe" del /f /q "gwdgui.old.exe" >nul 2>nul
-if exist "gwdgui.old.exe" (
-  echo gwdgui.old.exe is still in use ^(an older GWDGUI is running^); close it and retry.
-  echo The new build is in %CANDIDATE_DIR%gwdgui.exe; gwdgui.exe was not changed.
+if exist "zgui.old.exe" del /f /q "zgui.old.exe" >nul 2>nul
+if exist "zgui.old.exe" (
+  echo zgui.old.exe is still in use ^(an older ZGUI is running^); close it and retry.
+  echo The new build is in %CANDIDATE_DIR%zgui.exe; zgui.exe was not changed.
   exit /b 1
 )
 set "MOVED_OLD="
-if exist "gwdgui.exe" (
-  move /y "gwdgui.exe" "gwdgui.old.exe" >nul
+if exist "zgui.exe" (
+  move /y "zgui.exe" "zgui.old.exe" >nul
   if errorlevel 1 (
-    echo Could not rename gwdgui.exe; close GWDGUI and retry.
-    echo The new build is in %CANDIDATE_DIR%gwdgui.exe; gwdgui.exe was not changed.
+    echo Could not rename zgui.exe; close ZGUI and retry.
+    echo The new build is in %CANDIDATE_DIR%zgui.exe; zgui.exe was not changed.
     exit /b 1
   )
   set "MOVED_OLD=1"
 )
-move /y "%CANDIDATE_DIR%gwdgui.exe" "gwdgui.exe" >nul
+move /y "%CANDIDATE_DIR%zgui.exe" "zgui.exe" >nul
 if errorlevel 1 goto publishfailed
-if defined MOVED_OLD del /f /q "gwdgui.old.exe" >nul 2>nul
-echo Built %~dp0gwdgui.exe
+if defined MOVED_OLD del /f /q "zgui.old.exe" >nul 2>nul
+echo Built %~dp0zgui.exe
 exit /b 0
 
 :publishfailed
 echo Could not move the new build into place.
 if not defined MOVED_OLD exit /b 1
-move /y "gwdgui.old.exe" "gwdgui.exe" >nul
+move /y "zgui.old.exe" "zgui.exe" >nul
 if errorlevel 1 (
-  echo The previous executable is gwdgui.old.exe; rename it to gwdgui.exe.
+  echo The previous executable is zgui.old.exe; rename it to zgui.exe.
   exit /b 1
 )
-echo The previous gwdgui.exe was kept.
+echo The previous zgui.exe was kept.
 exit /b 1
 
 :failed
-echo Build failed ^(lazbuild exit code %RESULT%^); gwdgui.exe was not changed.
+echo Build failed ^(lazbuild exit code %RESULT%^); zgui.exe was not changed.
 if "%RESULT%"=="0" exit /b 1
 exit /b %RESULT%

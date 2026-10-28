@@ -6,6 +6,21 @@ and implementation details are available in the [commit history](https://github.
 
 ## Unreleased
 
+### ZGUI baseline — 2026-10-28
+
+- Import GWDGUI 3.4 from upstream commit
+  `61c6cef894e18544d18e7e761143de47ef492226` as an exact, separately committed
+  baseline, preserving the upstream history below.
+- Rename the application, Lazarus project and executable to ZGUI / `zgui`;
+  update build scripts, help branding and existing branding checks.
+- Document the prepared chess/engine interfaces and remaining adapter boundaries
+  in `CHESS_PORT_REVIEW.md`. Preserve existing GUI layout and game behaviour.
+- Record the requirement to reuse shared game, tournament and database code;
+  any necessary generic code change must be reverted for Claude to review.
+- Validation: Linux GTK2 build, full headless regression suite (before and after
+  branding), and all five existing GTK GUI suites passed. The inherited
+  experimental SynEdit warning remains. Native Windows execution was not tested.
+
 ## [3.4](https://github.com/gwiesenekker/GWDGUI/releases/tag/v3.4) — 2026-10-28
 
 Changes since [3.3](https://github.com/gwiesenekker/GWDGUI/compare/v3.3...v3.4).

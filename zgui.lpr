@@ -1,4 +1,4 @@
-program GWDGUI;
+program ZGUI;
 
 {$mode objfpc}{$H+}
 

@@ -65,7 +65,7 @@ var
 begin
   inherited CreateNew(AOwner);
   Name := 'ManualWindow';
-  Caption := 'GWDGUI Manual';
+  Caption := 'ZGUI Manual';
   Width := 1080;
   Height := 760;
   Constraints.MinWidth := 760;

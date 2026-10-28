@@ -556,7 +556,7 @@ var
 begin
   inherited Create(AOwner);
 
-  Caption := 'GWDGUI - International Polish Draughts';
+  Caption := 'ZGUI - International Polish Draughts';
   Application.HintColor := RGBToColor(255, 255, 225);
   Screen.HintFont.Color := clBlack;
   Position := poDesigned;
@@ -663,7 +663,7 @@ begin
   LMenuItem := TMenuItem.Create(Self); LMenuItem.Caption := '&Manual...';
   LMenuItem.ShortCut := ShortCut(VK_F1, []);
   LMenuItem.OnClick := @ManualClick; LHelpMenu.Add(LMenuItem);
-  LMenuItem := TMenuItem.Create(Self); LMenuItem.Caption := '&About GWDGUI...';
+  LMenuItem := TMenuItem.Create(Self); LMenuItem.Caption := '&About ZGUI...';
   LMenuItem.ShortCut := ShortCut(VK_F1, [ssShift]);
   LMenuItem.OnClick := @AboutClick; LHelpMenu.Add(LMenuItem);
   Menu := LMainMenu;
@@ -2724,7 +2724,7 @@ begin
 
   if (FTournamentDialog <> nil) and FTournamentDialog.HasTournamentData then
   begin
-    LResponse := ShowGuiConfirmationDialog(Self, 'Close GWDGUI',
+    LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
       'Save the tournament JSON before closing?', 'Yes', 'No', mrNo);
     if LResponse = mrCancel then
       Exit;
@@ -2734,7 +2734,7 @@ begin
 
   if HasDisplayedGameToSave then
   begin
-    LResponse := ShowGuiConfirmationDialog(Self, 'Close GWDGUI',
+    LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
       'Save the currently displayed game as PDN before closing?', 'Yes',
       'No', mrNo);
     if LResponse = mrCancel then
@@ -2745,7 +2745,7 @@ begin
 
   if FGameActive and GameTreeHasContent(FGameTree) then
   begin
-    LResponse := ShowGuiConfirmationDialog(Self, 'Close GWDGUI',
+    LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
       'Save the standalone board as PDN before closing?', 'Yes', 'No', mrNo);
     if LResponse = mrCancel then
       Exit;
@@ -2770,7 +2770,7 @@ begin
       LMessage += ' and the running tournament scheduler';
     LMessage += '. Close anyway?';
 
-    if ShowGuiConfirmationDialog(Self, 'Close GWDGUI', LMessage, 'Yes',
+    if ShowGuiConfirmationDialog(Self, 'Close ZGUI', LMessage, 'Yes',
       'No', mrNo) <> mrYes then
       Exit;
   end;
@@ -3999,14 +3999,14 @@ begin
   FDisplayBoardFailed := not TryBuildDisplayedBoard(AGameTree, FBoard);
   if FDisplayBoardFailed then
   begin
-    Caption := 'GWDGUI - Cannot display the selected position';
+    Caption := 'ZGUI - Cannot display the selected position';
     ClearHumanMoveSelection;
     CancelAnalyzerSearch;
     if FBoardControl <> nil then FBoardControl.Board := nil;
     if FAutoPlayButton <> nil then FAutoPlayButton.Enabled := False;
     Exit;
   end;
-  Caption := 'GWDGUI - International Polish Draughts';
+  Caption := 'ZGUI - International Polish Draughts';
   if FBoardControl <> nil then
   begin
     FBoardControl.Board := FBoard;
@@ -4669,7 +4669,7 @@ begin
 end;
 procedure TMainForm.AboutClick(Sender: TObject);
 begin
-  ShowGuiOkDialog(Self, 'About GWDGUI', AppAboutText);
+  ShowGuiOkDialog(Self, 'About ZGUI', AppAboutText);
 end;
 
 procedure TMainForm.QuitClick(Sender: TObject);

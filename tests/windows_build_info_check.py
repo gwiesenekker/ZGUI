@@ -85,7 +85,7 @@ end.
     assert subprocess.run([str(helper), str(source), str(generated)],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0
 
-project = ET.parse(ROOT / 'gwdgui.lpi')
+project = ET.parse(ROOT / 'zgui.lpi')
 mode = project.find("./ProjectOptions/BuildModes/Item2[@Name='Windows']/CompilerOptions")
 assert mode is not None
 assert '-dGWDGUI_EMBEDDED_HELP' in mode.find('Other/CustomOptions').get('Value')
@@ -101,24 +101,24 @@ assert 'build_windows.cmd' in command and '$(CompPath)' in command
 batch = (ROOT / 'build.bat').read_bytes()
 assert b'\r\n' in batch and b'\n' not in batch.replace(b'\r\n', b''), 'build.bat must use CRLF'
 batch_text = batch.decode('ascii')
-assert '--build-mode=Windows' in batch_text and 'gwdgui.lpi' in batch_text
+assert '--build-mode=Windows' in batch_text and 'zgui.lpi' in batch_text
 assert '--no-write-project' in batch_text
 for label in ('failed', 'publishfailed'):
     assert 'goto ' + label in batch_text and '\r\n:' + label + '\r\n' in batch_text
-# C12: the build goes to a candidate path; gwdgui.exe is replaced only after
-# success, and gwdgui.old.exe is never deleted unless gwdgui.exe exists.
+# C12: the build goes to a candidate path; zgui.exe is replaced only after
+# success, and zgui.old.exe is never deleted unless zgui.exe exists.
 target = mode.find('Target/Filename').get('Value')
-assert target == '$Env(GWDGUI_BUILD_DIR)gwdgui', target
+assert target == '$Env(GWDGUI_BUILD_DIR)zgui', target
 assert 'set "GWDGUI_BUILD_DIR=%CANDIDATE_DIR%"' in batch_text
 lines = batch_text.split('\r\n')
 build_line = next(i for i, l in enumerate(lines) if '--build-mode=Windows' in l)
 assert lines[build_line].startswith('call "%LAZBUILD%"')
 restore_line = next(i for i, l in enumerate(lines)
-                    if l.startswith('if not exist "gwdgui.exe" if exist "gwdgui.old.exe"'))
+                    if l.startswith('if not exist "zgui.exe" if exist "zgui.old.exe"'))
 for i, line in enumerate(lines):
-    if 'gwdgui.old.exe' in line and line.lstrip().startswith(('del ', 'if exist "gwdgui.old.exe" del')):
-        assert i > build_line, 'gwdgui.old.exe deleted before the build: line %d' % (i + 1)
-    if line.lstrip().startswith('move /y "gwdgui.exe" "gwdgui.old.exe"'):
-        assert i > build_line, 'gwdgui.exe renamed before the build: line %d' % (i + 1)
+    if 'zgui.old.exe' in line and line.lstrip().startswith(('del ', 'if exist "zgui.old.exe" del')):
+        assert i > build_line, 'zgui.old.exe deleted before the build: line %d' % (i + 1)
+    if line.lstrip().startswith('move /y "zgui.exe" "zgui.old.exe"'):
+        assert i > build_line, 'zgui.exe renamed before the build: line %d' % (i + 1)
 assert restore_line < build_line
 print('Native Windows build-info generator checks passed (host execution; Windows IDE still needs validation)')

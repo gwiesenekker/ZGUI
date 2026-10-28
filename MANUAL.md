@@ -1,13 +1,13 @@
-# GWDGUI User Manual
+# ZGUI User Manual
 
-This manual describes the current GWDGUI application, a graphical workbench for
+This manual describes the current ZGUI application, a graphical workbench for
 international draughts. It can play and browse games,
 run Hub and DXP engines, organize engine tournaments, display engine analysis,
 and store or search games in an SQLite database.
 
 ## 1. Getting started
 
-When GWDGUI starts, the main window shows:
+When ZGUI starts, the main window shows:
 
 - the main draughts board and clocks;
 - **Game History** and the legal moves for the displayed position;
@@ -51,7 +51,7 @@ In the engine editor:
 5. Review the startup log and parameters reported by the engine.
 6. Click **Launched correctly** to save the registration and parameter values.
 
-GWDGUI starts the executable in the executable's own directory, initiates the
+ZGUI starts the executable in the executable's own directory, initiates the
 Hub protocol, applies the configured non-GUI parameters, and initializes the
 engine. Closing the editor stops an engine that was launched for this test.
 
@@ -68,8 +68,8 @@ For a DXP engine:
 4. Set the host, normally `127.0.0.1` for a local engine.
 5. Set the port, commonly `27531` unless the engine requires another port.
 6. Choose the role:
-   - `listen`: GWDGUI waits for the DXP peer to connect;
-   - `connect`: GWDGUI connects to the configured host and port.
+   - `listen`: ZGUI waits for the DXP peer to connect;
+   - `connect`: ZGUI connects to the configured host and port.
 7. Enter any required launch arguments.
 8. Click **Launch engine** and inspect the connection log.
 9. Click **Launched correctly** after the test succeeds.
@@ -102,16 +102,16 @@ argument or generated configuration file.
 
 Parameters reported by a Hub engine are shown in the parameter grid. Their
 values are sent to the engine when it is initialized, except for names starting
-with `gui-`. Those are GWDGUI settings and are never sent as Hub parameters.
+with `gui-`. Those are ZGUI settings and are never sent as Hub parameters.
 
 Important GUI parameters include:
 
 | Parameter | Meaning |
 | --- | --- |
 | `gui-engine-type` | `hub` or `dxp` |
-| `gui-hub-id` | Hub identity used by GWDGUI |
+| `gui-hub-id` | Hub identity used by ZGUI |
 | `gui-hub-launch-argument` | Hub command-line arguments |
-| `gui-dxp-id` | DXP identity used by GWDGUI |
+| `gui-dxp-id` | DXP identity used by ZGUI |
 | `gui-dxp-ip` | DXP dotted IPv4 host, or `localhost` |
 | `gui-dxp-peer-ip` | Optional allowed peer IPv4 for game listeners and the registration connection test |
 | `gui-startup-timeout-ms` | Engine startup timeout; 0 means 60,000 ms; effective range 1,000–300,000 ms |
@@ -124,7 +124,7 @@ Important GUI parameters include:
 | `gui-engine-supports-mcts` | Makes a Hub engine available as an MCTS annotator |
 | `gui-score-perspective` | Perspective of scores reported by a Hub engine |
 
-`gui-score-perspective` tells GWDGUI how to convert an engine score to White's
+`gui-score-perspective` tells ZGUI how to convert an engine score to White's
 perspective:
 
 - `side-to-move`: a score is good for the side to move; scores are negated when
@@ -136,7 +136,7 @@ Choose this setting to match the engine's protocol output. An incorrect choice
 causes the evaluation graph to change sign on the wrong moves.
 
 Hub parameter values cannot contain a double quote (`"`); the protocol has no
-escape for it. GWDGUI rejects double quotes and line breaks in Hub parameters
+escape for it. ZGUI rejects double quotes and line breaks in Hub parameters
 before saving the engine settings and names the parameter to correct. Command-line
 arguments and initialization commands are separate settings and may contain quotes.
 
@@ -151,7 +151,7 @@ in parameter files for compatibility but are not the current graph controls.
 
 ### 2.5 Where engine settings are stored
 
-GWDGUI stores the engine registry in `engines.json` beside the GWDGUI
+ZGUI stores the engine registry in `engines.json` beside the ZGUI
 executable. Parameter values for an engine are stored beside that engine, using
 the engine executable name with the extension `.params.json`.
 
@@ -180,7 +180,7 @@ excluded in tournament games.
 
 ### 3.1 Making a human move
 
-Click the source square and then the destination square. GWDGUI accepts only a
+Click the source square and then the destination square. ZGUI accepts only a
 legal move for the displayed position. You can also click a move in the
 **Legal moves** list.
 
@@ -211,7 +211,7 @@ finished game lets you inspect its game tree and move history.
 
 ### 3.3 How games end
 
-GWDGUI decides results from the legal position and clocks. A side with no legal
+ZGUI decides results from the legal position and clocks. A side with no legal
 move loses. A player that exhausts its allotted time loses; engine search limits
 follow the game clock. The game log records why play ended.
 
@@ -425,7 +425,7 @@ Available pairing types are:
 
 Click **Create pairing**. Single and double round-robin creation builds the
 complete schedule. For Swiss tournaments, all results in the current round must
-be known before the next round can be created. GWDGUI warns when avoiding a
+be known before the next round can be created. ZGUI warns when avoiding a
 repeat pairing is impossible.
 
 Changing accepted tournament settings after creating pairings invalidates the
@@ -434,7 +434,7 @@ schedule. Choose **Apply change** to clear the existing pairings and results, or
 
 ### 7.2 Playing the tournament
 
-Click **Play** to start pending games. GWDGUI starts games up to the configured
+Click **Play** to start pending games. ZGUI starts games up to the configured
 concurrency limit while respecting engine availability. Each simultaneous game
 needs its own available engine instances and non-conflicting DXP resources.
 
@@ -483,7 +483,7 @@ scheduling so the error can be resolved without losing results.
 ### 7.5 Tournament files in detail
 
 Tournament changes and results are saved automatically. Until you choose a file,
-GWDGUI uses a recovery file in its application configuration directory; **Load**
+ZGUI uses a recovery file in its application configuration directory; **Load**
 opens that directory for a new tournament. Save errors pause scheduling and appear
 in the tournament window title. Pairings cannot be replaced while games are still
 running or stopping.
@@ -508,14 +508,14 @@ result override, and earlier attempts of rescheduled pairings. Manual correction
 change the standings while retaining the original played result. Rescheduling
 archives the previous attempt and clears the current result.
 
-GWDGUI regenerates the tournament PDN from these saved records, with one game
+ZGUI regenerates the tournament PDN from these saved records, with one game
 per current pairing attempt, including games ending before their first move.
 Byes do not create PDN games. The PDN path is chosen beside the first JSON file
 and remains fixed when you rename the tournament or save the JSON elsewhere.
 On the first save outside the recovery directory, the PDN moves beside the chosen
 JSON; the old recovery files are removed after both new files are saved. A failed
 save keeps the recovery files available.
-An existing file or directory is never adopted as a new PDN target: GWDGUI uses
+An existing file or directory is never adopted as a new PDN target: ZGUI uses
 a unique filename instead. Its first write also refuses to replace a file that
 appeared after the name was chosen. Later saves update the PDN created for that
 tournament. Saving over an existing JSON file asks for overwrite confirmation.
@@ -524,20 +524,20 @@ an archive and generate a separate projection from the saved records.
 Manual overrides are identified in the PDN headers along with the played result.
 Loading the JSON repairs a stale or missing PDN. Paths are saved relative to the
 JSON, so move the JSON and PDN together. If an older path points to a missing
-directory, GWDGUI generates a new PDN beside the JSON and preserves any existing
+directory, ZGUI generates a new PDN beside the JSON and preserves any existing
 archive there. Earlier attempts remain in JSON.
 
 Older tournament files did not contain the played games. When loading one with
-an existing PDN archive, GWDGUI preserves that archive and creates a separate PDN
+an existing PDN archive, ZGUI preserves that archive and creates a separate PDN
 for the linked records. Missing older moves cannot be recovered from standings.
-Preserve the older archive along with the tournament JSON. GWDGUI prompts to save
+Preserve the older archive along with the tournament JSON. ZGUI prompts to save
 tournament state when closing if unsaved tournament data exists.
 
 ## 8. PDN and FEN
 
 ### 8.1 Opening PDN
 
-Choose **File > Open PDN**. GWDGUI lists the games in the file with White,
+Choose **File > Open PDN**. ZGUI lists the games in the file with White,
 Black, event, and result. A warnings column marks games with malformed
 variations; select a marked game to see what was skipped. A variation whose
 numbered start lies outside its parent line is skipped without moving it to a
@@ -549,7 +549,7 @@ be located.
 
 ### 8.2 Saving PDN
 
-Choose **File > Save PDN** to save the displayed game tree. GWDGUI appends the
+Choose **File > Save PDN** to save the displayed game tree. ZGUI appends the
 game to the selected PDN file; it does not replace games already in that file.
 Choose a new filename when a one-game file is required.
 
@@ -557,12 +557,12 @@ The Game Tree window can also copy the current tree as PDN to the clipboard.
 
 ### 8.3 Compatibility with other PDN programs
 
-GWDGUI exports standard result spellings `1-0`, `1/2-1/2` and `0-1`; the tournament
+ZGUI exports standard result spellings `1-0`, `1/2-1/2` and `0-1`; the tournament
 window uses draughts point results `2-0`, `1-1` and `0-2`. Both forms are accepted
 on import. The special result `0-0` is preserved; `*` denotes an unfinished game.
 
 Scores and clocks appear as readable comments. Additional `[%gwd ...]` comments
-preserve typed node metadata for GWDGUI round trips. Other programs may show
+preserve typed node metadata for ZGUI round trips. Other programs may show
 these extensions as ordinary comments or ignore their meaning. Literal user
 comments resembling metadata are escaped on export. Equivalent capture spellings
 are merged; conflicting metadata keeps the first value and generates a warning
@@ -585,7 +585,7 @@ in the FEN box. **Apply** sends the resulting position back to the main window;
 
 ## 9. Game database
 
-GWDGUI uses SQLite databases for collections of PDN games and position search.
+ZGUI uses SQLite databases for collections of PDN games and position search.
 
 Choose **Database > Create database** for a new `.sqlite` or `.db` file, or
 **Database > Open database** for an existing one.
@@ -603,7 +603,7 @@ comments or branches remain separate records. Older database identities are
 compared and upgraded as matching games are encountered, so the first import
 against an older database may take longer.
 
-Opening a supported older database upgrades its internal format. An older GWDGUI
+Opening a supported older database upgrades its internal format. An older ZGUI
 that cannot understand the newer format refuses to open it. Keep a backup before
 upgrading when you need to continue using an older executable.
 
@@ -680,7 +680,7 @@ saved PDN keep their existing meaning. Colours and styles apply when you choose
 
 Use **Defaults** to restore default values, **Save** to apply and persist the
 settings, or **Close** to leave without saving changes. Preferences are stored
-in `prefs.json` beside the GWDGUI executable.
+in `prefs.json` beside the ZGUI executable.
 
 ## 11. Common problems
 
@@ -692,7 +692,7 @@ engine test was completed with **Launched correctly**.
 
 ### An engine does not start
 
-When an engine or annotator cannot be started, GWDGUI writes the reason to the
+When an engine or annotator cannot be started, ZGUI writes the reason to the
 log and also shows it in a dialog. If the executable is missing, nothing is
 launched; the Engines dialog marks such an engine with **(not found)** in the
 executable column.
@@ -711,7 +711,7 @@ using that local port.
 ### Scores have the wrong sign
 
 Edit the Hub engine and set `gui-score-perspective` to match what the engine
-reports: side to move, White, or Black. GWDGUI's display itself always uses
+reports: side to move, White, or Black. ZGUI's display itself always uses
 White's perspective.
 
 ### The score history is empty
@@ -738,7 +738,7 @@ game to an existing collection.
 
 ## 12. Installation and developer notes
 
-GWDGUI is an Object Pascal application built with Lazarus/LCL 3.0 or later (GTK2
+ZGUI is an Object Pascal application built with Lazarus/LCL 3.0 or later (GTK2
 on Linux), its bundled SynEdit package, and Free Pascal 3.2.2 or later. The
 `draughts.ttf` piece font must be available beside the application as expected
 by the build or distribution.
@@ -751,20 +751,20 @@ bash build.sh
 
 `build.sh` embeds the current manual and Git build identity. On Windows, run
 `build.bat` from the source directory; it finds `lazbuild.exe` on PATH or in a
-standard Lazarus folder (or takes its path as an argument), builds `gwdgui.exe`
-with the **Windows** build mode in `lib\candidate`, and replaces `gwdgui.exe`
+standard Lazarus folder (or takes its path as an argument), builds `zgui.exe`
+with the **Windows** build mode in `lib\candidate`, and replaces `zgui.exe`
 only after a successful build, so a failed or interrupted build keeps the
-previous executable. Alternatively, open `gwdgui.lpi` in Lazarus, select the **Windows** build
+previous executable. Alternatively, open `zgui.lpi` in Lazarus, select the **Windows** build
 mode under Project → Project Options → Build modes, then choose **Build**. Both
 use the build mode's pre-build step, which uses
 Lazarus’s configured compiler to embed the manual and Git identity; Python is
 not required. Install Git for Windows and make `git` available on PATH before
 starting Lazarus. Use a Git checkout or copy including `.git` to identify the
 commit. Changes to tracked files are marked in About. Keep `draughts.ttf` beside
-`gwdgui.exe`.
+`zgui.exe`.
 
 Direct IDE builds in the **Default** mode or
-`lazbuild gwdgui.lpi` builds remain supported, but report that the commit is
+`lazbuild zgui.lpi` builds remain supported, but report that the commit is
 unavailable and load `MANUAL.md` from beside the executable. Builds from source
 archives without Git metadata explicitly report that the commit is unavailable.
 
@@ -788,14 +788,14 @@ For protocol details, see [DXP Protocol.md](DXP%20Protocol.md) and
 
 ### 12.1 File locations and portability
 
-- `engines.json` and `prefs.json` live beside the GWDGUI executable. Keep that
+- `engines.json` and `prefs.json` live beside the ZGUI executable. Keep that
   directory writable. Per-engine `.params.json` files live beside the engine
   executable they describe; launch/INI paths remain part of engine configuration.
 - PDN, database and saved tournament files live where you choose them. Import logs
   use the imported PDN's filename with the `.import.log` extension beside that PDN.
 - Unsaved tournament recovery is the exception to portable storage: it uses the
   operating system's per-user application configuration directory, under
-  `tournaments` (normally `~/.config/gwdgui/tournaments` on Linux). The tournament
+  `tournaments` (normally `~/.config/zgui/tournaments` on Linux). The tournament
   **Load** dialog opens that recovery directory for an unnamed tournament.
 
 ## 13. Keyboard reference
@@ -812,7 +812,7 @@ shortcuts are also shown beside their menu items:
 | Open database | Ctrl+Shift+O |
 | Quit | Ctrl+Q |
 | Manual | F1 |
-| About GWDGUI | Shift+F1 |
+| About ZGUI | Shift+F1 |
 | Flip the main board | F |
 | Browse the focused move list, tree or PV | Left / Right Arrow |
 | Stop Auto Play or leave game/PV browsing | Escape |
@@ -827,7 +827,7 @@ window. Choose Cancel in a save prompt to keep working.
 
 ## 14. Help and version
 
-Choose **Help → Manual** (F1) to open this manual inside GWDGUI. The manual is
+Choose **Help → Manual** (F1) to open this manual inside ZGUI. The manual is
 read-only and available offline in builds made with `build.sh` or the Windows
 Lazarus build mode.
 
@@ -848,7 +848,7 @@ the ends; use **F3** / **Shift+F3** for the same actions. **Ctrl+F** focuses and
 selects the search query. **Enter** finds the next match, and **Escape** closes
 the manual window.
 
-**Help → About GWDGUI** shows the build description and full Git commit captured
+**Help → About ZGUI** shows the build description and full Git commit captured
 when the executable was built. A build made from modified tracked files is
 marked as including uncommitted changes. This identifies the running executable;
 it does not query whichever checkout happens to be on disk later.

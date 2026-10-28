@@ -58,13 +58,13 @@ begin
   try
     Check(FindMenu(Main, 'Manual...').Parent = FindMenu(Main, 'Help'), 'manual belongs to help');
     Check(FindMenu(Main, 'Manual...').ShortCut = ShortCut(VK_F1, []), 'manual F1 shortcut');
-    Check(FindMenu(Main, 'About GWDGUI...').ShortCut = ShortCut(VK_F1, [ssShift]), 'about shortcut');
+    Check(FindMenu(Main, 'About ZGUI...').ShortCut = ShortCut(VK_F1, [ssShift]), 'about shortcut');
     CurrentCommit := AppBuildCommit;
     Check(((Length(CurrentCommit) = 40) and (Pos('unavailable', CurrentCommit) = 0)) or
       (CurrentCommit = 'unavailable (source archive)'), 'build identifies its commit or explicitly identifies an archive');
     GuiTestConfirmationResult := mrYes;
-    FindMenu(Main, 'About GWDGUI...').Click;
-    Check((Pos('GWDGUI', GuiTestLastConfirmationText) > 0) and
+    FindMenu(Main, 'About ZGUI...').Click;
+    Check((Pos('ZGUI', GuiTestLastConfirmationText) > 0) and
       (Pos('Commit: ' + CurrentCommit, GuiTestLastConfirmationText) > 0), 'About action displays embedded commit');
     GuiTestConfirmationResult := 0;
     Before := Main.CurrentGameTreePdnText('before help');
@@ -75,7 +75,7 @@ begin
     Text := TSynEdit(Manual.FindComponent('ManualText'));
     Contents := TTreeView(Manual.FindComponent('ManualContents'));
     Status := TLabel(Manual.FindComponent('ManualMatchStatus'));
-    Check(Text.ReadOnly and (Pos('GWDGUI User Manual', Text.Lines.Text) > 0) and
+    Check(Text.ReadOnly and (Pos('ZGUI User Manual', Text.Lines.Text) > 0) and
       (Pos('Choose capture', Text.Lines.Text) + Pos('captures share', Text.Lines.Text) > 0),
       'embedded current manual available without external file');
     Check((Pos('**', Text.Lines.Text) = 0) and (Pos('## ', Text.Lines.Text) = 0),

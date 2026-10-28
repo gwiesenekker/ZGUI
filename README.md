@@ -1,6 +1,12 @@
-# GWDGUI
+# ZGUI
 
-GWDGUI is a desktop application for **international draughts (10×10)**. It lets
+ZGUI starts from the unmodified GWDGUI 3.4 source at upstream commit
+`61c6cef894e18544d18e7e761143de47ef492226`. This baseline changes application
+branding only; it still runs international draughts. Chess and UCI are not yet
+implemented. See [the chess preparation review](CHESS_PORT_REVIEW.md).
+
+
+ZGUI is a desktop application for **international draughts (10×10)**. It lets
 players and engine authors play games, examine analysis, explore variations,
 run engine tournaments and search game databases. It supports engines using the
 **Hub** and **DXP** protocols, including GWD.
@@ -29,11 +35,11 @@ tagged release are listed under [Unreleased](CHANGELOG.md#unreleased).
 - Configurable board colours and notation styles, separate engine/annotator PV
   colours and a font chooser for the moves window.
 - An offline, searchable manual under **Help → Manual** and the build commit
-  under **Help → About GWDGUI**.
+  under **Help → About ZGUI**.
 
-## Download and run
+## Upstream downloads
 
-The [version 3.4 release](https://github.com/gwiesenekker/GWDGUI/releases/tag/v3.4)
+The upstream GWDGUI [version 3.4 release](https://github.com/gwiesenekker/GWDGUI/releases/tag/v3.4)
 provides **Linux x86_64** and **Windows x86_64** portable archives, plus the
 executables, draughts font and manual as separate downloads. Compare download
 checksums with the release's `SHA256SUMS` file.
@@ -46,8 +52,11 @@ Windows, run `gwdgui.exe`. On Linux, run:
 ```
 
 Linux requires the GTK2 and SQLite3 runtime libraries. Keep `draughts.ttf` beside
-the executable. GWDGUI also needs an independently installed draughts engine
+the executable. ZGUI also needs an independently installed draughts engine
 for engine play or analysis; you can play human-versus-human games without one.
+
+Build ZGUI from this checkout using the instructions below; upstream downloads
+retain their GWDGUI name.
 
 ## Getting started
 
@@ -92,7 +101,7 @@ Python 3, then run from the source directory:
 
 ```sh
 bash build.sh
-./gwdgui
+./zgui
 ```
 
 The script compiles in a temporary directory, embeds the manual and Git identity,
@@ -113,9 +122,9 @@ folders. You can supply its full path explicitly:
 build.bat "C:\lazarus\lazbuild.exe"
 ```
 
-It builds a candidate executable in `lib\candidate` and replaces `gwdgui.exe`
+It builds a candidate executable in `lib\candidate` and replaces `zgui.exe`
 only after a successful build, preserving the previous executable on failure.
-Alternatively, open `gwdgui.lpi` in Lazarus, select the **Windows** build mode
+Alternatively, open `zgui.lpi` in Lazarus, select the **Windows** build mode
 under **Project → Project Options → Build modes**, and choose **Build**.
 
 The Windows build mode embeds the manual and Git identity without Python.

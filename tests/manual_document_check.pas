@@ -209,7 +209,7 @@ begin
         Format('all %d headings in the contents at width %d, got %d',
           [LHeadingCount, LWidth, Length(LDoc.Headings)]));
       Check(Pos('**', LDoc.Text) = 0, 'no strong markers in the real manual');
-      Check(Pos('GWDGUI User Manual', LDoc.Text) > 0, 'manual title');
+      Check(Pos('ZGUI User Manual', LDoc.Text) > 0, 'manual title');
       for I := 0 to LDoc.LineCount - 1 do
       begin
         LLine := LineText(LDoc, I);
