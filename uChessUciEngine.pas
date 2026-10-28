@@ -14,9 +14,16 @@ type
     FSearching,FFaulted,FExpectUci,FExpectReady: Boolean;
     FStartedTick: QWord;
     FGameMode,FHasClock: Boolean;
-    FClock: TEngineGameClockState;
+    FClock,FPonderClock: TEngineGameClockState;
+    FPonderActive,FHasPending: Boolean;
+    FPendingRoot,FSearchRoot,FSearchMoves,FNextReply: string;
+    FPendingMoves: TStringList;
     FDurationMs,FStopMs: Integer;
-    FReportedName,FBestMove: string;
+    FReportedName,FBestMove,FFaultText: string;
+    procedure Idle;
+    procedure ClearPonder;
+    procedure Accepted(const Root: string; Moves: TStrings; const Clock: TEngineGameClockState);
+    function ClockGo(const Clock: TEngineGameClockState; Ponder: Boolean): string;
     function SearchWaitMs: Integer;
     procedure SetAnalysisOption;
     procedure ExecuteWorkerCommand(Obj: TObject);
@@ -27,7 +34,7 @@ type
     procedure Ready;
     function Initialize: Boolean;
     procedure SendOptions;
-    procedure StopCurrentSearch;
+    procedure StopCurrentSearch(WaitLimitMs: Integer=-1);
     procedure StartSearch;
     procedure Poll;
     procedure ApplyPosition(const Fen: string; Moves: TStrings);
@@ -49,6 +56,8 @@ type
     procedure PressButton(const Name: string);
     procedure BeginGame(const Fen: string; Side: TGameSide; Minutes: Double; Moves: Integer; Increment: Double=0); override;
     procedure SetGameClockState(const Clock: TEngineGameClockState); override;
+    procedure GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
+      const NextOwnClock: TEngineGameClockState); override;
     procedure NewGame(const Fen: string); override;
     procedure SetGamePosition(const Fen: string; Moves: TStrings); override;
     procedure SetClockInfo(MovesRemaining: Integer; Remaining,Used: Double); override;
@@ -62,7 +71,7 @@ type
 implementation
 uses Math, uChessUciProtocol;
 type
-  TUciCommandKind=(ucInit,ucPosition,ucNewGame,ucBudget,ucAnalyze,ucThink,ucPoll,ucStopSearch,ucShutdown,ucData,ucButton,ucBegin,ucClock);
+  TUciCommandKind=(ucInit,ucPosition,ucNewGame,ucBudget,ucAnalyze,ucThink,ucPoll,ucStopSearch,ucShutdown,ucData,ucButton,ucBegin,ucClock,ucAccepted);
   TUciCommand=class(TProcessEngineCommand)
     Operation: TUciCommandKind;
     Text: string;
@@ -75,23 +84,23 @@ type
     destructor Destroy; override;
   end;
 constructor TUciCommand.Create(AKind: TUciCommandKind);
-begin inherited Create('uci-'+IntToStr(Ord(AKind))); Operation:=AKind; Moves:=TStringList.Create; AutoFree:=AKind=ucData; end;
+begin inherited Create('uci-'+IntToStr(Ord(AKind))); Operation:=AKind; Moves:=TStringList.Create; AutoFree:=AKind in [ucData,ucAccepted]; end;
 destructor TUciCommand.Destroy;
 begin Moves.Free; inherited; end;
 constructor TUciEngine.Create(Definition: TExternalEngineDefinition);
 begin
   inherited Create(EnginePickerDisplayName(Definition,0));
   FDefinition:=TExternalEngineDefinition.Create; FDefinition.Assign(Definition);
-  FPosition:=TChessPosition.Create; FDurationMs:=1000; FStopMs:=1500;
+  FPendingMoves:=TStringList.Create; FPosition:=TChessPosition.Create; FDurationMs:=1000; FStopMs:=1500;
   LoadEngineParamsFromJson(EngineParamsFileName(Definition.ExePath),'uci',FParams);
   FStopMs:=StrToIntDef(EngineParamValue(FParams,'gui-stop-timeout-ms','1500'),1500);
   FStopMs:=Max(100,Min(10000,FStopMs));
-  FWorker:=TProcessEngineWorker.Create(@ExecuteWorkerCommand,@Log,@WorkerStopping,'UCI');
+  FWorker:=TProcessEngineWorker.Create(@ExecuteWorkerCommand,@Log,@WorkerStopping,'UCI',@Idle);
   FWorker.Process.OnData:=@ProcessData;
 end;
 destructor TUciEngine.Destroy;
 begin
-  try Stop; finally FWorker.Free; FPosition.Free; FDefinition.Free; inherited; end;
+  try Stop; finally FWorker.Free; FPendingMoves.Free; FPosition.Free; FDefinition.Free; inherited; end;
 end;
 function TUciEngine.ProtocolName: string;
 begin Result:='UCI'; end;
@@ -103,11 +112,13 @@ procedure TUciEngine.RequestStop;
 begin InterlockedExchange(FCancel,1); end;
 procedure TUciEngine.Fault(const Text: string);
 begin
-  InterlockedExchange(FCancel,1); FFaulted:=True; FSearching:=False; SetLastError(Text); ChangeState(esError,Text); Log('error; '+Text);
+  InterlockedExchange(FCancel,1); FFaulted:=True; FSearching:=False; FFaultText:=Text;
+  ClearPonder; SetLastError(Text); ChangeState(esError,Text); Log('error; '+Text);
 end;
 procedure TUciEngine.RequireReady;
 begin
-  if FFaulted or WorkerStopping or not FWorker.Process.IsRunning then raise EInvalidOperation.Create('UCI session is not synchronized; reopen the engine');
+  if FFaulted then raise EInvalidOperation.Create(FFaultText);
+  if WorkerStopping or not FWorker.Process.IsRunning then raise EInvalidOperation.Create('UCI session is not synchronized; reopen the engine');
 end;
 procedure TUciEngine.Ready;
 var Line: string;
@@ -193,10 +204,24 @@ begin
   if FExpectUci and (Copy(Line,1,8)='id name ') then begin FReportedName:=Copy(Line,9,MaxInt); Exit; end;
   if Copy(Line,1,9)='bestmove ' then begin
     if not FSearching then begin if not WorkerStopping then Fault('Unexpected/duplicate UCI bestmove'); Exit; end;
-    FSearching:=False; FBestMove:=Trim(Copy(Line,10,MaxInt)); I:=Pos(' ',FBestMove); if I>0 then FBestMove:=Copy(FBestMove,1,I-1);
-    if (FBestMove='0000') or (FBestMove='(none)') then begin
-      if FPosition.LegalMoveCount>0 then Fault('UCI returned no move in a playable position'); FBestMove:='';
-    end else if not FPosition.IsLegal(FBestMove) then begin Fault('Illegal UCI bestmove '+FBestMove); FBestMove:=''; end;
+    FSearching:=False; FNextReply:='';
+    Moves:=TStringList.Create;
+    try
+      ExtractStrings([' ',#9],[],PChar(Line),Moves);
+      FBestMove:=LowerCase(Moves[1]);
+      if (FBestMove='0000') or (FBestMove='(none)') then begin
+        if FPosition.LegalMoveCount>0 then Fault('UCI returned no move in a playable position'); FBestMove:='';
+      end else if not FPosition.IsLegal(FBestMove) then begin Fault('Illegal UCI bestmove '+FBestMove); FBestMove:=''; end;
+      if not FFaulted and (FBestMove<>'') and (Moves.Count=4) and (Moves[2]='ponder') then begin
+        Trial:=TChessPosition(FPosition.Clone);
+        try
+          Trial.PlayMove(FBestMove);
+          if Trial.IsLegal(LowerCase(Moves[3])) then FNextReply:=LowerCase(Moves[3])
+          else Log('ignored illegal optional ponder reply');
+        finally Trial.Free; end;
+      end;
+    finally Moves.Free; end;
+    if FPonderActive and not FFaulted then Log('early ponder bestmove retained');
     if not FFaulted then ChangeState(esReady,'UCI search completed');
     FWorker.AddReceivedLine(Line); Exit;
   end;
@@ -205,7 +230,7 @@ begin
   if Line='readyok' then begin if FExpectReady then begin FExpectReady:=False; FWorker.AddReceivedLine(Line); end; Exit; end;
   // A bound is not an exact evaluation of the published line. Preserve the
   // last complete exact tuple, including its depth, instead of mixing updates.
-  if not FSearching or WorkerStopping or FFaulted then Exit;
+  if FPonderActive or not FSearching or WorkerStopping or FFaulted then Exit;
   if not ParseUciInfo(Line,Info) or Info.Bounded or (Info.MultiPV<>1) or
     not Info.HasScore or (Info.PV='') then Exit;
   Trial:=TChessPosition(FPosition.Clone); Moves:=TStringList.Create; PV:='';
@@ -235,11 +260,60 @@ end;
 procedure TUciEngine.ApplyPosition(const Fen: string; Moves: TStrings);
 var Trial: TChessPosition; I: Integer;
 begin
-  RequireReady; if FSearching then StopCurrentSearch;
+  RequireReady;
   Trial:=TChessPosition.Create;
   try
     Trial.LoadFromFEN(Fen); if Moves<>nil then for I:=0 to Moves.Count-1 do Trial.PlayMove(Moves[I]);
-    inherited SetGamePosition(Fen,Moves); FPosition.AssignFrom(Trial); FHasClock:=False;
+    FHasClock:=False;
+    if FPonderActive then begin
+      FPendingRoot:=Fen; FPendingMoves.Clear;
+      if Moves<>nil then FPendingMoves.Assign(Moves);
+      FHasPending:=True; Exit;
+    end;
+    if FSearching then StopCurrentSearch;
+    ClearPonder;
+    inherited SetGamePosition(Fen,Moves); FPosition.AssignFrom(Trial);
+  finally Trial.Free; end;
+end;
+procedure TUciEngine.ClearPonder;
+begin
+  FPonderActive:=False; FNextReply:=''; FHasPending:=False; FPendingMoves.Clear;
+end;
+procedure TUciEngine.Idle;
+begin
+  if not FPonderActive or FFaulted then Exit;
+  try
+    if WorkerStopping then begin
+      FSearching:=False; ClearPonder; FWorker.StopProcess; Exit;
+    end;
+    if FWorker.Process.NeedsPolling then FWorker.Process.ReadAvailable;
+    if not FWorker.Process.IsRunning then Fault('UCI process exited while pondering');
+  except on E:Exception do Fault('UCI ponder idle service: '+E.Message); end;
+end;
+procedure TUciEngine.Accepted(const Root: string; Moves: TStrings; const Clock: TEngineGameClockState);
+var I: Integer; Enabled: Boolean; Trial: TChessPosition; Reply,Line: string;
+begin
+  if WorkerStopping or FFaulted or not FGameMode or (FNextReply='') then Exit;
+  Enabled:=False;
+  for I:=0 to High(FOptions) do if SameText(FOptions[I].Name,'Ponder') and
+    (FOptions[I].ParamType='check') and SameText(FOptions[I].Value,'true') then Enabled:=True;
+  if not Enabled or (Root<>FSearchRoot) or (Moves.Text<>FSearchMoves+FBestMove+LineEnding) then Exit;
+  Trial:=TChessPosition.Create;
+  try
+    Trial.LoadFromFEN(Root);
+    for I:=0 to Moves.Count-1 do Trial.PlayMove(Moves[I]);
+    Reply:=FNextReply; FNextReply:='';
+    if not Trial.IsLegal(Reply) then Exit;
+    Trial.PlayMove(Reply);
+    if Trial.LegalMoveCount=0 then Exit;
+    inherited SetGamePosition(Root,Moves); MovesPlayed.Add(Reply);
+    FPosition.AssignFrom(Trial); FPonderClock:=Clock;
+    FSearchRoot:=Root; FSearchMoves:=MovesPlayed.Text;
+    while FWorker.TakeReceivedLine('bestmove',Line) do ;
+    if Root=ChessStartingFEN then Line:='position startpos' else Line:='position fen '+Root;
+    Line+=' moves'; for I:=0 to MovesPlayed.Count-1 do Line+=' '+MovesPlayed[I];
+    FWorker.SendLine(Line); FBestMove:=''; FPonderActive:=True; FSearching:=True;
+    FWorker.SendLine(ClockGo(Clock,True)); Log('ponder started');
   finally Trial.Free; end;
 end;
 function TUciEngine.SearchWaitMs: Integer;
@@ -247,19 +321,34 @@ begin
   if FGameMode then Result:=MoveTimeLimitMs else Result:=Min(MoveTimeLimitMs,FDurationMs+FStopMs);
 end;
 procedure TUciEngine.SetAnalysisOption;
-var I: Integer; Value: string;
+var I: Integer; Value: string; Changed: Boolean;
 begin
-  if FGameMode then Value:='false' else Value:='true';
-  for I:=0 to High(FOptions) do if SameText(FOptions[I].Name,'UCI_AnalyseMode') and (FOptions[I].Value<>Value) then begin
+  Changed:=False;
+  for I:=0 to High(FOptions) do begin
+    if SameText(FOptions[I].Name,'UCI_AnalyseMode') then begin
+      if FGameMode then Value:='false' else Value:='true';
+    end else if SameText(FOptions[I].Name,'Ponder') and (FOptions[I].ParamType='check') then begin
+      Value:='false';
+      if FGameMode and SameText(EngineParamValue(FParams,'Ponder','false'),'true') then Value:='true';
+    end else Continue;
+    if FOptions[I].Value=Value then Continue;
     FWorker.SendLine('setoption name '+FOptions[I].Name+' value '+Value);
-    FOptions[I].Value:=Value; Ready; Break;
+    FOptions[I].Value:=Value; Changed:=True;
   end;
+  if Changed then Ready;
 end;
 function UciMilliseconds(Seconds: Double): string;
 begin
   if IsNan(Seconds) or IsInfinite(Seconds) or (Seconds<0) or (Seconds>=9.22e15) then
     raise EConvertError.Create('Invalid UCI clock seconds');
   Result:=IntToStr(Trunc(Seconds*1000));
+end;
+function TUciEngine.ClockGo(const Clock: TEngineGameClockState; Ponder: Boolean): string;
+begin
+  Result:='go'; if Ponder then Result+=' ponder';
+  Result+=' wtime '+UciMilliseconds(Clock.Remaining[gsWhite])+' btime '+UciMilliseconds(Clock.Remaining[gsBlack])+
+    ' winc '+UciMilliseconds(Clock.Increment[gsWhite])+' binc '+UciMilliseconds(Clock.Increment[gsBlack]);
+  if Clock.MovesRemaining>0 then Result+=' movestogo '+IntToStr(Clock.MovesRemaining);
 end;
 procedure TUciEngine.StartSearch;
 var Line: string; I: Integer;
@@ -272,29 +361,34 @@ begin
   PublishSearchInfo('','','','');
   if StartingFEN=ChessStartingFEN then Line:='position startpos' else Line:='position fen '+StartingFEN;
   if MovesPlayed.Count>0 then begin Line+=' moves'; for I:=0 to MovesPlayed.Count-1 do Line+=' '+MovesPlayed[I]; end;
+  FSearchRoot:=StartingFEN; FSearchMoves:=MovesPlayed.Text; FNextReply:='';
   FWorker.SendLine(Line); FBestMove:=''; FSearching:=True; FStartedTick:=GetTickCount64;
   if FGameMode then begin
-    Line:='go wtime '+UciMilliseconds(FClock.Remaining[gsWhite])+' btime '+UciMilliseconds(FClock.Remaining[gsBlack])+
-      ' winc '+UciMilliseconds(FClock.Increment[gsWhite])+' binc '+UciMilliseconds(FClock.Increment[gsBlack]);
-    if FClock.MovesRemaining>0 then Line+=' movestogo '+IntToStr(FClock.MovesRemaining);
+    Line:=ClockGo(FClock,False);
     FHasClock:=False;
   end else Line:='go movetime '+IntToStr(FDurationMs);
   ChangeState(esThinking,'UCI search started'); FWorker.SendLine(Line);
 end;
-procedure TUciEngine.StopCurrentSearch;
-var Line: string;
+procedure TUciEngine.StopCurrentSearch(WaitLimitMs: Integer);
+var Line: string; TimeoutMs: Integer;
 begin
   RequireReady;
   if FSearching then begin
+    TimeoutMs:=FStopMs;
+    if WaitLimitMs>=0 then TimeoutMs:=Max(1,Min(TimeoutMs,WaitLimitMs));
     FWorker.SendLine('stop'); ChangeState(esStopping,'waiting for bestmove');
     // UCI has no search IDs. Do not send another position/go until this search
     // completes; a missing bestmove makes the process unusable.
-    if not FWorker.WaitForLine('bestmove',FStopMs,Line) then begin
+    if not FWorker.WaitForLine('bestmove',TimeoutMs,Line) then begin
+      if (WaitLimitMs>=0) and (WaitLimitMs<=FStopMs) and
+        (FWorker.LastWaitFailure='timeout') and not StopRequested and not FFaulted then
+        MarkMoveTimedOut;
       Fault('UCI stop acknowledgement missing: '+FWorker.LastWaitFailure); FWorker.StopProcess;
       raise EInvalidOperation.Create(LastError);
     end;
   end;
   if FFaulted then raise EInvalidOperation.Create(LastError);
+  ClearPonder;
 end;
 procedure TUciEngine.Poll;
 begin
@@ -303,21 +397,65 @@ begin
   if not WorkerStopping then begin
     if not FWorker.Process.IsRunning then begin Fault('UCI process exited'); raise EInvalidOperation.Create(LastError); end;
     if FFaulted then raise EInvalidOperation.Create(LastError);
-    if FSearching and (GetTickCount64-FStartedTick>QWord(SearchWaitMs)) then begin
+    if FSearching and not FPonderActive and (GetTickCount64-FStartedTick>QWord(SearchWaitMs)) then begin
       Fault('UCI search exceeded its finite budget'); FWorker.StopProcess; raise EInvalidOperation.Create(LastError);
     end;
   end;
 end;
 function TUciEngine.DoStartThinking: string;
-var Line: string;
+var Line: string; StartTick,Elapsed: QWord; WaitMs: Integer;
+  Own: TGameSide; Hit: Boolean; Root: string; Moves: TStringList;
 begin
-  StartSearch;
+  StartTick:=GetTickCount64;
+  RequireReady;
+  if FPonderActive then begin
+    if not FHasPending or not FHasClock then raise EInvalidOperation.Create('Fresh actual position and game clocks required after pondering');
+    // Drain before changing phase: an early result belongs to the predicted position.
+    if FWorker.Process.NeedsPolling then FWorker.Process.ReadAvailable;
+    RequireReady;
+    Own:=FPonderClock.SideToMove;
+    // M5: the opponent's clocks are stale by design. Only our own budget
+    // and the complete actual history determine whether this search is reusable.
+    Hit:=(FPendingRoot=FSearchRoot) and (FPendingMoves.Text=FSearchMoves) and
+      (FClock.SideToMove=Own) and (FClock.Remaining[Own]=FPonderClock.Remaining[Own]) and
+      (FClock.Increment[Own]=FPonderClock.Increment[Own]) and
+      (FClock.MovesRemaining=FPonderClock.MovesRemaining);
+    Root:=FPendingRoot; Moves:=TStringList.Create;
+    try
+      Moves.Assign(FPendingMoves);
+      if Hit then begin
+        inherited SetGamePosition(Root,Moves); FHasPending:=False; FHasClock:=False;
+        PublishSearchInfo('','','','');
+        if not FSearching then begin
+          // M4: already completed. Never send ponderhit and invite another reply.
+          FPonderActive:=False;
+          while FWorker.TakeReceivedLine('bestmove',Line) do ;
+          Exit(FBestMove);
+        end;
+        FWorker.SendLine('ponderhit'); FPonderActive:=False; FStartedTick:=StartTick;
+        Log('ponder hit');
+      end else begin
+        Elapsed:=GetTickCount64-StartTick;
+        StopCurrentSearch(Max(1,SearchWaitMs-Integer(Min(Elapsed,QWord(High(Integer))))));
+        inherited SetGamePosition(Root,Moves);
+        FPosition.LoadFromFEN(Root);
+        for WaitMs:=0 to Moves.Count-1 do FPosition.PlayMove(Moves[WaitMs]);
+        Elapsed:=GetTickCount64-StartTick;
+        if Elapsed>=QWord(SearchWaitMs) then begin MarkMoveTimedOut; Exit(''); end;
+        FClock.Remaining[FClock.SideToMove]:=Max(0,FClock.Remaining[FClock.SideToMove]-Elapsed/1000);
+        Log('ponder miss; previous result discarded');
+        StartSearch;
+      end;
+    finally Moves.Free; end;
+  end else StartSearch;
   if not FSearching then Exit('');
-  if not FWorker.WaitForLine('bestmove',SearchWaitMs,Line) then begin
+  Elapsed:=GetTickCount64-StartTick;
+  WaitMs:=Max(1,SearchWaitMs-Integer(Min(Elapsed,QWord(High(Integer)))));
+  if (Elapsed>=QWord(SearchWaitMs)) or not FWorker.WaitForLine('bestmove',WaitMs,Line) then begin
     if StopRequested then Exit('');
     if FFaulted then raise EInvalidOperation.Create(LastError);
     if FWorker.LastWaitFailure='stopping' then Exit('');
-    if FWorker.LastWaitFailure='timeout' then MarkMoveTimedOut;
+    if (Elapsed>=QWord(SearchWaitMs)) or (FWorker.LastWaitFailure='timeout') then MarkMoveTimedOut;
     Line:='UCI bestmove not received: '+FWorker.LastWaitFailure;
     Fault(Line); FWorker.StopProcess;
     if MoveTimedOut then Exit('');
@@ -345,9 +483,17 @@ begin
       FClock:=C.Clock; FGameMode:=True; FHasClock:=True;
     end;
     ucBudget:begin
-      FGameMode:=False; FHasClock:=False;
+      C.BoolResult:=FHasPending;
+      if FHasPending then begin C.Text:=FPendingRoot; C.Moves.Assign(FPendingMoves); end;
+      StopCurrentSearch;
+      if C.BoolResult then ApplyPosition(C.Text,C.Moves);
+      FGameMode:=False; FHasClock:=False; SetAnalysisOption;
       if IsNan(C.Seconds) or IsInfinite(C.Seconds) or (C.Seconds<=0) or (C.Seconds>86400) then raise EConvertError.Create('Invalid analysis duration');
       FDurationMs:=Max(1,Round(C.Seconds*1000));
+    end;
+    ucAccepted:begin
+      try Accepted(C.Text,C.Moves,C.Clock);
+      except on E:Exception do Fault('Ponder setup failed: '+E.Message); end;
     end;
     ucAnalyze:StartSearch;
     ucThink:C.StringResult:=inherited StartThinking;
@@ -361,7 +507,7 @@ begin
       end;
       if not Found then raise EConvertError.Create('Unknown UCI button '+C.Text); Ready;
     end;
-    ucShutdown:begin inherited Stop; FSearching:=False; FWorker.StopProcess; end;
+    ucShutdown:begin inherited Stop; FSearching:=False; ClearPonder; FWorker.StopProcess; end;
   end;
 end;
 procedure TUciEngine.ConfigureOptions(const Params: TEngineParamArray);
@@ -400,6 +546,15 @@ end;
 procedure TUciEngine.SetGameClockState(const Clock: TEngineGameClockState);
 var C: TUciCommand;
 begin C:=TUciCommand.Create(ucClock); C.Clock:=Clock; FWorker.QueueProcedureCommand(C); end;
+procedure TUciEngine.GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
+  const NextOwnClock: TEngineGameClockState);
+var C: TUciCommand;
+begin
+  if WorkerStopping then Exit;
+  C:=TUciCommand.Create(ucAccepted); C.Text:=RootFEN;
+  C.Moves.Assign(ActualMoves); C.Clock:=NextOwnClock;
+  if not FWorker.Post(C) then C.Free;
+end;
 procedure TUciEngine.NewGame(const Fen: string);
 var C: TUciCommand;
 begin C:=TUciCommand.Create(ucNewGame); C.Text:=Fen; FWorker.QueueProcedureCommand(C); end;

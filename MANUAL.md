@@ -56,13 +56,18 @@ annotator, PV/hint views and score history:
    each finite analysis search. Browsing a different position stops the old search
    before starting another. Use **Close Annotator** to release the engine.
 
+The line above the annotator PV shows its score, depth and time using the same
+information format as the engine PV. It follows the displayed PV and clears
+when the annotator closes.
+
 Scores are from White's point of view: pawn units for ordinary evaluations and
 `#N` for mate. Mate scores stay textual rather than becoming invented chart
 values. Only exact primary-line scores with a legal PV are stored; bounded and
 secondary lines remain in the engine log. A score/depth update still appears when
 its PV is unchanged. PVs and hints use existing navigation and never become
-played moves or variations. The managed options Ponder and UCI_Chess960 are forced
-off, MultiPV to 1, and UCI_AnalyseMode on for analysis and off for games when advertised. Other saved options match
+played moves or variations. Ponder is forced off for discovery and analysis;
+UCI_Chess960 stays off, MultiPV is 1, and UCI_AnalyseMode is on for analysis and
+off for games when advertised. Other saved options match
 names without case sensitivity, while commands use the engine's spelling.
 Unknown saved options are retained but not sent. Initialization accepts only
 empty lines, `debug on`, `debug off` or `register later`; use the grid for options.
@@ -98,7 +103,26 @@ rules automatically accept threefold/50-move draw claims as soon as available,
 including a legal intended move; there is no new claim dialog. Conservative
 insufficient-material/dead-position limitations remain as documented.
 
-Pondering, Auto Play, setup, tournaments and databases are not yet connected.
+To enable pondering for a game engine, save **Ponder = true** in its existing
+parameter grid. Without a saved true value, pondering is off even when the
+engine advertises a true default. An engine must advertise the Ponder check
+option. This choice is per engine; discovery and analysis never ponder and do
+not replace the saved choice with their runtime false value.
+
+Pondering searches a predicted opponent reply in the background. A matching
+actual reply reuses that search through `ponderhit`; a different reply stops the
+old search before starting from the actual position. A valid early ponder result
+is retained for a hit and discarded for a miss. Predictions and speculative
+scores/PVs never become played moves or annotations. Ponder time is not charged
+to the engine's clock; actual-turn time, including stopping a missed search, is.
+
+Pondering is most useful against a human or engines on separate machines. Two
+engines pondering on one computer compete for CPU resources; leave it off for
+ordinary engine comparisons unless resources are deliberately separated.
+When chess tournaments are connected, they will need their own ponder-off
+default before enabling pondering there.
+
+Auto Play, setup, tournaments and databases are not yet connected.
 Their controls remain visible in their original locations but are disabled,
 with automatic database search also guarded.
 

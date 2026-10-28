@@ -4,7 +4,41 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed UCI pondering and annotator information — 2026-10-28
+
+- Implement the approved UCI pondering design and M4/M5/D5 through the existing
+  engine adapter, game orchestrator, clocks, snapshots and process worker.
+  Enable only a saved true Ponder check option in game sessions; discovery and
+  analysis keep it off without overwriting the saved choice. INI editing remains.
+- Start background work only after move acceptance. Match full root/history and
+  the engine's own clock fields for ponderhit; ignore stale opponent clock fields.
+  On a miss, stop/fence the predicted search before searching the actual position.
+  Charge reconciliation to the real turn and retain its original total deadline.
+- M4: retain a legal early ponder bestmove, return it on a hit without ponderhit,
+  and discard it on a miss without waiting for stop. Illegal/duplicate replies
+  and background failures retain the existing explicit-error/unfinished-result
+  policy. Stop still takes precedence over timeout in both return/error paths.
+- Discard speculative info: no predictions, scores or PVs become played moves,
+  variations, hints or annotations. Keep existing game and analysis GUI layout.
+  Document per-engine opt-in, CPU contention and the future tournament-level
+  ponder-off default; tournaments remain disabled.
+- At the user's additional request, add the annotator score/depth/time line above
+  its PV by supplying a label to the same existing PV browser used by engines.
+  No renderer, game-tree or analysis-coordinator changes.
+- Validation: application build, full headless regression and all seven GTK GUI
+  suites pass. Checked deterministic pondering tests cover hit/miss, early output,
+  both colours, periods, history/clock mismatches, >64 KiB idle output, faults,
+  Stop during hit/miss, analysis transitions and idle shutdown without leaks.
+  Real Stockfish 19, Arasan 26.1, RubiChess 20240817 and Igel 3.8.0 pondering
+  games exercise actual hits/misses without protocol failures. The GUI tests
+  verify saved opt-in and the annotator header's values, navigation and clearing.
+  Final checked runs pass 160 deterministic pondering checks / 165 with Stockfish
+  and 86 focused GUI checks. Miss-stop waits are bounded by the real deadline;
+  deadline expiry and cancellation during reconciliation are covered explicitly.
+
 ### Reviewed pondering infrastructure — 2026-10-28
+
+Commit: `267d14c`.
 
 - Apply the shared seams approved in Claude review b833e78: one default-no-op
   accepted-move notification and a reused side-specific clock-record builder.

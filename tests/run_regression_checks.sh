@@ -15,6 +15,7 @@ CHECKS=(
   analyzer_position_check.pas
   hub_search_fence_check.pas
   uci_game_check.pas
+  uci_ponder_check.pas
   uci_engine_check.pas
   hub_worker_trace_check.pas
   endgame_draw_check.pas

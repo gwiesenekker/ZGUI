@@ -39,6 +39,7 @@ type
     FAnalyzerPopup: TPopupMenu;
     FAnalyzerPvBrowser: TPvBrowser;
     FAnalyzerPvMemo: TMemo;
+    FAnalyzerPvInfoLabel: TLabel;
     FAnalyzerRunner: TAnalyzerRunnerThread;
     FAnalysis: TAnalysisCoordinator;
     FAutoPlay: TAutoPlayCoordinator;
@@ -828,7 +829,16 @@ begin
   LAnalyzerTextPanel.Align := alClient;
   LAnalyzerTextPanel.BevelOuter := bvNone;
 
+  FAnalyzerPvInfoLabel := TLabel.Create(Self);
+  FAnalyzerPvInfoLabel.Name := 'AnnotatorPvInfoLabel';
+  FAnalyzerPvInfoLabel.Parent := LAnalyzerTextPanel;
+  FAnalyzerPvInfoLabel.Align := alTop;
+  FAnalyzerPvInfoLabel.AutoSize := False;
+  FAnalyzerPvInfoLabel.Height := 20;
+  FAnalyzerPvInfoLabel.Layout := tlCenter;
+
   FAnalyzerPvMemo := TMemo.Create(Self);
+  FAnalyzerPvMemo.Top := FAnalyzerPvInfoLabel.Height;
   FAnalyzerPvMemo.Parent := LAnalyzerTextPanel;
   FAnalyzerPvMemo.Align := alTop;
   FAnalyzerPvMemo.Height := 44;
@@ -841,7 +851,7 @@ begin
   FAnalyzerPvMemo.PopupMenu := FAnalyzerPopup;
 
   FAnalyzerPvBrowser := TPvBrowser.Create(DefaultGameVariant,
-    FAnalyzerMiniBoardControl, nil, FAnalyzerPvMemo);
+    FAnalyzerMiniBoardControl, FAnalyzerPvInfoLabel, FAnalyzerPvMemo);
   FAnalyzerPvBrowser.OnBoardChanged := @AnalyzerPvBoardChanged;
 
   FMctsMemo := TMemo.Create(Self);
