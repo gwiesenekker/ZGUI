@@ -241,3 +241,29 @@ cases conservatively; it does not solve arbitrary dead positions such as locked
 pawn fortresses. FEN accepts six fields for orthodox chess, checks local validity
 and coherent castling/en-passant state, but does not prove historical reachability.
 Chess960 and other variants are outside this adapter.
+
+
+## Shared board and chess GUI checks
+
+`run_gui_checks.sh` now also runs `chess_board_check` after the five existing
+suites. It explicitly injects chess into the existing main form, while those
+five suites continue to use the draughts default. The chess suite checks all
+64 squares, flip/resize/margins, owned snapshots, board/list moves, all promotion
+choices and stale/cancelled choices, mainline/branch navigation, FEN clipboard
+paths, capability guards, SAN PVs (including invalid prefixes, pending updates
+and Black move 37), and unchanged score-history behaviour. It also compares
+all control bounds between draughts and chess compositions.
+
+Compare actual saved draughts rendering with the pre-extraction control using:
+
+```sh
+python3 tests/board_render_compare.py /tmp/zgui-board-render
+```
+
+This builds the original control from commit `42e0d54` in an isolated directory,
+then compares eight nonblank saved bitmaps, including both orientations, side
+markers, kings and every highlight source. Native paint must invalidate the
+bitmap raw-image cache before saving; the fixture explicitly does that.
+The comparison needs GTK2 and a display. It can also be run under Xvfb where
+installed; validation here used the available GTK desktop display. New neutral
+board/PV units are included in the existing source dependency audit.

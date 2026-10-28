@@ -1,9 +1,29 @@
 # ZGUI User Manual
 
-This manual describes the current ZGUI application, a graphical workbench for
-international draughts. It can play and browse games,
-run Hub and DXP engines, organize engine tournaments, display engine analysis,
-and store or search games in an SQLite database.
+The executable currently opens an 8×8 chess board in the existing GWDGUI layout
+for standalone exploration. Click a source and destination, or click a move in
+**Legal moves**. Promotion choices use the existing move-choice dialog. Notation
+uses SAN; the legal-moves list uses UCI coordinates. **F** flips the board.
+
+Right-click the FEN field to paste a chess FEN from the clipboard. The main
+board's context menu copies the displayed position as FEN. For a new standard
+position, paste:
+
+```text
+rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+```
+
+Explore mainlines and variations through the existing notation and game-tree
+views. This step does not save chess games; copy FEN to retain a position.
+PGN, UCI, clocked games, setup, tournaments and databases are not yet connected.
+Their controls remain visible in their original locations but are disabled,
+with automatic database search also guarded.
+
+The numbered sections below are retained reference documentation for the
+inherited draughts features. They do not imply those features are enabled for
+chess. The score-history view and shared navigation infrastructure are retained.
+Chess pieces use original GPLv3 vector artwork embedded in the source and do not
+require a chess font.
 
 ## 1. Getting started
 

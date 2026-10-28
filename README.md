@@ -1,25 +1,32 @@
 # ZGUI
 
-ZGUI starts from the unmodified GWDGUI 3.4 source at upstream commit
-`61c6cef894e18544d18e7e761143de47ef492226`. The application still runs
-international draughts with ZGUI branding. A chess position/rules adapter is
-implemented and tested in isolation; chess GUI integration and UCI remain
-future work. See [the chess preparation review](CHESS_PORT_REVIEW.md).
+ZGUI is being ported to chess from the unmodified GWDGUI 3.4 source at
+upstream commit `61c6cef894e18544d18e7e761143de47ef492226`, while preserving
+its existing GUI and shared infrastructure.
 
+The executable now opens an **8×8 chess board** in the existing layout. This
+step supports standalone exploration: legal board/list moves, promotion choices,
+FEN copying/pasting, mainline and variation navigation, highlights and board
+flipping. Click both source and destination, including for a piece with one move.
+The legal list uses UCI coordinates; notation and PV views use SAN.
 
-ZGUI is a desktop application for **international draughts (10×10)**. It lets
-players and engine authors play games, examine analysis, explore variations,
-run engine tournaments and search game databases. It supports engines using the
-**Hub** and **DXP** protocols, including GWD.
+PGN, UCI engines, clocked games, position setup, tournaments and databases are
+not yet connected for chess. Their existing controls stay in place but are
+disabled, including automatic database search. Exploration is not saved as a
+game yet; copy FEN to retain the displayed position. The existing score-history
+view is retained, without changing its implementation.
 
-[Download version 3.4](https://github.com/gwiesenekker/GWDGUI/releases/tag/v3.4)
-· [User manual](MANUAL.md)
-· [Change history](CHANGELOG.md)
+Chess pieces are original, scalable Canvas vector artwork in
+`uChessBoardControl.pas`, distributed under the project's **GPLv3** licence.
+No system chess glyphs, external artwork or additional chess font is needed.
+The inherited `draughts.ttf` remains for the preserved draughts components.
 
-This README describes the current source tree. Changes made after the latest
-tagged release are listed under [Unreleased](CHANGELOG.md#unreleased).
+See [the port review](CHESS_PORT_REVIEW.md), [user manual](MANUAL.md) and
+[change history](CHANGELOG.md). The sections below document the inherited
+GWDGUI infrastructure; disabled features will become available through adapters,
+not replacement implementations.
 
-## Features
+## Inherited infrastructure
 
 - Human-versus-human, human-versus-engine and engine-versus-engine games, with
   configurable time controls and multiple games in the game history.
@@ -59,7 +66,7 @@ for engine play or analysis; you can play human-versus-human games without one.
 Build ZGUI from this checkout using the instructions below; upstream downloads
 retain their GWDGUI name.
 
-## Getting started
+## Using the inherited draughts features (reference)
 
 1. Open **Engines...**, add an executable and select its Hub or DXP protocol.
    Use **Launch engine** to test it, then **Launched correctly** to save it.

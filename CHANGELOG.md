@@ -4,6 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Select standalone chess exploration — 2026-10-28
+
+- C1: explicitly select chess in `zgui.lpr` before form creation, retaining the
+  selected variant until all forms/views are destroyed. ZGUI opens an 8×8 board
+  with the existing GUI layout, board/list input, promotions, FEN and navigation.
+- Document working exploration features and the disabled pending chess adapters
+  in README and the manual. State that exploration is not yet saved as games.
+- Add the chess GUI suite to the standard GUI runner; retain all five existing
+  draughts suites. Record the original vector artwork's GPLv3 licence.
+- Validation: application compilation/startup smoke test, full headless suite,
+  all six GTK GUI suites, and eight nonblank reference bitmap comparisons pass.
+  The 534-check chess GUI suite also passes range/overflow checking with zero
+  unfreed heap blocks. Native Windows GUI execution was not tested.
+
 ### Reviewed chess board and shared PV integration — 2026-10-28
 
 - Address U1/U2/A1: bind the main/mini/popout views to owned game-position

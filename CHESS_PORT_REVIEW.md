@@ -10,22 +10,29 @@ rules, SAN/PGN, a chess board or UCI. The application still plays draughts.
 Claude's local position-interface proposal in the independent GWDGUI checkout
 was also consulted; the checked-in implementation is the authority below.
 
-## Adapter implementation status — 2026-10-28
+## Implementation status — 2026-10-28
 
-`uChessPosition.pas` now implements `TChessPosition`, `TChessVariant` and
-`TChessRules` through the existing contracts. It supplies orthodox FEN, legal
-moves, canonical UCI move text, SAN, repetition identity, draw claims and
-material-aware timeout outcomes. It is not linked into `zgui.lpr` and does not
-register as the default; the application and GUI still run draughts. PGN, UCI
-engine communication and GUI integration remain future work.
+The position/rules adapter is tested through the existing interfaces. The
+executable now explicitly selects chess before form creation and displays the
+8×8 board in the existing layout for standalone FEN exploration. The shared
+board base and existing PV browser were adapted according to Claude's review;
+no replacement tree, router, runner, clock or database was introduced.
 
-Tests inject chess into the existing tree/actor and orchestrator without changing
-those units. The contract suite, fixed perft fixtures, focused rule tests and an
-optional python-chess differential check are documented in `tests/README.md`.
-Material detection is conservative: arbitrary dead-position fortresses are not
-solved. FEN validation does not attempt full retrograde reachability analysis.
-The baseline observations below describe the imported source; the new adapter
-completes the isolated chess core step only.
+Board controls and the PV browser own their position snapshots. Chess uses
+original GPLv3 vector piece drawing and orientation-aware coordinates. The
+existing legal list, promotion chooser, tree/variation navigation, PV pending
+updates and score history are reused. Two-click chess input is a GUI interaction
+option; the draughts single-move shortcut remains the default.
+
+PGN, UCI, clocked games, setup, tournament and database connections remain future
+steps. Their controls retain the layout but are guarded for chess, including
+implicit database searches and PDN save/close/replace paths. Chess exploration
+is not persisted as game files yet. All rule limitations noted in the adapter
+remain, including conservative dead-material detection.
+
+See `tests/README.md` for interface/perft, rendering and GUI validation, and
+`REVIEW_NOTES.md` (local review notes) for responses by Claude issue ID. Baseline observations below
+refer to the imported code before these isolated adapter/view steps.
 
 ## Prepared contracts to reuse
 
