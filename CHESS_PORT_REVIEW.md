@@ -24,14 +24,15 @@ existing legal list, promotion chooser, tree/variation navigation, PV pending
 updates and score history are reused. Two-click chess input is a GUI interaction
 option; the draughts single-move shortcut remains the default.
 
-PGN, UCI, clocked games, setup, tournament and database connections remain future
-steps. Their controls retain the layout but are guarded for chess, including
-implicit database searches and PDN save/close/replace paths. Chess exploration
-is not persisted as game files yet. All rule limitations noted in the adapter
-remain, including conservative dead-material detection.
+PGN loading/saving now reuses the existing tree, actor, file browser and export
+traversal. UCI configuration and finite analysis use the existing editor, shared
+process worker, factory, analysis runner and coordinator, as approved in Claude
+review c0493e3. GUI layout is preserved; engine PVs remain typed analysis data.
+Clocked games, pondering, Auto Play, setup, tournaments and databases remain
+future steps and stay guarded for chess. Rule limitations remain, including
+conservative dead-material detection.
 
-See `tests/README.md` for interface/perft, rendering and GUI validation, and
-`REVIEW_NOTES.md` (local review notes) for responses by Claude issue ID. Baseline observations below
+See `tests/README.md` for interface/perft, rendering and GUI validation. Baseline observations below
 refer to the imported code before these isolated adapter/view steps.
 
 ## Prepared contracts to reuse

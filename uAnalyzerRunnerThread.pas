@@ -7,7 +7,7 @@ interface
 uses
   Classes, SyncObjs, SysUtils,
   uCancellationToken, uEngineBase, uGamePosition, uEngineRegistry, uGameTreeSearchRef,
-  uDraughtsHubEngine, uPvSnapshot, uThreadMessageQueue;
+  uPvSnapshot, uThreadMessageQueue;
 
 type
   TAnalyzerRunMode = (
@@ -24,7 +24,8 @@ type
   TAnalyzerRunnerThread = class(TThread)
   private
     FCommandQueue: TThreadMessageQueue;
-    FEngine: THubEngine;
+    FEngine: TGameEngine;
+    FLastGameTreeId: Int64;
     FEngineLifetimeLock: TCriticalSection;
     FStopToken: TCancellationToken;
     FEngineDefinition: TExternalEngineDefinition;
@@ -181,16 +182,17 @@ end;
 
 procedure TAnalyzerRunnerThread.RuntimeLog(Sender: TObject; const AMessage: string);
 var
-  LPvText: string;
+  LPvText,Score,Depth,TimeText,Fingerprint: string;
 begin
   if Assigned(FOnLog) then
     FOnLog(Self, AMessage);
   if FEngine = nil then
     Exit;
-  LPvText := FEngine.PrincipalVariation;
+  FEngine.ReadSearchInfo(LPvText,Score,Depth,TimeText);
+  Fingerprint:=LPvText+#0+Score+#0+Depth+#0+TimeText;
   FPvLock.Acquire;
   try
-    if (Trim(LPvText) = '') or (LPvText = FLastPublishedPv) then
+    if (Trim(LPvText) = '') or (Fingerprint = FLastPublishedPv) then
       Exit;
   finally
     FPvLock.Release;
@@ -202,16 +204,17 @@ end;
 procedure TAnalyzerRunnerThread.PublishSnapshot;
 var
   Snapshot: TPvSnapshot;
+  PV,Score,Depth,TimeText: string;
 begin
   if FEngine = nil then
     Exit;
+  FEngine.ReadSearchInfo(PV,Score,Depth,TimeText);
   Snapshot := TPvSnapshot.Create;
   FPvLock.Acquire;
   try
     Snapshot.SetDataWithSearch(FPvBasePosition, FPvBasePly,
-      FEngine.PrincipalVariation, FEngine.LastScore, FEngine.LastDepth,
-      FEngine.LastTimeText, FPvSearch, FPvGameTreeOnly, FPvTransient);
-    FLastPublishedPv := FEngine.PrincipalVariation;
+      PV,Score,Depth,TimeText, FPvSearch, FPvGameTreeOnly, FPvTransient);
+    FLastPublishedPv := PV+#0+Score+#0+Depth+#0+TimeText;
   finally
     FPvLock.Release;
   end;
@@ -265,6 +268,9 @@ begin
           ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
             Moves);
           FEngine.StopSearch;
+          if FLastGameTreeId<>Command.Search.GameTreeId then begin
+            FEngine.NewGame(Command.StartingFEN); FLastGameTreeId:=Command.Search.GameTreeId;
+          end;
           FEngine.SetGamePosition(Command.StartingFEN, Moves);
           ApplyPvContext(Command, False);
           if Command.Terminal then
@@ -294,10 +300,14 @@ begin
           ExtractStrings([' ', #9, #10, #13], [], PChar(Trim(Command.MovesText)),
             Moves);
           FEngine.StopSearch;
+          if FLastGameTreeId<>Command.Search.GameTreeId then begin
+            FEngine.NewGame(Command.StartingFEN); FLastGameTreeId:=Command.Search.GameTreeId;
+          end;
           FEngine.SetGamePosition(Command.StartingFEN, Moves);
           ApplyPvContext(Command, True);
           FEngine.SetClockInfo(1, Command.ThinkSeconds, 0);
           MoveText := Trim(FEngine.StartThinking);
+          PublishSnapshot;
         finally
           Moves.Free;
         end;
@@ -351,7 +361,9 @@ begin
       if Terminated then Exit;
       FEngineLifetimeLock.Acquire;
       try
-        FEngine := THubEngine.Create(FEngineDefinition);
+        FEngine := CreateGameEngine(FEngineDefinition);
+        if not (ecAnalysis in FEngine.Capabilities) then raise EInvalidOperation.Create('Engine does not support analysis');
+        if (FRunMode=armMcts) and not (ecHubMcts in FEngine.Capabilities) then raise EInvalidOperation.Create('Engine does not support Hub MCTS');
         FEngine.StopToken := FStopToken;
       finally
         FEngineLifetimeLock.Release;
@@ -365,7 +377,7 @@ begin
       begin
         FFailureText := Trim(FEngine.LastError);
         if FFailureText = '' then
-          FFailureText := 'the engine did not start or did not answer the Hub handshake';
+          FFailureText := 'the engine did not answer the '+FEngine.ProtocolName+' handshake';
         if Assigned(FOnLog) then
           FOnLog(Self, DisplayName + ' launch failed: ' + FFailureText);
         Exit;

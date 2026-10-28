@@ -57,3 +57,9 @@ if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
   exit 1
 fi
 "$OUT_DIR/chess_board_check"
+
+
+echo "==> uci_gui_check (GTK2, existing editor and annotator)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
+  "$ROOT_DIR/tests/uci_gui_check.lpi" > "$OUT_DIR/uci-build.log" 2>&1
+"$OUT_DIR/uci_gui_check"

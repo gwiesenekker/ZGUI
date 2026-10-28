@@ -4,7 +4,7 @@ program chess_board_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils, Types,
   Controls, Graphics, Math, StdCtrls, Menus, LCLType, Clipbrd, uGamePosition,
   uChessPosition, uDraughtsPosition, uGameBoardControl, uChessBoardControl,
-  uPvBrowser, uMainForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
+  uPvBrowser, uDraughtsHubEngine, uMainForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
   uGameNotationView, uGuiDialogs, uGameGuiProfile, uPdnOpenDialog, Grids, uChessPgn, uGameFileReader, uScoreHistoryControl;
 type
   TPaintChess = class(TChessBoardControl)
@@ -279,9 +279,9 @@ var Main: TMainForm; B: TGameBoardControl; Legal: TMemo; Memo: TGameNotationView
     Key: Word; Before: string; Actor: TGameTreeActor; C: TGameTreeCommand;
     Score: TScoreHistoryControl; Value: Double;
 const Promotions: array[0..3] of string=('a7a8q','a7a8r','a7a8b','a7a8n');
-  Unsupported: array[0..4] of string = (
+  Unsupported: array[0..3] of string = (
     'Setup position...','&Database','Search position in database',
-    'Open Annotator','Open MCTS annotator');
+    'Open MCTS annotator');
 begin
   Main:=TMainForm.Create(nil); Expected:=TChessPosition.Create; Choice:=TChoice.Create;
   Actor:=nil;

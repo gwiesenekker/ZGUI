@@ -8,7 +8,7 @@ uses
   Classes, FPJSON, SysUtils;
 
 type
-  TExternalEngineKind = (eekHub, eekDxp);
+  TExternalEngineKind = (eekHub, eekDxp, eekUci);
   TDxpEngineRole = (derListen, derConnect);
 
   TExternalEngineDefinition = class
@@ -21,6 +21,7 @@ type
     FExecutableName: string;
     FExePath: string;
     FHubId: string;
+    FUciId: string;
     FIniContent: string;
     FIniFileName: string;
     FInitText: string;
@@ -41,6 +42,7 @@ type
     property DxpRole: TDxpEngineRole read FDxpRole write FDxpRole;
     property ExecutableName: string read FExecutableName write FExecutableName;
     property ExePath: string read FExePath write SetExePath;
+    property UciId: string read FUciId write FUciId;
     property HubId: string read FHubId write FHubId;
     property IniContent: string read FIniContent write FIniContent;
     property IniFileName: string read FIniFileName write FIniFileName;
@@ -110,6 +112,7 @@ begin
   FExecutableName := Source.ExecutableName;
   FExePath := Source.ExePath;
   FHubId := Source.HubId;
+  FUciId := Source.UciId;
   FIniContent := Source.IniContent;
   FIniFileName := Source.IniFileName;
   FInitText := Source.InitText;
@@ -118,6 +121,7 @@ end;
 
 function TExternalEngineDefinition.IdText: string;
 begin
+  if FKind=eekUci then Exit(FUciId);
   if FKind = eekHub then
     Result := FHubId
   else
@@ -126,6 +130,7 @@ end;
 
 function TExternalEngineDefinition.KindText: string;
 begin
+  if FKind=eekUci then Exit('UCI');
   if FKind = eekHub then
     Result := 'hub'
   else
@@ -134,6 +139,8 @@ end;
 
 procedure TExternalEngineDefinition.NormalizeIds;
 begin
+  if FKind=eekUci then begin FHubId:=''; FDxpId:=''; Exit; end;
+  FUciId:='';
   if FKind = eekHub then
     FDxpId := ''
   else
@@ -149,6 +156,7 @@ end;
 
 procedure TExternalEngineDefinition.SetKind(AValue: TExternalEngineKind);
 begin
+  if (AValue=eekUci) and (FKind<>eekUci) and (FInitText='init') then FInitText:='';
   FKind := AValue;
   NormalizeIds;
 end;
@@ -424,7 +432,8 @@ begin
   Result.DxpPort := AObject.Get('dxp_port', Result.DxpPort);
 
   KindText := LowerCase(AObject.Get('kind', AObject.Get('protocol', '')));
-  if (KindText = 'dxp') or ((Result.DxpId <> '') and (Result.HubId = '')) then
+  if KindText='uci' then begin Result.Kind:=eekUci; Result.UciId:=AObject.Get('uci_id',''); end
+  else if (KindText = 'dxp') or ((Result.DxpId <> '') and (Result.HubId = '')) then
     Result.Kind := eekDxp
   else
     Result.Kind := eekHub;
@@ -447,6 +456,7 @@ begin
   Result.Add('path', ExtractFilePath(AEngine.ExePath));
   Result.Add('hub_id', AEngine.HubId);
   Result.Add('dxp_id', AEngine.DxpId);
+  if AEngine.Kind=eekUci then Result.Add('uci_id',AEngine.UciId);
   Result.Add('kind', LowerCase(AEngine.KindText));
   Result.Add('arguments', AEngine.Arguments);
   if AEngine.IniFileName <> '' then Result.Add('ini_file_name', AEngine.IniFileName);

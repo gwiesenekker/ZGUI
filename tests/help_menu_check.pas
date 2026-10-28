@@ -2,7 +2,7 @@ program help_menu_check;
 {$mode objfpc}{$H+}{$codepage utf8}
 {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}{$FATAL Build with its LPI project}{$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils,
-  Controls, Menus, LCLType, StdCtrls, ComCtrls, LazUTF8, SynEdit, uMainForm, uGuiDialogs,
+  Controls, Menus, LCLType, StdCtrls, ComCtrls, LazUTF8, SynEdit, uDraughtsHubEngine, uMainForm, uGuiDialogs,
   uDraughtsPdn, uManualForm, uManualDocument, uAppInfo, uDraughtsPosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then begin WriteLn('FAIL: ', Text); Halt(1); end; end;

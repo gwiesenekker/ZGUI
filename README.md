@@ -16,8 +16,11 @@ variations are retained. Repeated equivalent variations are merged with an
 import warning. Replacing or closing a board offers the existing save prompt;
 Cancel or failed saving preserves it. The score-history view is retained.
 
-UCI engines, clocked games, position setup, tournaments and databases are not
-yet connected for chess. Their controls stay in place but remain disabled,
+UCI engine configuration and analysis use the existing engine editor and
+annotator: select **UCI**, launch to discover options, save, then right-click
+the analysis area and choose **Open Annotator**. INI editing remains available.
+Clocked games, pondering, Auto Play, position setup, tournaments and databases
+are not yet connected for chess. Their controls stay in place but remain disabled,
 including automatic database search.
 Chess pieces are original, scalable Canvas vector artwork in
 `uChessBoardControl.pas`, distributed under the project's **GPLv3** licence.

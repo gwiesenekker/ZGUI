@@ -10,7 +10,7 @@ uses
   Forms,
   uMainForm,
   // The game and its engine protocols register themselves when linked.
-  uGamePosition, uChessPosition, uGameGuiProfile,
+  uGamePosition, uChessPosition, uGameGuiProfile, uChessUciEngine,
   uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
 
 var

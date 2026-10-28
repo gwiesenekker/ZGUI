@@ -7,7 +7,7 @@ interface
 uses
   Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, Grids, StdCtrls,
   SysUtils, uDraughtsDxpTestConnection, uEngineParamsJson, uEngineRegistry,
-  uPlatformProcess;
+  uPlatformProcess, SyncObjs, uChessUciEngine, uChessUciProtocol, uProcessEngineWorker, uThreadMessageQueue;
 
 type
   TEngineAcceptedEvent = procedure(Sender: TObject;
@@ -15,6 +15,10 @@ type
 
   TEngineEditForm = class(TForm)
   private
+    FUciEngine: TUciEngine;
+    FUciInit,FUciButton: TProcessEngineCommand;
+    FUciLogs: TThreadMessageQueue;
+    FIdLabel,FArgsLabel: TLabel;
     FAcceptedEngine: TExternalEngineDefinition;
     FAcceptButton: TButton;
     FAllowHubIdAutoUpdate: Boolean;
@@ -44,6 +48,10 @@ type
     FSelectedParamRow: Integer;
     FStdoutMemo: TMemo;
     FTextBuffer: string;
+    procedure UciLog(Sender: TObject; const AText: string);
+    procedure FinishUciDiscovery;
+    procedure ParamDoubleClick(Sender: TObject);
+    function IsComboParamRow(Row: Integer): Boolean;
     procedure AcceptClick(Sender: TObject);
     procedure ButtonPanelResize(Sender: TObject);
     procedure BrowseClick(Sender: TObject);
@@ -91,6 +99,9 @@ implementation
 
 uses
   LCLType, uGuiDialogs;
+type TUciEditorLog=class(TThreadMessage)
+  Text: string;
+end;
 
 const
   HubArgsHint =
@@ -131,6 +142,7 @@ begin
   Constraints.MinHeight := 480;
   OnClose := @FormClose;
 
+  FUciLogs:=TThreadMessageQueue.Create;
   FProcess := TPlatformProcess.Create;
   FProcess.OnData := @ProcessData;
   FProcessPollTimer := TTimer.Create(Self);
@@ -239,6 +251,7 @@ begin
   FKindCombo.Style := csDropDownList;
   FKindCombo.Items.Add('hub');
   FKindCombo.Items.Add('DXP');
+  FKindCombo.Items.Add('UCI');
   FKindCombo.ItemIndex := 0;
   FKindCombo.OnChange := @KindChanged;
   Inc(LTop, 36);
@@ -246,7 +259,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Hub id';
+  LLabel.Caption := 'Hub id'; FIdLabel:=LLabel;
   LLabel.Layout := tlCenter;
 
   FHubIdEdit := TEdit.Create(Self);
@@ -258,7 +271,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Hub args';
+  LLabel.Caption := 'Hub args'; FArgsLabel:=LLabel;
   LLabel.Layout := tlCenter;
 
   FHubArgsEdit := TEdit.Create(Self);
@@ -395,6 +408,7 @@ begin
   FParamsGrid.ColCount := 3;
   FParamsGrid.FixedRows := 1;
   FParamsGrid.Options := FParamsGrid.Options + [goEditing, goColSizing];
+  FParamsGrid.OnDblClick := @ParamDoubleClick;
   FParamsGrid.OnMouseUp := @ParamsGridMouseUp;
   FParamsGrid.OnSelectCell := @ParamsGridSelectCell;
   FParamsGrid.Cells[0, 0] := 'name';
@@ -425,6 +439,7 @@ end;
 destructor TEngineEditForm.Destroy;
 begin
   CloseRunningEngine;
+  FUciLogs.Free;
   FAcceptedEngine.Free;
   FProcess.Free;
   inherited Destroy;
@@ -457,11 +472,13 @@ begin
   begin
     Caption := 'Edit engine';
     FExeEdit.Text := AEngine.ExePath;
-    if AEngine.Kind = eekDxp then
+    if AEngine.Kind=eekUci then FKindCombo.ItemIndex:=2
+    else if AEngine.Kind = eekDxp then
       FKindCombo.ItemIndex := 1
     else
       FKindCombo.ItemIndex := 0;
-    FHubIdEdit.Text := AEngine.HubId;
+    if AEngine.Kind=eekUci then FHubIdEdit.Text:=AEngine.UciId
+    else FHubIdEdit.Text := AEngine.HubId;
     FDxpIdEdit.Text := AEngine.DxpId;
     FHubArgsEdit.Text := '';
     FDxpArgsEdit.Text := '';
@@ -470,6 +487,9 @@ begin
     else
       FHubArgsEdit.Text := AEngine.Arguments;
     FInitMemo.Text := AEngine.InitText;
+    if AEngine.Kind=eekUci then begin
+      FIniPathEdit.Text:=AEngine.IniFileName; FIniContentMemo.Text:=AEngine.IniContent;
+    end;
     FDXpHostEdit.Text := AEngine.DxpHost;
     FDxpPortEdit.Text := IntToStr(AEngine.DxpPort);
     if AEngine.DxpRole = derConnect then
@@ -492,14 +512,18 @@ end;
 procedure TEngineEditForm.AcceptClick(Sender: TObject);
 var
   Accepted: Boolean;
+  I: Integer;
 begin
   StoreParamsGrid;
   StoreArgumentParams;
   FreeAndNil(FAcceptedEngine);
   FAcceptedEngine := CurrentEngineDefinition;
-  if FAcceptedEngine.Kind = eekHub then
+  if FAcceptedEngine.Kind in [eekHub,eekUci] then
     try
-      ValidateHubParams(FCapturedParams);
+      if FAcceptedEngine.Kind=eekUci then begin
+        for I:=0 to High(FCapturedParams) do
+          if Copy(LowerCase(FCapturedParams[I].Name),1,4)<>'gui-' then ValidateUciValue(FCapturedParams[I],FCapturedParams[I].Value);
+      end else ValidateHubParams(FCapturedParams);
     except
       on E: EConvertError do
       begin
@@ -596,6 +620,13 @@ begin
   if FProcessPollTimer <> nil then
     FProcessPollTimer.Enabled := False;
 
+  if FUciEngine<>nil then begin
+    FUciEngine.RequestStop;
+    FUciEngine.Free; FUciEngine:=nil;
+    FreeAndNil(FUciInit); FreeAndNil(FUciButton);
+    FUciLogs.Clear;
+  end;
+
   if FDxpThread <> nil then
   begin
     FDxpThread.StopConnection;
@@ -620,11 +651,13 @@ begin
   Result := TExternalEngineDefinition.Create;
   Result.ExePath := Trim(FExeEdit.Text);
   Result.ExecutableName := ExtractFileName(Result.ExePath);
-  if FKindCombo.ItemIndex = 1 then
+  if FKindCombo.ItemIndex=2 then Result.Kind:=eekUci
+  else if FKindCombo.ItemIndex = 1 then
     Result.Kind := eekDxp
   else
     Result.Kind := eekHub;
-  Result.HubId := Trim(FHubIdEdit.Text);
+  if Result.Kind=eekUci then Result.UciId:=Trim(FHubIdEdit.Text)
+  else Result.HubId := Trim(FHubIdEdit.Text);
   Result.DxpId := Trim(FDxpIdEdit.Text);
   Result.DxpHost := Trim(FDxpHostEdit.Text);
   if Result.DxpHost = '' then
@@ -669,8 +702,11 @@ procedure TEngineEditForm.KindChanged(Sender: TObject);
 var
   Engine: TExternalEngineDefinition;
 begin
+  CloseRunningEngine;
   StoreParamsGrid;
+  if (FKindCombo.ItemIndex=2) and (Trim(FInitMemo.Text)='init') then FInitMemo.Clear;
   StoreArgumentParams;
+  if FKindCombo.ItemIndex=2 then LoadParamsForExecutable;
   Engine := CurrentEngineDefinition;
   try
     SeedDefaultGuiParams(FCapturedParams, Engine);
@@ -730,7 +766,7 @@ function TEngineEditForm.IsBoolParamRow(ARow: Integer): Boolean;
 begin
   Result := (FParamsGrid <> nil) and (ARow > 0) and
     (ARow < FParamsGrid.RowCount) and
-    SameText(FParamsGrid.Cells[1, ARow], 'bool');
+    (SameText(FParamsGrid.Cells[1, ARow], 'bool') or SameText(FParamsGrid.Cells[1, ARow], 'check'));
 end;
 
 function TEngineEditForm.IsDirParamRow(ARow: Integer): Boolean;
@@ -772,6 +808,15 @@ begin
     FStdoutMemo.Clear;
     FTextBuffer := '';
     FAllowHubIdAutoUpdate := False;
+    CloseRunningEngine;
+    if Engine.Kind=eekUci then begin
+      FUciEngine:=TUciEngine.Create(Engine);
+      FUciEngine.ConfigureOptions(FCapturedParams);
+      FUciEngine.OnLog:=@UciLog;
+      FUciInit:=FUciEngine.BeginInitialize;
+      FProcessPollTimer.Enabled:=True;
+      Exit;
+    end;
     StopProcessFor(Engine);
 
     if Engine.ExePath = '' then
@@ -882,6 +927,12 @@ begin
   if ParamsFileName = '' then
     Exit;
 
+  if FKindCombo.ItemIndex=2 then begin
+    FCapturedParams:=nil; LoadEngineParamsFromJson(ParamsFileName,'uci',FCapturedParams);
+    UpdateFieldsFromParams;
+    Engine:=CurrentEngineDefinition; try SeedDefaultGuiParams(FCapturedParams,Engine); finally Engine.Free; end;
+    Exit;
+  end;
   if FKindCombo.ItemIndex = 1 then
     Section := 'dxp'
   else
@@ -935,7 +986,9 @@ begin
   FParamsGrid.RowCount := 1;
   for I := 0 to High(FCapturedParams) do
   begin
-    if SameText(FCapturedParams[I].Name, 'gui-ini-file') or
+    if SameText(FCapturedParams[I].Name,'gui-uci-init') or
+      SameText(FCapturedParams[I].Name,'gui-uci-launch-arguments') or
+      SameText(FCapturedParams[I].Name, 'gui-ini-file') or
       SameText(FCapturedParams[I].Name, 'gui-ini-content') or
       SameText(FCapturedParams[I].Name, 'gui-hub-init') or
       SameText(FCapturedParams[I].Name, 'gui-hub-launch-argument') or
@@ -954,12 +1007,18 @@ var
 begin
   Value := LowerCase(Trim(EngineParamValue(FCapturedParams,
     'gui-engine-type', '')));
-  if Value = 'dxp' then
+  if Value='uci' then FKindCombo.ItemIndex:=2
+  else if Value = 'dxp' then
     FKindCombo.ItemIndex := 1
   else if Value = 'hub' then
     FKindCombo.ItemIndex := 0;
 
-  FHubIdEdit.Text := EngineParamValue(FCapturedParams, 'gui-hub-id',
+  if FKindCombo.ItemIndex=2 then begin
+    FHubIdEdit.Text:=EngineParamValue(FCapturedParams,'gui-uci-id',FHubIdEdit.Text);
+    FHubArgsEdit.Text:=EngineParamValue(FCapturedParams,EngineLaunchArgumentParamName(eekUci),FHubArgsEdit.Text);
+    FInitMemo.Text:=EngineParamValue(FCapturedParams,'gui-uci-init',FInitMemo.Text);
+  end;
+  if FKindCombo.ItemIndex<>2 then FHubIdEdit.Text := EngineParamValue(FCapturedParams, 'gui-hub-id',
     FHubIdEdit.Text);
   FDxpIdEdit.Text := EngineParamValue(FCapturedParams, 'gui-dxp-id',
     FDxpIdEdit.Text);
@@ -975,11 +1034,11 @@ begin
   else if Value = 'listen' then
     FDxpRoleCombo.ItemIndex := 0;
 
-  FHubArgsEdit.Text := EngineParamValue(FCapturedParams,
+  if FKindCombo.ItemIndex<>2 then FHubArgsEdit.Text := EngineParamValue(FCapturedParams,
     'gui-hub-launch-argument', FHubArgsEdit.Text);
   FDxpArgsEdit.Text := EngineParamValue(FCapturedParams,
     'gui-dxp-launch-arguments', FDxpArgsEdit.Text);
-  FInitMemo.Text := EngineParamValue(FCapturedParams, 'gui-hub-init',
+  if FKindCombo.ItemIndex<>2 then FInitMemo.Text := EngineParamValue(FCapturedParams, 'gui-hub-init',
     FInitMemo.Text);
   FIniPathEdit.Text := EngineParamValue(FCapturedParams, 'gui-ini-file',
     FIniPathEdit.Text);
@@ -1009,7 +1068,7 @@ begin
 
   FSelectedParamRow := Row;
   if (Col = 2) and
-    (IsBoolParamRow(Row) or IsScorePerspectiveParamRow(Row)) then
+    (IsBoolParamRow(Row) or IsComboParamRow(Row) or IsScorePerspectiveParamRow(Row)) then
   begin
     PrepareInlineParamComboForRow(Row);
     CellRect := FParamsGrid.CellRect(Col, Row);
@@ -1036,15 +1095,20 @@ procedure TEngineEditForm.ParamsGridSelectCell(Sender: TObject; aCol,
 begin
   FSelectedParamRow := aRow;
   if (aCol <> 2) or
-    not (IsBoolParamRow(aRow) or IsScorePerspectiveParamRow(aRow)) then
+    not (IsBoolParamRow(aRow) or IsComboParamRow(aRow) or IsScorePerspectiveParamRow(aRow)) then
     FInlineParamCombo.Visible := False;
 end;
 
 procedure TEngineEditForm.PrepareInlineParamComboForRow(ARow: Integer);
 var
   Value: string;
+  I: Integer;
 begin
   FInlineParamCombo.Items.Clear;
+  if IsComboParamRow(ARow) then begin
+    for I:=0 to High(FCapturedParams) do if SameText(FCapturedParams[I].Name,FParamsGrid.Cells[0,ARow]) then FInlineParamCombo.Items.Text:=FCapturedParams[I].Choices;
+    FInlineParamCombo.ItemIndex:=FInlineParamCombo.Items.IndexOf(FParamsGrid.Cells[2,ARow]); Exit;
+  end;
   if IsScorePerspectiveParamRow(ARow) then
   begin
     FInlineParamCombo.Items.Add('side-to-move');
@@ -1098,7 +1162,17 @@ begin
 end;
 
 procedure TEngineEditForm.ProcessPollTimer(Sender: TObject);
+var Obj: TObject;
 begin
+  while FUciLogs.TryPop(Obj) do try Log(TUciEditorLog(Obj).Text); finally Obj.Free; end;
+  if FUciEngine<>nil then begin
+    if (FUciInit<>nil) and (FUciInit.Completed.WaitFor(0)=wrSignaled) then FinishUciDiscovery;
+    if (FUciButton<>nil) and (FUciButton.Completed.WaitFor(0)=wrSignaled) then begin
+      if FUciButton.ErrorMessage<>'' then Log(FUciButton.ErrorMessage);
+      FreeAndNil(FUciButton);
+    end;
+    Exit;
+  end;
   if FProcess = nil then
     Exit;
   if FProcess.NeedsPolling then
@@ -1179,6 +1253,8 @@ end;
 
 procedure TEngineEditForm.StoreParamsGrid;
 var
+  Old: TEngineParamArray;
+  J: Integer;
   I: Integer;
   Row: Integer;
 begin
@@ -1188,6 +1264,7 @@ begin
   if FInlineParamCombo.Visible then
     InlineParamComboSelect(nil);
   FInlineParamCombo.Visible := False;
+  Old:=Copy(FCapturedParams);
   SetLength(FCapturedParams, 0);
   for Row := 1 to FParamsGrid.RowCount - 1 do
   begin
@@ -1195,9 +1272,11 @@ begin
       Continue;
     I := Length(FCapturedParams);
     SetLength(FCapturedParams, I + 1);
+    for J:=0 to High(Old) do if SameText(Old[J].Name,Trim(FParamsGrid.Cells[0,Row])) then begin FCapturedParams[I]:=Old[J]; Break; end;
     FCapturedParams[I].Name := Trim(FParamsGrid.Cells[0, Row]);
     FCapturedParams[I].ParamType := Trim(FParamsGrid.Cells[1, Row]);
     FCapturedParams[I].Value := FParamsGrid.Cells[2, Row];
+    if FCapturedParams[I].ParamType='button' then FCapturedParams[I].Value:='';
   end;
   StoreIniParams;
 end;
@@ -1206,6 +1285,11 @@ procedure TEngineEditForm.StoreArgumentParams;
 begin
   if (FHubArgsEdit = nil) or (FDxpArgsEdit = nil) then
     Exit;
+  if FKindCombo.ItemIndex=2 then begin
+    AddOrUpdateParam(FCapturedParams,EngineLaunchArgumentParamName(eekUci),'string',Trim(FHubArgsEdit.Text),False);
+    AddOrUpdateParam(FCapturedParams,'gui-uci-init','string',FInitMemo.Text,False);
+    Exit;
+  end;
   AddOrUpdateParam(FCapturedParams, EngineLaunchArgumentParamName(eekHub),
     'string', Trim(FHubArgsEdit.Text), False);
   AddOrUpdateParam(FCapturedParams, EngineLaunchArgumentParamName(eekDxp),
@@ -1227,6 +1311,12 @@ var
   IsDxp: Boolean;
 begin
   IsDxp := FKindCombo.ItemIndex = 1;
+  if FKindCombo.ItemIndex=2 then begin
+    FIdLabel.Caption:='UCI id'; FArgsLabel.Caption:='UCI args';
+    FHubArgsEdit.Hint:='Command-line arguments passed to the UCI engine.';
+  end else begin
+    FIdLabel.Caption:='Hub id'; FArgsLabel.Caption:='Hub args'; FHubArgsEdit.Hint:=HubArgsHint;
+  end;
   FHubIdEdit.Enabled := not IsDxp;
   FDxpIdEdit.Enabled := IsDxp;
   FDxpHostEdit.Enabled := IsDxp;
@@ -1234,4 +1324,39 @@ begin
   FDxpRoleCombo.Enabled := IsDxp;
 end;
 
+procedure TEngineEditForm.UciLog(Sender: TObject; const AText: string);
+var Msg: TUciEditorLog;
+begin
+  if FUciLogs.Count>=1024 then Exit;
+  Msg:=TUciEditorLog.Create('uci-log'); Msg.Text:=Copy(AText,1,8192); FUciLogs.TryPost(Msg);
+end;
+procedure TEngineEditForm.FinishUciDiscovery;
+var Options: TEngineParamArray; I,J,N: Integer; Value: string;
+begin
+  try
+    if not FUciInit.BoolResult then Log('[UCI discovery failed: '+FUciEngine.LastError+']');
+    StoreParamsGrid;
+    Options:=FUciEngine.DiscoveredOptions;
+    for I:=0 to High(Options) do begin
+      Value:=Options[I].DefaultValue; N:=-1;
+      for J:=0 to High(FCapturedParams) do if SameText(FCapturedParams[J].Name,Options[I].Name) then begin N:=J; Value:=FCapturedParams[J].Value; Break; end;
+      if N<0 then begin N:=Length(FCapturedParams); SetLength(FCapturedParams,N+1); end;
+      FCapturedParams[N]:=Options[I]; FCapturedParams[N].Value:=Value;
+    end;
+    if (Trim(FHubIdEdit.Text)='') and (FUciEngine.ReportedName<>'') then FHubIdEdit.Text:=FUciEngine.ReportedName;
+    LoadParamsGrid;
+    if FUciInit.BoolResult then Log('[UCI ready; button options: double-click their value cell]');
+  finally FreeAndNil(FUciInit); end;
+end;
+function TEngineEditForm.IsComboParamRow(Row: Integer): Boolean;
+begin Result:=(Row>0) and (Row<FParamsGrid.RowCount) and SameText(FParamsGrid.Cells[1,Row],'combo'); end;
+procedure TEngineEditForm.ParamDoubleClick(Sender: TObject);
+var Row: Integer;
+begin
+  Row:=FParamsGrid.Row;
+  if (Row>0) and (FParamsGrid.Col=2) and SameText(FParamsGrid.Cells[1,Row],'button') then begin
+    if (FUciEngine=nil) or (FUciInit<>nil) or (FUciButton<>nil) then begin Log('[launch UCI discovery before using a button]'); Exit; end;
+    try FUciButton:=FUciEngine.BeginButton(FParamsGrid.Cells[0,Row]); except on E:Exception do Log(E.Message); end;
+  end;
+end;
 end.

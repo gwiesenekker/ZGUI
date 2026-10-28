@@ -22,6 +22,8 @@ type
     esError
   );
 
+  TEngineCapability=(ecAnalysis,ecHubMcts);
+  TEngineCapabilities=set of TEngineCapability;
   TEngineLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
 
   { Shared engine infrastructure: state, logs, clocks, PV, stop fences. The
@@ -59,14 +61,15 @@ type
     function GetCurrentState: TEngineState;
     procedure ParsePositionMessage(const AMessage: string; out AFEN,
       AMovesText: string);
-    procedure SetLastError(const AValue: string);
     procedure SetLastDepth(const AValue: string);
     procedure SetLastScore(const AValue: string);
     procedure SetLastTimeText(const AValue: string);
     procedure SetPrincipalVariation(const AValue: string);
   protected
+    procedure SetLastError(const AValue: string);
     // The game's standard spelling of move text from or for the engine. The
     // base trims; a game's engine class normalizes (draughts: no leading zeros).
+    procedure PublishSearchInfo(const APv,AScore,ADepth,ATime: string);
     function NormalizeMoveText(const AMove: string): string; virtual;
     procedure ChangeState(ANewState: TEngineState; const AReason: string);
     function DoStartThinking: string; virtual; abstract;
@@ -81,6 +84,11 @@ type
 
     // Starts the engine process or connection. True when it is ready.
     function LaunchAndInit: Boolean; virtual;
+    function Capabilities: TEngineCapabilities; virtual;
+    procedure StartAnalyzing; virtual;
+    procedure StartMcts; virtual;
+    procedure PollOutput; virtual;
+    procedure StopSearch; virtual;
     // Protocol name for messages ('Hub', 'DXP').
     function ProtocolName: string; virtual;
     procedure BeginGame(const AStartingFEN: string; ASide: TGameSide;
@@ -150,6 +158,23 @@ begin
     raise EInvalidOperation.Create('No engine implementation is linked for ' +
       ADefinition.KindText + ' engines');
   Result := GEngineFactories[ADefinition.Kind](ADefinition);
+end;
+
+function TGameEngine.Capabilities: TEngineCapabilities;
+begin Result:=[]; end;
+procedure TGameEngine.StartAnalyzing;
+begin raise EInvalidOperation.Create(ProtocolName+' analysis is not supported'); end;
+procedure TGameEngine.StartMcts;
+begin raise EInvalidOperation.Create(ProtocolName+' Hub-MCTS command is not supported'); end;
+procedure TGameEngine.PollOutput;
+begin end;
+procedure TGameEngine.StopSearch;
+begin raise EInvalidOperation.Create(ProtocolName+' analysis stop is not supported'); end;
+procedure TGameEngine.PublishSearchInfo(const APv,AScore,ADepth,ATime: string);
+begin
+  FPvLock.Acquire;
+  try FPrincipalVariation:=APv; FLastScore:=AScore; FLastDepth:=ADepth; FLastTimeText:=ATime;
+  finally FPvLock.Release; end;
 end;
 
 function TGameEngine.NormalizeMoveText(const AMove: string): string;

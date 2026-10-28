@@ -69,11 +69,12 @@ type
     procedure SetClockInfoWithIncrement(AMovesRemaining: Integer;
       ARemainingSeconds, ATotalUsedSeconds, AIncrementSeconds: Double); override;
     procedure SetGamePosition(const AStartingFEN: string; AMoves: TStrings); override;
-    procedure StartAnalyzing;
-    procedure StartMcts;
+    function Capabilities: TEngineCapabilities; override;
+    procedure StartAnalyzing; override;
+    procedure StartMcts; override;
     function StartThinking: string; override;
-    procedure PollOutput;
-    procedure StopSearch;
+    procedure PollOutput; override;
+    procedure StopSearch; override;
     procedure Stop; override;
   end;
 
@@ -277,25 +278,21 @@ begin
           PvText := ExtractHubArgument(InfoLine, 'pv');
           if PvText <> '' then
           begin
-            PrincipalVariation := PvText;
             LoggedPvText := PvText;
           end;
           ScoreText := ExtractHubArgument(InfoLine, 'score');
           if ScoreText <> '' then
           begin
-            LastScore := NormalizeScoreToWhitePerspective(ScoreText);
-            LoggedScoreText := LastScore;
+            LoggedScoreText := NormalizeScoreToWhitePerspective(ScoreText);
           end;
           DepthText := ExtractHubArgument(InfoLine, 'depth');
           if DepthText <> '' then
           begin
-            LastDepth := DepthText;
             LoggedDepthText := DepthText;
           end;
           TimeText := ExtractHubArgument(InfoLine, 'time');
           if TimeText <> '' then
           begin
-            LastTimeText := TimeText;
             LoggedTimeText := TimeText;
           end;
         end;
@@ -304,6 +301,12 @@ begin
   finally
     Lines.Free;
   end;
+  ReadSearchInfo(PvText,ScoreText,DepthText,TimeText);
+  if LoggedPvText<>'' then PvText:=LoggedPvText;
+  if LoggedScoreText<>'' then ScoreText:=LoggedScoreText;
+  if LoggedDepthText<>'' then DepthText:=LoggedDepthText;
+  if LoggedTimeText<>'' then TimeText:=LoggedTimeText;
+  PublishSearchInfo(PvText,ScoreText,DepthText,TimeText);
   // Log observers can publish throttled live snapshots. Parse the complete
   // chunk first so stdout cannot publish the previous info and consume the slot.
   Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
@@ -826,6 +829,8 @@ begin
   Result := QueueStringCommand(THubWorkerCommand.Create(hwcStartThinking));
 end;
 
+function THubEngine.Capabilities: TEngineCapabilities;
+begin Result:=[ecAnalysis,ecHubMcts]; end;
 procedure THubEngine.StartAnalyzing;
 begin
   QueueProcedureCommand(THubWorkerCommand.Create(hwcStartAnalyzing));

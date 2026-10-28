@@ -12,6 +12,7 @@ type
     Name: string;
     ParamType: string;
     Value: string;
+    DefaultValue,MinValue,MaxValue,Choices: string;
   end;
 
   TEngineParamArray = array of TEngineParam;
@@ -63,6 +64,7 @@ end;
 
 function NormalizeSectionName(const ASection: string): string;
 begin
+  if SameText(ASection,'uci') then Exit('uci');
   if SameText(ASection, 'dxp') then
     Result := 'dxp'
   else
@@ -81,6 +83,10 @@ begin
     Item.Add('name', AParams[I].Name);
     Item.Add('type', AParams[I].ParamType);
     Item.Add('value', AParams[I].Value);
+    if AParams[I].DefaultValue<>'' then Item.Add('default',AParams[I].DefaultValue);
+    if AParams[I].MinValue<>'' then Item.Add('min',AParams[I].MinValue);
+    if AParams[I].MaxValue<>'' then Item.Add('max',AParams[I].MaxValue);
+    if AParams[I].Choices<>'' then Item.Add('choices',AParams[I].Choices);
     Result.Add(Item);
   end;
 end;
@@ -131,6 +137,8 @@ begin
       AParams[I].Name := Item.Get('name', '');
       AParams[I].ParamType := Item.Get('type', '');
       AParams[I].Value := Item.Get('value', '');
+      AParams[I].DefaultValue:=Item.Get('default',''); AParams[I].MinValue:=Item.Get('min','');
+      AParams[I].MaxValue:=Item.Get('max',''); AParams[I].Choices:=Item.Get('choices','');
     end;
 end;
 
@@ -172,6 +180,7 @@ end;
 
 function EngineLaunchArgumentParamName(AKind: TExternalEngineKind): string;
 begin
+  if AKind=eekUci then Exit('gui-uci-launch-arguments');
   if AKind = eekDxp then
     Result := 'gui-dxp-launch-arguments'
   else
@@ -291,6 +300,15 @@ var
   RoleText: string;
 begin
   AddOrUpdateParam(AParams, 'gui-startup-timeout-ms', 'string', '60000', True);
+  if (AEngine<>nil) and (AEngine.Kind=eekUci) then begin
+    AddOrUpdateParam(AParams,'gui-engine-type','string','uci',False);
+    AddOrUpdateParam(AParams,'gui-uci-id','string',AEngine.UciId,False);
+    AddOrUpdateParam(AParams,'gui-uci-launch-arguments','string',AEngine.Arguments,True);
+    AddOrUpdateParam(AParams,'gui-uci-init','string',AEngine.InitText,False);
+    AddOrUpdateParam(AParams,'gui-ini-file','string',AEngine.IniFileName,True);
+    AddOrUpdateParam(AParams,'gui-ini-content','string',AEngine.IniContent,True);
+    Exit;
+  end;
   if (AEngine <> nil) and (AEngine.Kind = eekDxp) then
     ProtocolText := 'dxp'
   else
@@ -419,6 +437,8 @@ begin
           ExistingArray := JsonObjectArray(TJSONObject(ExistingData), 'hub');
           if ExistingArray <> nil then
             Data.Add('hub', CloneJsonArray(ExistingArray));
+          ExistingArray := JsonObjectArray(TJSONObject(ExistingData), 'uci');
+          if ExistingArray<>nil then Data.Add('uci',CloneJsonArray(ExistingArray));
           ExistingArray := JsonObjectArray(TJSONObject(ExistingData), 'dxp');
           if ExistingArray <> nil then
             Data.Add('dxp', CloneJsonArray(ExistingArray));
@@ -460,7 +480,10 @@ begin
   Params := Copy(AParams);
   SeedDefaultGuiParams(Params, AEngine);
   SortEngineParams(Params);
-  if AEngine.Kind = eekDxp then
+  if AEngine.Kind=eekUci then begin
+    Section:='uci';
+  end
+  else if AEngine.Kind = eekDxp then
   begin
     Section := 'dxp';
     AddOrUpdateParam(Params, 'gui-engine-type', 'string', 'dxp', False);

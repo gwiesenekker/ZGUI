@@ -6,7 +6,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils, SyncObjs, uAnalyzerRunnerThread, uEngineRegistry,
+  Classes, SysUtils, SyncObjs, uDraughtsHubEngine, uAnalyzerRunnerThread, uEngineRegistry,
   uDraughtsBoard, uGamePosition, uPvSnapshot, uGameTreeSearchRef, uDraughtsPosition;
 
 type

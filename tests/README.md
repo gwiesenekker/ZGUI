@@ -293,3 +293,21 @@ bitmap raw-image cache before saving; the fixture explicitly does that.
 The comparison needs GTK2 and a display. It can also be run under Xvfb where
 installed; validation here used the available GTK desktop display. New neutral
 board/PV units are included in the existing source dependency audit.
+
+
+## UCI configuration and analysis
+
+`run_regression_checks.sh` includes `uci_engine_check`: deterministic UCI peers,
+legacy registry identities, options with spaces/case changes, bounds/secondary
+lines, mate/Black-root scores, history, terminal positions, overlong output,
+stop failures, cancellation, duplicate completion and independent processes.
+It needs no installed chess engine. `run_gui_checks.sh` adds `uci_gui_check`,
+using the existing engine editor/INI fields and annotator, navigation and shutdown.
+The prior layout, Hub and draughts suites remain enabled.
+
+Both new binaries optionally take a Stockfish executable path as their first
+argument. This runs additional real-engine checks, including the initial position
+and a custom Black-to-move root. Build `uci_gui_check.lpi` with the existing
+`build_lazarus_check.py` helper and run with a GTK display. Range, overflow and
+heap checks are enabled in that project. Stockfish is only a test dependency;
+no engine binary is committed or installed by these scripts.

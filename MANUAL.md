@@ -41,7 +41,34 @@ Each imported game is limited to 16 MiB, individual tokens to 1 MiB and variatio
 nesting to 128 levels. Large collections are indexed a game at a time, with move
 validation deferred until selection.
 
-UCI, clocked games, setup, tournaments and databases are not yet connected.
+UCI configuration and analysis are connected through the existing editor,
+annotator, PV/hint views and score history:
+
+1. Open **Engines...**, add an engine, choose **UCI**, and select its executable.
+2. Leave initialization empty. Use the existing arguments and INI/config fields
+   when required by the engine; the INI editor remains available.
+3. Click **Launch engine**. Discovery runs in the background; **Cancel** interrupts
+   an unresponsive handshake. The parameter grid retains saved values and shows
+   advertised check, spin, combo, string and button options. Double-click a button
+   option's value cell to invoke it once. Buttons are never replayed on startup.
+4. Click **Launched correctly** to save, then right-click the analysis area and
+   select the engine under **Open Annotator**. The existing seconds field controls
+   each finite analysis search. Browsing a different position stops the old search
+   before starting another. Use **Close Annotator** to release the engine.
+
+Scores are from White's point of view: pawn units for ordinary evaluations and
+`#N` for mate. Mate scores stay textual rather than becoming invented chart
+values. Only exact primary-line scores with a legal PV are stored; bounded and
+secondary lines remain in the engine log. A score/depth update still appears when
+its PV is unchanged. PVs and hints use existing navigation and never become
+played moves or variations. The managed options Ponder and UCI_Chess960 are forced
+off, MultiPV to 1, and UCI_AnalyseMode on when advertised. Other saved options match
+names without case sensitivity, while commands use the engine's spelling.
+Unknown saved options are retained but not sent. Initialization accepts only
+empty lines, `debug on`, `debug off` or `register later`; use the grid for options.
+Hub, DXP and UCI settings remain in separate JSON sections.
+
+Clocked games, pondering, Auto Play, setup, tournaments and databases are not yet connected.
 Their controls remain visible in their original locations but are disabled,
 with automatic database search also guarded.
 

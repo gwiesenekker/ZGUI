@@ -684,7 +684,7 @@ begin
   FAutoPlayButton.Caption := 'Auto Play';
   FAutoPlayButton.Enabled := False;
   FAutoPlayButton.OnClick := @AutoPlayClick;
-  ApplyFeature(FAutoPlayButton, gfEngines);
+  ApplyFeature(FAutoPlayButton, gfAutoPlay);
 
   LAnnotatorSecondsPanel := TPanel.Create(Self);
   LAnnotatorSecondsPanel.Parent := LToolbar;
@@ -761,12 +761,12 @@ begin
   FMctsPopup.OnPopup := @MctsPopupPopup;
   FMctsOpenMenuItem := TMenuItem.Create(Self);
   FMctsOpenMenuItem.Caption := 'Open MCTS annotator';
-  ApplyFeature(FMctsOpenMenuItem,gfEngines);
+  ApplyFeature(FMctsOpenMenuItem,gfMcts);
   FMctsPopup.Items.Add(FMctsOpenMenuItem);
   FMctsCloseMenuItem := TMenuItem.Create(Self);
   FMctsCloseMenuItem.Caption := 'Close MCTS annotator';
   FMctsCloseMenuItem.OnClick := @CloseMctsClick;
-  ApplyFeature(FMctsCloseMenuItem,gfEngines);
+  ApplyFeature(FMctsCloseMenuItem,gfMcts);
   FMctsPopup.Items.Add(FMctsCloseMenuItem);
 
   LAnalyzerBoardPanel := TPanel.Create(Self);
@@ -2048,7 +2048,7 @@ end;
 
 procedure TMainForm.AutoPlayClick(Sender: TObject);
 begin
-  if not GameSupports(gfEngines) then Exit;
+  if not GameSupports(gfAutoPlay) then Exit;
   if FAutoPlay.Active then
     StopAutoPlay
   else
@@ -2065,7 +2065,7 @@ var
   LGameTree: TGameTree;
   LNode: TGameTreePlyNode;
 begin
-  if not GameSupports(gfEngines) then Exit;
+  if not GameSupports(gfAutoPlay) then Exit;
   LGameTree := ActiveGameTree;
   if (LGameTree = nil) or (StateForTree(LGameTree) <> gosStopped) then
     Exit;
@@ -2475,7 +2475,7 @@ begin
     LoadExternalEngines(EnginesJsonFileName, Engines);
     for I := 0 to Engines.Count - 1 do
     begin
-      if Engines[I].Kind <> eekHub then
+      if not (Engines[I].Kind in GameGuiProfileFor(DefaultGameVariant).EngineKinds) or not (Engines[I].Kind in [eekHub,eekUci]) then
         Continue;
       EngineKey := EngineIdentityKey(Engines[I]);
       if BusyKeys.IndexOf(EngineKey) >= 0 then
@@ -2495,7 +2495,7 @@ begin
   if FAnalyzerOpenMenuItem.Count = 0 then
   begin
     Item := TMenuItem.Create(Self);
-    Item.Caption := '(no available Hub engines)';
+    Item.Caption := '(no available analysis engines)';
     Item.Enabled := False;
     FAnalyzerOpenMenuItem.Add(Item);
   end;
@@ -2520,7 +2520,7 @@ begin
     LoadExternalEngines(EnginesJsonFileName, Engines);
     Engine := nil;
     for I := 0 to Engines.Count - 1 do
-      if (Engines[I].Kind = eekHub) and
+      if (Engines[I].Kind in GameGuiProfileFor(DefaultGameVariant).EngineKinds) and (Engines[I].Kind in [eekHub,eekUci]) and
         (EngineIdentityKey(Engines[I]) = EngineKey) then
       begin
         Engine := Engines[I];
@@ -2580,7 +2580,7 @@ var
   I: Integer;
   Item: TMenuItem;
 begin
-  if not GameSupports(gfEngines) then Exit;
+  if not GameSupports(gfMcts) then Exit;
   FMctsOpenMenuItem.Clear;
   FMctsOpenMenuItem.Enabled := FMctsRunner = nil;
   FMctsCloseMenuItem.Enabled := FMctsRunner <> nil;
@@ -2606,7 +2606,7 @@ begin
       Item.Caption := EnginePickerDisplayName(Engines[I], I + 1);
       Item.Hint := EngineKey;
       Item.OnClick := @OpenMctsClick;
-      ApplyFeature(Item, gfEngines);
+      ApplyFeature(Item, gfMcts);
       FMctsOpenMenuItem.Add(Item);
     end;
   finally
@@ -2630,7 +2630,7 @@ var
   Engines: TExternalEngineList;
   I: Integer;
 begin
-  if not GameSupports(gfEngines) then Exit;
+  if not GameSupports(gfMcts) then Exit;
   if FMctsRunner <> nil then
     Exit;
   if not (Sender is TMenuItem) then
@@ -2727,7 +2727,7 @@ end;
 procedure TMainForm.RestartMctsAnnotator(AGameTree: TGameTree);
 var LPosition: TGamePosition; AnalysisPosition: TAnalysisPosition; Request: TAnalysisRequest;
 begin
-  if not GameSupports(gfEngines) then Exit;
+  if not GameSupports(gfMcts) then Exit;
   if (FMctsRunner = nil) or (AGameTree = nil) then Exit;
   LPosition := AGameTree.Variant.CreatePosition;
   try
@@ -5857,7 +5857,7 @@ var
 begin
   if FAutoPlayButton = nil then
     Exit;
-  if not GameSupports(gfEngines) then
+  if not GameSupports(gfAutoPlay) then
   begin FAutoPlayButton.Enabled := False; Exit; end;
   if FAutoPlay.Active then
   begin

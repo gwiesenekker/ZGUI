@@ -64,7 +64,7 @@ begin
   FGrid.OnDblClick := @EditEngineClick;
   FGrid.Cells[0, 0] := 'Exe path';
   FGrid.Cells[1, 0] := 'Executable';
-  FGrid.Cells[2, 0] := 'Hub id';
+  FGrid.Cells[2, 0] := 'Hub / UCI id';
   FGrid.Cells[3, 0] := 'DXP id';
   FGrid.ColWidths[0] := 360;
   FGrid.ColWidths[1] := 160;
@@ -246,7 +246,8 @@ begin
       FGrid.Cells[1, I + 1] := Engine.ExecutableName
     else
       FGrid.Cells[1, I + 1] := Engine.ExecutableName + ' (not found)';
-    FGrid.Cells[2, I + 1] := Engine.HubId;
+    if Engine.Kind=eekUci then FGrid.Cells[2, I + 1] := Engine.UciId
+    else FGrid.Cells[2, I + 1] := Engine.HubId;
     FGrid.Cells[3, I + 1] := Engine.DxpId;
   end;
 end;

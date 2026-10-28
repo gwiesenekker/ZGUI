@@ -4,7 +4,39 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed UCI configuration and analysis — 2026-10-28
+
+- Apply Claude review c0493e3 with D1–D3 through the existing engine factory,
+  extracted process worker, analysis runner, coordinator, tree and GUI. No new
+  game, clock, tournament, database, navigation or analysis controller.
+- Add the UCI protocol adapter: handshake/readiness, advertised options, new-game
+  notification, root FEN plus played moves, finite analysis and bestmove/stop
+  fences. A missing completion or known protocol violation makes the session
+  unusable; cancellation interrupts discovery and shutdown waits.
+- D1: publish coherent exact primary PV/score/depth/time tuples only. Keep the
+  last exact tuple on bounds/secondary lines; validate legal PV prefixes and
+  normalize pawn/mate scores to White. Unchanged-PV score/depth updates reach
+  the existing tree, PV views and score history without becoming played moves.
+- D2: match saved option names without regard to case and send advertised spelling.
+  Retain separate UCI JSON settings, defaults/ranges/choices, custom identities
+  and INI editing; preserve Hub/DXP settings and ordinals. Discover options and
+  invoke buttons on the existing engine worker, with timer-delivered UI updates
+  and Cancel. Buttons are one-shot and never replayed on launch.
+- Keep existing widget bounds and layout. Enable the existing chess engine editor
+  and annotator; filter the analysis picker by profile. Keep clocked games,
+  pondering, Auto Play, Hub MCTS, setup, tournaments and databases disabled.
+- D3 extraction was committed and verified independently before UCI implementation.
+  The final Hub wire trace still matches the pre-extraction fixture.
+- Validation: application compiles; full headless and all seven GTK GUI suites
+  pass, including preserved layout/Hub lifecycle checks. UCI range/overflow/heap
+  checks pass (59 fake/registry checks, 62 including Stockfish 16). The UCI GUI
+  checks pass (29 deterministic checks, 34 including real Stockfish initial and
+  custom Black-root analysis). No unfreed heap blocks in the UCI checks.
+
+
 ### Reviewed Hub worker extraction (D3) — 2026-10-28
+
+Commit: `35113f8`.
 
 - Extract Hub's existing process worker, command completion, line framing,
   bounded reply queue, launch preparation and shutdown into a neutral helper
