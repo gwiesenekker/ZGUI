@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reviewed clocked UCI games — 2026-10-28
 
+Commit: `62b20b9`.
+
 - Apply Claude review bc177c4 through the existing New game dialog, game runner,
   orchestrator, clocks, snapshots, actors, engine factory and process worker.
   Preserve GUI layout; no replacement game loop, clock, tree or process manager.
