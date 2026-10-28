@@ -128,8 +128,28 @@ begin
       Check(A.GameTree.EventName='reachable','Validated entry replays without a third parse');
     end;
   finally Saved.Free; Reader.Free; DeleteFile(Name); end;
+  Name:=GetTempFileName(GetTempDir,'zp11'); Reader:=TChessPgnReader.Create(V); Saved:=TStringList.Create;
+  try
+    for I:=0 to 1 do begin
+      if I=0 then Text:='1.e4 {good} {[%cal Ge2e4]} e5 *'
+      else Text:='1.e4 {wrapped'+#10+'[%clk 0:01:00] extra} e5 *';
+      Saved.Text:='[Event "raw"]'+#10+Text+#10+'[Event "second"]'+#10+Text;
+      Saved.SaveToFile(Name); Reader.OpenFile(Name);
+      Check(Reader.Entries.Count=2,'Raw wrapped comments remain in their games');
+      TGameFileEntry(Reader.Entries[0]).Validate; Check(TGameFileEntry(Reader.Entries[0]).ErrorText='','Raw wrapped comment validates');
+      RoundTrip(Text); Text:=Export(A);
+      Check(Pos(#10+'[%',Text)=0,'Export indents bracket comment continuations');
+      Saved.Text:=Text+#10+Text; Saved.SaveToFile(Name); Reader.OpenFile(Name);
+      Check(Reader.Entries.Count=2,'Wrapped command comments do not split games');
+      TGameFileEntry(Reader.Entries[0]).Validate; TGameFileEntry(Reader.Entries[1]).Validate;
+      Check((TGameFileEntry(Reader.Entries[0]).ErrorText='') and (TGameFileEntry(Reader.Entries[1]).ErrorText=''),'Both saved entries reopen');
+    end;
+  finally Saved.Free; Reader.Free; DeleteFile(Name); end;
   RoundTrip('1.e4 {[%eval 0.25,22]} *');
   Check(Pos('[%eval 0.25,22]',Export(A))>0,'Evaluation depth retained');
+  Start:=A.ValidationReplayBuildCount;
+  ImportChessPgn('1.e4 {one} e5 {two} 2.Nf3 {three} Nc6 *',A,nil);
+  Check(A.ValidationReplayBuildCount-Start<=1,'Append/store/append cache survives annotation revisions');
   // Two-pass timing includes the existing actor's validation, not a bypass.
   Text:=''; for I:=1 to 50 do Text+='Nf3 Nf6 Ng1 Ng8 ';
   Start:=GetTickCount64; ImportChessPgn(Text+'*',A,nil);

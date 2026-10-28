@@ -304,6 +304,22 @@ var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
     finally L.Free; end;
     Entries.Add(Entry); Start:=Posn; Reset;
   end;
+  function StartsTagLine: Boolean;
+  var Saved,At: Int64; Ch: Char; HaveName: Boolean;
+  begin
+    Result:=False; Saved:=F.Position; At:=Posn+1; HaveName:=False;
+    try
+      F.Position:=At;
+      while F.Read(Ch,1)=1 do begin
+        if Ch in ['a'..'z','A'..'Z','0'..'9','_'] then HaveName:=True
+        else begin
+          if not HaveName then Exit;
+          while Ch in [' ',#9] do if F.Read(Ch,1)<>1 then Exit;
+          Result:=Ch='"'; Exit;
+        end;
+      end;
+    finally F.Position:=Saved; end;
+  end;
   function IsResult: Boolean;
   begin Result:=(Symbol='*') or (Symbol='1-0') or (Symbol='0-1') or (Symbol='1/2-1/2'); end;
 begin
@@ -316,7 +332,7 @@ begin
         C:=Chr(Buffer[I]);
         // A fresh tag line is the collection recovery boundary, even when
         // the preceding entry has an unclosed comment/string/variation.
-        if (C='[') and ColumnOne and Body then Finish
+        if (C='[') and ColumnOne and Body and StartsTagLine then Finish
         else if not Brace and not Quote and not LineComment and not Tag and (Depth=0) and
           not (C in ['0'..'9','a'..'z','A'..'Z','/','-','*']) and IsResult then Finish;
         Inc(Posn);

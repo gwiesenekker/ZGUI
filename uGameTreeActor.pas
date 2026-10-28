@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Contnrs, SysUtils,
-  uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory, uGameTreeNodeData, uDraughtsPdn;
+  uGamePosition, uGameTree, uGameTreeBuilder, uGameTreeSearchRef, uThreadMessageQueue, uGameMoveHistory, uGameTreeNodeData, uDraughtsPdn;
 
 type
   TGameTreeMoveSource = (
@@ -106,6 +106,9 @@ type
     FNextSearchId: Int64;
     FOwnsGameTree: Boolean;
     FRevision: Int64;
+    FTopologyVersion,FCacheVersion,FCacheNodeId: Int64;
+    FValidationCache,FValidatedPosition: TGamePosition;
+    FValidationReplayBuildCount: Integer;
     FSearches: TObjectList;
     procedure CopyMainlineInputToCommand(ACommand: TGameTreeCommand;
       const AMainline: TGameTreeMainlineInput; AIncludeMoves: Boolean);
@@ -219,12 +222,13 @@ type
 
     property GameTree: TGameTree read FGameTree;
     property Revision: Int64 read FRevision;
+    property ValidationReplayBuildCount: Integer read FValidationReplayBuildCount;
   end;
 
 implementation
 
 uses
-  uGamePosition, Math, uGameFileMetadata;
+  Math, uGameFileMetadata;
 
 function TGameTreeSearchRecord.SearchRef: TGameTreeSearchRef;
 begin
@@ -303,6 +307,7 @@ end;
 
 destructor TGameTreeActor.Destroy;
 begin
+  FValidationCache.Free; FValidatedPosition.Free;
   FSearches.Free;
   FCommandQueue.Free;
   if FOwnsGameTree then
@@ -382,6 +387,17 @@ begin
   ACommand.TreeChanged := True;
   if AInvalidateSignature then
     AInvalidateRebuildSignature := True;
+  if ACommand.CommandKind in [gtcAddMainlineMove,gtcAppendMainlineMove,
+    gtcAppendMainlineSnapshotMove,gtcImportBranch,gtcImportNode,gtcImportPdnTree,
+    gtcStoreMoveVariation,gtcClearBranches,gtcRebuildFromInputs,gtcSetHeader] then begin
+    Inc(FTopologyVersion); FreeAndNil(FValidationCache); FCacheNodeId:=0;
+    if (FValidatedPosition<>nil) and (ACommand.CreatedNodeId<>0) and
+      (ACommand.CommandKind in [gtcAddMainlineMove,gtcAppendMainlineMove,
+        gtcAppendMainlineSnapshotMove,gtcImportBranch,gtcImportNode]) then begin
+      FValidationCache:=FValidatedPosition.Clone; FCacheNodeId:=ACommand.CreatedNodeId;
+      FCacheVersion:=FTopologyVersion;
+    end;
+  end;
   MarkMissingTargetSearchesFailed;
   Inc(FRevision);
 end;
@@ -911,6 +927,14 @@ var
   Ply, ImportIndex: Integer;
   Fen: string;
 
+  function LoadParent(Node: TGameTreePlyNode): Boolean;
+  begin
+    Result:=Node<>nil; if not Result then Exit;
+    if (FValidationCache<>nil) and (FCacheVersion=FTopologyVersion) and (FCacheNodeId=Node.NodeId) then
+      Board.AssignFrom(FValidationCache)
+    else begin Inc(FValidationReplayBuildCount); Result:=FGameTree.TryBuildPositionAtNode(Node,Board); end;
+  end;
+
   procedure Replay(AList: TStrings; ACount: Integer);
   var
     J: Integer;
@@ -945,6 +969,7 @@ var
   end;
 
 begin
+  FreeAndNil(FValidatedPosition);
   Result := True;
   if not (ACommand.CommandKind in [gtcAddMainlineMove, gtcAppendMainlineMove,
     gtcAppendMainlineSnapshotMove, gtcImportBranch, gtcImportNode, gtcStoreMoveVariation,
@@ -977,7 +1002,7 @@ begin
                 Parent := FGameTree.Root
               else
                 Parent := FGameTree.MainlineNode[Ply - 1];
-              if not FGameTree.TryBuildPositionAtNode(Parent, Board) then
+              if not LoadParent(Parent) then
                 raise EConvertError.Create('Cannot replay move parent');
             end;
             ACommand.MoveText := Board.PlayMoveText(ACommand.MoveText);
@@ -985,14 +1010,14 @@ begin
         gtcStoreMoveVariation:
           begin
             Parent := FGameTree.FindNodeById(ACommand.NodeId);
-            if (Parent = nil) or not FGameTree.TryBuildPositionAtNode(Parent, Board) then
+            if (Parent = nil) or not LoadParent(Parent) then
               raise EConvertError.Create('Cannot replay variation parent');
             ACommand.MoveText := Board.PlayMoveText(ACommand.MoveText);
           end;
         gtcImportBranch, gtcImportNode:
           begin
             Parent := FGameTree.FindNodeById(ACommand.NodeId);
-            if (Parent = nil) or not FGameTree.TryBuildPositionAtNode(Parent, Board) then
+            if (Parent = nil) or not LoadParent(Parent) then
               raise EConvertError.Create('Cannot replay import parent');
             if Length(ACommand.ImportMoves) = 0 then
               raise EConvertError.Create('Branch has no moves');
@@ -1027,6 +1052,9 @@ begin
         Result := False;
       end;
     end;
+    if Result and (ACommand.CommandKind in [gtcAddMainlineMove,gtcAppendMainlineMove,
+      gtcAppendMainlineSnapshotMove,gtcImportBranch,gtcImportNode]) then
+      FValidatedPosition:=Board.Clone;
   finally
     Mainline.Free;
     Board.Free;

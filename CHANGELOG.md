@@ -4,6 +4,32 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### PGN recovery and actor validation cache review — 2026-10-28
+
+- Fix P11: require a real tag-line prefix for damaged-game recovery; keep column-1
+  embedded commands inside comments. Indent bracket/percent comment continuation
+  lines on export and cover raw wrapped comments plus ZGUI's own round trip.
+- Implement the approved F1(b)/G2 one-position actor cache. Key it by node identity
+  and structural generation; annotation-only mutations retain the entry. Fall
+  back to existing replay on a miss and invalidate on rebuild/header/topology
+  changes. No validation bypass or alternate import/tree model.
+- Validation: 123 PGN checks pass with range/overflow/heap checks; full headless
+  regression passes. An optimized 137.1 MB listing takes 484 ms; validation plus
+  replay of the 200-ply / 676-node fixture takes 608 ms. Append/store/append
+  replay-count regression confirms annotations do not defeat the cache.
+
+
+### Clocked UCI games proposal — 2026-10-28
+
+- Prepare a local proposal for Claude against bc177c4, reusing the existing game
+  runner, orchestrator, clocks, engine worker, snapshots and New game dialog.
+- Request review of the two-sided clock contract, UCI game/analysis contexts,
+  cancellation classification, idle-human expiry, initial outcomes, clock display
+  anchors and existing-dialog/profile bindings. Preserve GUI layout and defer
+  pondering, Auto Play, tournaments, databases and position setup.
+- Documentation only; no production changes or compile/test run in this step.
+
+
 ### Reviewed UCI configuration and analysis — 2026-10-28
 
 Commit: `76ea792`.

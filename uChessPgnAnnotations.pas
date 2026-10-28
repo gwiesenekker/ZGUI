@@ -11,7 +11,7 @@ function PgnBraceComment(const Text: string): string;
 implementation
 uses Classes, Math, StrUtils;
 function PgnBraceComment(const Text: string): string;
-var S: string;
+var S: string; I: Integer;
 begin
   // PGN braces cannot be escaped. Semicolon comments safely retain literal
   // closing braces; all other comments use the usual brace spelling.
@@ -21,7 +21,15 @@ begin
     S:=StringReplace(S,#13,#10,[rfReplaceAll]);
     Result:=';'+StringReplace(S,#10,LineEnding+';',[rfReplaceAll])+LineEnding;
   end
-  else Result:='{'+Text+'}';
+  else begin
+    S:=StringReplace(Text,#13#10,#10,[rfReplaceAll]); S:=StringReplace(S,#13,#10,[rfReplaceAll]);
+    Result:='{';
+    for I:=1 to Length(S) do begin
+      Result+=S[I];
+      if (S[I]=#10) and (I<Length(S)) and (S[I+1] in ['[','%']) then Result+=' ';
+    end;
+    Result+='}';
+  end;
 end;
 function Duration(const Text: string; out Seconds: Double): Boolean;
 var P: TStringList; H,M: Integer; S: Double; FS: TFormatSettings;
