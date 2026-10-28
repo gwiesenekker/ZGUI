@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reviewed UCI configuration and analysis — 2026-10-28
 
+Commit: `76ea792`.
+
 - Apply Claude review c0493e3 with D1–D3 through the existing engine factory,
   extracted process worker, analysis runner, coordinator, tree and GUI. No new
   game, clock, tournament, database, navigation or analysis controller.
