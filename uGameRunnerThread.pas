@@ -1,0 +1,854 @@
+unit uGameRunnerThread;
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, SyncObjs, SysUtils,
+  uCancellationToken,
+  uEngineBase, uEngineRegistry,
+  uGameOrchestrator, uGameMoveHistory, uGamePosition, uGameSetupTypes, uPvSnapshot,
+  uThreadMessageQueue;
+
+type
+  TGameRunnerSnapshot = class
+  private
+    FBlackRemainingSeconds: Double;
+    FBlackPlayerName: string;
+    FBlackUsedSeconds: Double;
+    FPosition: TGamePosition; // owned copy; nil before the game started
+    FCurrentSide: TGameSide;
+    FGameResult: string;
+    FLastError: string;
+    FLogLines: TStringList;
+    FLogRevision: QWord;
+    FMoveAnnotationsText: string;
+    FMoveData: TGameMoveDataArray;
+    FMovesPlayedText: string;
+    FPlyCount: Integer;
+    FLiveUpdate: Boolean;
+    FPvSnapshot: TPvSnapshot;
+    FState: TGameOrchestratorState;
+    FStartingFEN: string;
+    FWhiteRemainingSeconds: Double;
+    FWhitePlayerName: string;
+    FWhiteUsedSeconds: Double;
+    function GetMoveData: TGameMoveDataArray;
+    function GetPrincipalVariation: string;
+    function GetPvBasePosition: TGamePosition;
+    function GetPvBasePly: Integer;
+    function GetPvScore: string;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure AssignFrom(ASource: TGameRunnerSnapshot);
+    procedure MarkStopped(const AReason: string);
+
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    property TestLiveUpdate: Boolean read FLiveUpdate write FLiveUpdate;
+    {$ENDIF}
+    property LiveUpdate: Boolean read FLiveUpdate;
+    property BlackRemainingSeconds: Double read FBlackRemainingSeconds;
+    property BlackPlayerName: string read FBlackPlayerName;
+    property BlackUsedSeconds: Double read FBlackUsedSeconds;
+    property Position: TGamePosition read FPosition;
+    property CurrentSide: TGameSide read FCurrentSide;
+    property GameResult: string read FGameResult;
+    property LastError: string read FLastError;
+    property LogLines: TStringList read FLogLines;
+    property LogRevision: QWord read FLogRevision;
+    property MoveData: TGameMoveDataArray read GetMoveData;
+    property MoveAnnotationsText: string read FMoveAnnotationsText;
+    property MovesPlayedText: string read FMovesPlayedText;
+    property PlyCount: Integer read FPlyCount;
+    property PvScore: string read GetPvScore;
+    property PrincipalVariation: string read GetPrincipalVariation;
+    property PvBasePosition: TGamePosition read GetPvBasePosition;
+    property PvBasePly: Integer read GetPvBasePly;
+    property PvSnapshot: TPvSnapshot read FPvSnapshot;
+    property State: TGameOrchestratorState read FState;
+    property StartingFEN: string read FStartingFEN;
+    property WhiteRemainingSeconds: Double read FWhiteRemainingSeconds;
+    property WhitePlayerName: string read FWhitePlayerName;
+    property WhiteUsedSeconds: Double read FWhiteUsedSeconds;
+  end;
+
+  TGameRunnerSnapshotEvent = procedure(Sender: TObject; ASnapshot: TGameRunnerSnapshot) of object;
+  TGameRunnerFinishedEvent = procedure(Sender: TObject) of object;
+
+  TGameRunnerThread = class(TThread)
+  private
+    FCommandQueue: TThreadMessageQueue;
+    FGameLog: TStringList;
+    FGameId: Integer;
+    FHumanTurnStartTick: QWord;
+    FOnFinished: TGameRunnerFinishedEvent;
+    FOnSnapshot: TGameRunnerSnapshotEvent;
+    FOrchestrator: TGameOrchestrator;
+    FLastLogSnapshotTick: QWord;
+    FLogRevision: QWord;
+    FLastPrincipalVariation: string;
+    FPvBasePosition: TGamePosition; // nil until the first PV
+    FVariant: TGameVariant;
+    FPvBasePly: Integer;
+    FRunnerError: string;
+    FRunnerFailed: Boolean;
+    FSetup: TGameSetup;
+    FShowStdout: Boolean;
+    FSnapshotLock: TCriticalSection;
+    FLastFullSnapshot: TGameRunnerSnapshot;
+    FHasFullSnapshot: Boolean;
+    FActiveSearchEngine: TGameEngine;
+    FStopLogged: Boolean;
+    FWhiteEngine: TExternalEngineDefinition;
+    FBlackEngine: TExternalEngineDefinition;
+    FLogLock: TCriticalSection;
+    FStopToken: TCancellationToken;
+    function PlayerDisplayName(AKind: TPlayerKind;
+      AEngine: TExternalEngineDefinition): string;
+    procedure AddGameLog(const AMessage: string);
+    procedure AddGameLogLines(ALines: TStrings);
+    procedure TrimGameLogLocked;
+    procedure DrainCommands;
+    procedure DetachRuntimeLogHandlers;
+    procedure HandleCommand(ACommand: TObject);
+    procedure PostCommand(ACommand: TObject);
+    function CurrentPlayerKind: TPlayerKind;
+    procedure CreateEngines;
+    function CreateSnapshot: TGameRunnerSnapshot;
+    procedure PublishSnapshot;
+    procedure PublishSnapshotIfDue;
+    procedure PublishLiveUpdate(AEngine: TGameEngine);
+    procedure PublishFinished;
+    procedure RequestStopFromRunner(const AReason: string);
+  protected
+    procedure RuntimeLog(Sender: TObject; const AMessage: string);
+    procedure Execute; override;
+    procedure DoTerminate; override;
+  public
+    // AVariant: the game; nil uses the registered default game. Engines are
+    // created through the factories their units register (uEngineBase).
+    constructor Create(const ASetup: TGameSetup; AGameId: Integer;
+      ASnapshotEvent: TGameRunnerSnapshotEvent;
+      AFinishedEvent: TGameRunnerFinishedEvent; AVariant: TGameVariant = nil);
+    destructor Destroy; override;
+    procedure PostGuiLog(const AMessage: string);
+    procedure PostHumanMove(const AMove: string);
+    procedure PostShowStdout(AValue: Boolean);
+    procedure PostStop;
+    property GameId: Integer read FGameId;
+  end;
+
+implementation
+
+const
+  RunnerLogSnapshotIntervalMs = 500;
+  RunnerMaxLogLines = 2000;
+
+type
+  TGameRunnerCommandKind = (
+    grcStop,
+    grcSetShowStdout,
+    grcGuiLog,
+    grcHumanMove
+  );
+
+  TGameRunnerCommand = class(TThreadMessage)
+  private
+    FBoolValue: Boolean;
+    FCommandKind: TGameRunnerCommandKind;
+    FTextValue: string;
+  public
+    constructor Create(ACommandKind: TGameRunnerCommandKind;
+      ABoolValue: Boolean = False); reintroduce;
+    constructor CreateText(ACommandKind: TGameRunnerCommandKind;
+      const ATextValue: string);
+    property BoolValue: Boolean read FBoolValue;
+    property CommandKind: TGameRunnerCommandKind read FCommandKind;
+    property TextValue: string read FTextValue;
+  end;
+
+constructor TGameRunnerCommand.Create(ACommandKind: TGameRunnerCommandKind;
+  ABoolValue: Boolean);
+const
+  CommandNames: array[TGameRunnerCommandKind] of string = (
+    'stop',
+    'set-show-stdout',
+    'gui-log',
+    'human-move'
+  );
+begin
+  inherited Create(CommandNames[ACommandKind]);
+  FCommandKind := ACommandKind;
+  FBoolValue := ABoolValue;
+end;
+
+constructor TGameRunnerCommand.CreateText(ACommandKind: TGameRunnerCommandKind;
+  const ATextValue: string);
+begin
+  Create(ACommandKind);
+  FTextValue := Trim(ATextValue);
+end;
+
+constructor TGameRunnerSnapshot.Create;
+begin
+  inherited Create;
+  FPvSnapshot := TPvSnapshot.Create;
+  FLogLines := TStringList.Create;
+  FGameResult := '*';
+end;
+
+destructor TGameRunnerSnapshot.Destroy;
+begin
+  FLogLines.Free;
+  FPvSnapshot.Free;
+  FPosition.Free;
+  inherited Destroy;
+end;
+
+function TGameRunnerSnapshot.GetPrincipalVariation: string;
+begin
+  Result := FPvSnapshot.PrincipalVariation;
+end;
+
+function TGameRunnerSnapshot.GetPvBasePosition: TGamePosition;
+begin
+  Result := FPvSnapshot.BasePosition;
+end;
+
+function TGameRunnerSnapshot.GetPvBasePly: Integer;
+begin
+  Result := FPvSnapshot.BasePly;
+end;
+
+function TGameRunnerSnapshot.GetPvScore: string;
+begin
+  Result := FPvSnapshot.Score;
+end;
+
+function TGameRunnerSnapshot.GetMoveData: TGameMoveDataArray;
+begin
+  Result := Copy(FMoveData);
+end;
+
+procedure TGameRunnerSnapshot.AssignFrom(ASource: TGameRunnerSnapshot);
+begin
+  if ASource = nil then
+    Exit;
+  FLiveUpdate := ASource.FLiveUpdate;
+  FBlackPlayerName := ASource.FBlackPlayerName;
+  FBlackRemainingSeconds := ASource.FBlackRemainingSeconds;
+  FBlackUsedSeconds := ASource.FBlackUsedSeconds;
+  if ASource.FPosition = nil then
+    FreeAndNil(FPosition)
+  else
+    AssignGamePosition(FPosition, ASource.FPosition);
+  FCurrentSide := ASource.FCurrentSide;
+  FGameResult := ASource.FGameResult;
+  FLastError := ASource.FLastError;
+  if (FLogRevision <> ASource.FLogRevision) or
+    (FLogLines.Count <> ASource.FLogLines.Count) then
+  begin
+    FLogLines.Assign(ASource.FLogLines);
+    FLogRevision := ASource.FLogRevision;
+  end;
+  FMoveAnnotationsText := ASource.FMoveAnnotationsText;
+  FMoveData := Copy(ASource.FMoveData);
+  FMovesPlayedText := ASource.FMovesPlayedText;
+  FPlyCount := ASource.FPlyCount;
+  FPvSnapshot.AssignFrom(ASource.FPvSnapshot);
+  FState := ASource.FState;
+  FStartingFEN := ASource.FStartingFEN;
+  FWhitePlayerName := ASource.FWhitePlayerName;
+  FWhiteRemainingSeconds := ASource.FWhiteRemainingSeconds;
+  FWhiteUsedSeconds := ASource.FWhiteUsedSeconds;
+end;
+
+procedure TGameRunnerSnapshot.MarkStopped(const AReason: string);
+begin
+  if FState in [gosGameOver, gosError] then
+    Exit;
+  FState := gosStopped;
+  FGameResult := '*';
+  FLastError := AReason;
+  if Trim(AReason) <> '' then
+  begin
+    FLogLines.Add(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+      ' [gui] stopped; reason=' + Trim(AReason));
+    Inc(FLogRevision);
+  end;
+end;
+
+constructor TGameRunnerThread.Create(const ASetup: TGameSetup; AGameId: Integer;
+  ASnapshotEvent: TGameRunnerSnapshotEvent;
+  AFinishedEvent: TGameRunnerFinishedEvent; AVariant: TGameVariant);
+begin
+  inherited Create(True);
+  FreeOnTerminate := False;
+  FVariant := AVariant;
+  FGameId := AGameId;
+  FOnSnapshot := ASnapshotEvent;
+  FOnFinished := AFinishedEvent;
+  FSetup := ASetup;
+  FSetup.WhiteEngine := nil;
+  FSetup.BlackEngine := nil;
+  if ASetup.WhiteEngine <> nil then
+  begin
+    FWhiteEngine := TExternalEngineDefinition.Create;
+    FWhiteEngine.Assign(ASetup.WhiteEngine);
+  end;
+  if ASetup.BlackEngine <> nil then
+  begin
+    FBlackEngine := TExternalEngineDefinition.Create;
+    FBlackEngine.Assign(ASetup.BlackEngine);
+  end;
+  FGameLog := TStringList.Create;
+  FLogLock := TCriticalSection.Create;
+  FSnapshotLock := TCriticalSection.Create;
+  FLastFullSnapshot := TGameRunnerSnapshot.Create;
+  FCommandQueue := TThreadMessageQueue.Create(True);
+  FStopToken := TCancellationToken.Create;
+end;
+
+destructor TGameRunnerThread.Destroy;
+begin
+  DetachRuntimeLogHandlers;
+  FreeAndNil(FOrchestrator);
+  FPvBasePosition.Free;
+  FCommandQueue.Free;
+  FBlackEngine.Free;
+  FWhiteEngine.Free;
+  FStopToken.Free;
+  FLastFullSnapshot.Free;
+  FSnapshotLock.Free;
+  FLogLock.Free;
+  FGameLog.Free;
+  inherited Destroy;
+end;
+
+procedure TGameRunnerThread.DetachRuntimeLogHandlers;
+var
+  LSide: TGameSide;
+begin
+  if FOrchestrator = nil then
+    Exit;
+
+  FOrchestrator.OnLog := nil;
+  for LSide := Low(TGameSide) to High(TGameSide) do
+    if FOrchestrator.Engine[LSide] <> nil then
+      FOrchestrator.Engine[LSide].OnLog := nil;
+end;
+
+procedure TGameRunnerThread.HandleCommand(ACommand: TObject);
+var
+  RunnerCommand: TGameRunnerCommand;
+  LegalMove: string;
+begin
+  if not (ACommand is TGameRunnerCommand) then
+    Exit;
+  RunnerCommand := TGameRunnerCommand(ACommand);
+
+  case RunnerCommand.CommandKind of
+    grcStop:
+      RequestStopFromRunner('command');
+    grcSetShowStdout:
+      begin
+        FShowStdout := RunnerCommand.BoolValue;
+        AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+          ' [runner] command; kind=set-show-stdout; value=' +
+          BoolToStr(FShowStdout, True));
+      end;
+    grcGuiLog:
+      begin
+        if RunnerCommand.TextValue <> '' then
+        begin
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [gui] ' + RunnerCommand.TextValue);
+          PublishSnapshot;
+        end;
+      end;
+    grcHumanMove:
+      begin
+        if FHumanTurnStartTick = 0 then
+          FHumanTurnStartTick := GetTickCount64;
+        if (FOrchestrator = nil) or (FOrchestrator.State <> gosRunning) then
+          Exit;
+        if CurrentPlayerKind <> pkHuman then
+        begin
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [runner] ignored human move; reason=not human to move; move=' +
+            RunnerCommand.TextValue);
+          Exit;
+        end;
+        if not FOrchestrator.Position.TryParseMove(RunnerCommand.TextValue,
+          LegalMove) then
+        begin
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [runner] human move rejected; reason=illegal for current position; move=' +
+            RunnerCommand.TextValue);
+          PublishSnapshot;
+          Exit;
+        end;
+        FOrchestrator.PlayMove(LegalMove, FOrchestrator.CurrentSide,
+          (GetTickCount64 - FHumanTurnStartTick) / 1000, 'human');
+        FHumanTurnStartTick := 0;
+        AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+          ' [runner] command; kind=human-move; move=' + RunnerCommand.TextValue);
+        if (FOrchestrator.State = gosRunning) and
+          (CurrentPlayerKind = pkHuman) then
+          FHumanTurnStartTick := GetTickCount64;
+        PublishSnapshot;
+      end;
+  end;
+end;
+
+procedure TGameRunnerThread.DrainCommands;
+var
+  Command: TObject;
+begin
+  while FCommandQueue.TryPop(Command) do
+  begin
+    try
+      HandleCommand(Command);
+    finally
+      Command.Free;
+    end;
+  end;
+end;
+
+procedure TGameRunnerThread.AddGameLog(const AMessage: string);
+begin
+  FLogLock.Acquire;
+  try
+    FGameLog.Add(AMessage);
+    TrimGameLogLocked;
+    Inc(FLogRevision);
+  finally
+    FLogLock.Release;
+  end;
+end;
+
+procedure TGameRunnerThread.AddGameLogLines(ALines: TStrings);
+begin
+  if ALines = nil then
+    Exit;
+  FLogLock.Acquire;
+  try
+    FGameLog.AddStrings(ALines);
+    if ALines.Count > 0 then
+    begin
+      TrimGameLogLocked;
+      Inc(FLogRevision);
+    end;
+  finally
+    FLogLock.Release;
+  end;
+end;
+
+procedure TGameRunnerThread.TrimGameLogLocked;
+begin
+  while FGameLog.Count > RunnerMaxLogLines do
+    FGameLog.Delete(0);
+end;
+
+procedure TGameRunnerThread.PostCommand(ACommand: TObject);
+var
+  CommandName: string;
+  CommandKind: TGameRunnerCommandKind;
+  Posted: Boolean;
+begin
+  if ACommand = nil then
+    Exit;
+  if not (ACommand is TGameRunnerCommand) then
+  begin
+    ACommand.Free;
+    Exit;
+  end;
+
+  CommandKind := TGameRunnerCommand(ACommand).CommandKind;
+  CommandName := TGameRunnerCommand(ACommand).Kind;
+  if CommandKind = grcStop then
+  begin
+    FStopToken.Cancel;
+    Terminate;
+  end;
+
+  Posted := (FCommandQueue <> nil) and FCommandQueue.TryPost(ACommand);
+  if not Posted then
+  begin
+    if FCommandQueue = nil then
+      ACommand.Free;
+    AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+      ' [runner] command dropped; kind=' + CommandName +
+      '; reason=runner closed');
+  end;
+end;
+
+procedure TGameRunnerThread.RequestStopFromRunner(const AReason: string);
+begin
+  FStopToken.Cancel;
+  Terminate;
+  if FOrchestrator <> nil then
+    FOrchestrator.RequestStopEngines;
+  if FStopLogged then
+    Exit;
+
+  FStopLogged := True;
+  AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+    ' [runner] stop requested; reason=' + Trim(AReason));
+end;
+
+procedure TGameRunnerThread.PostStop;
+begin
+  PostCommand(TGameRunnerCommand.Create(grcStop));
+end;
+
+procedure TGameRunnerThread.PostGuiLog(const AMessage: string);
+begin
+  PostCommand(TGameRunnerCommand.CreateText(grcGuiLog, AMessage));
+end;
+
+procedure TGameRunnerThread.PostHumanMove(const AMove: string);
+begin
+  PostCommand(TGameRunnerCommand.CreateText(grcHumanMove, AMove));
+end;
+
+procedure TGameRunnerThread.PostShowStdout(AValue: Boolean);
+begin
+  PostCommand(TGameRunnerCommand.Create(grcSetShowStdout, AValue));
+end;
+
+function TGameRunnerThread.PlayerDisplayName(AKind: TPlayerKind;
+  AEngine: TExternalEngineDefinition): string;
+begin
+  case AKind of
+    pkHuman:
+      Result := 'Human';
+    pkRegistered:
+      begin
+        Result := '';
+        if AEngine <> nil then
+        begin
+          Result := Trim(AEngine.IdText);
+          if Result = '' then
+            Result := ChangeFileExt(AEngine.ExecutableName, '');
+          if Result = '' then
+            Result := ChangeFileExt(ExtractFileName(AEngine.ExePath), '');
+        end;
+        if Result = '' then
+          Result := 'Engine';
+      end;
+  else
+    Result := 'Player';
+  end;
+end;
+
+function TGameRunnerThread.CurrentPlayerKind: TPlayerKind;
+begin
+  if FOrchestrator.CurrentSide = gsBlack then
+    Result := FSetup.BlackPlayer
+  else
+    Result := FSetup.WhitePlayer;
+end;
+
+procedure TGameRunnerThread.CreateEngines;
+var
+  LEngine: TGameEngine;
+
+  procedure CreateRegisteredEngine(ASide: TGameSide;
+    ADefinition: TExternalEngineDefinition);
+  begin
+    if ADefinition = nil then
+      raise EInvalidOperation.Create('No registered engine definition for ' +
+        SideToString(ASide));
+
+    LEngine := CreateGameEngine(ADefinition);
+    try
+      LEngine.StopToken := FStopToken;
+      AddGameLogLines(LEngine.StateLog);
+      LEngine.OnLog := @RuntimeLog;
+      if not LEngine.LaunchAndInit then
+        raise EInvalidOperation.Create(SideToString(ASide) + ' ' +
+          LEngine.ProtocolName + ' engine did not launch correctly');
+      FOrchestrator.Engine[ASide] := LEngine;
+      LEngine := nil;
+    finally
+      LEngine.Free;
+    end;
+  end;
+begin
+  if FSetup.WhitePlayer = pkRegistered then
+    CreateRegisteredEngine(gsWhite, FWhiteEngine);
+
+  if FSetup.BlackPlayer = pkRegistered then
+    CreateRegisteredEngine(gsBlack, FBlackEngine);
+end;
+
+function TGameRunnerThread.CreateSnapshot: TGameRunnerSnapshot;
+var
+  LElapsedSeconds: Double;
+  LNowTick: QWord;
+  LPvDepth: string;
+  LPvScore: string;
+  LPvTimeText: string;
+  LPvText: string;
+  LPvEngine: TGameEngine;
+begin
+  Result := TGameRunnerSnapshot.Create;
+  if FOrchestrator = nil then
+  begin
+    Result.FState := gosError;
+    Result.FGameResult := '*';
+    Result.FLastError := FRunnerError;
+    Result.FWhitePlayerName := PlayerDisplayName(FSetup.WhitePlayer,
+      FWhiteEngine);
+    Result.FBlackPlayerName := PlayerDisplayName(FSetup.BlackPlayer,
+      FBlackEngine);
+    FLogLock.Acquire;
+    try
+      Result.FLogLines.Assign(FGameLog);
+      Result.FLogRevision := FLogRevision;
+    finally
+      FLogLock.Release;
+    end;
+    Result.FStartingFEN := FSetup.StartingFEN;
+    Exit;
+  end;
+
+  AssignGamePosition(Result.FPosition, FOrchestrator.Position);
+  Result.FCurrentSide := FOrchestrator.CurrentSide;
+  Result.FGameResult := FOrchestrator.GameResult;
+  Result.FLastError := FOrchestrator.LastError;
+  FLogLock.Acquire;
+  try
+    Result.FLogLines.Assign(FGameLog);
+    Result.FLogRevision := FLogRevision;
+  finally
+    FLogLock.Release;
+  end;
+  Result.FMovesPlayedText := FOrchestrator.MovesPlayedText;
+  Result.FMoveAnnotationsText := FOrchestrator.MoveAnnotationsText;
+  Result.FPlyCount := FOrchestrator.MoveHistory.Count;
+  Result.FMoveData := FOrchestrator.MoveHistory.ExportData;
+  Result.FState := FOrchestrator.State;
+  Result.FStartingFEN := FOrchestrator.StartingFEN;
+  Result.FWhiteRemainingSeconds := FOrchestrator.RemainingSeconds[gsWhite];
+  Result.FBlackRemainingSeconds := FOrchestrator.RemainingSeconds[gsBlack];
+  Result.FWhiteUsedSeconds := FOrchestrator.UsedSeconds[gsWhite];
+  Result.FBlackUsedSeconds := FOrchestrator.UsedSeconds[gsBlack];
+  if (Result.FState = gosRunning) and
+    (FHumanTurnStartTick > 0) and (CurrentPlayerKind = pkHuman) then
+  begin
+    LNowTick := GetTickCount64;
+    LElapsedSeconds := (LNowTick - FHumanTurnStartTick) / 1000;
+    if Result.FCurrentSide = gsWhite then
+    begin
+      Result.FWhiteUsedSeconds := Result.FWhiteUsedSeconds + LElapsedSeconds;
+      Result.FWhiteRemainingSeconds := Result.FWhiteRemainingSeconds -
+        LElapsedSeconds;
+      if Result.FWhiteRemainingSeconds < 0 then
+        Result.FWhiteRemainingSeconds := 0;
+    end
+    else
+    begin
+      Result.FBlackUsedSeconds := Result.FBlackUsedSeconds + LElapsedSeconds;
+      Result.FBlackRemainingSeconds := Result.FBlackRemainingSeconds -
+        LElapsedSeconds;
+      if Result.FBlackRemainingSeconds < 0 then
+        Result.FBlackRemainingSeconds := 0;
+    end;
+  end;
+  Result.FWhitePlayerName := PlayerDisplayName(FSetup.WhitePlayer,
+    FWhiteEngine);
+  Result.FBlackPlayerName := PlayerDisplayName(FSetup.BlackPlayer,
+    FBlackEngine);
+  LPvText := '';
+  LPvScore := '';
+  LPvDepth := '';
+  LPvTimeText := '';
+  LPvEngine := FOrchestrator.Engine[FOrchestrator.CurrentSide];
+  if LPvEngine <> nil then
+    LPvEngine.ReadSearchInfo(LPvText, LPvScore, LPvDepth, LPvTimeText);
+  if LPvText <> '' then
+  begin
+    if (LPvText <> FLastPrincipalVariation) or
+      (FPvBasePosition = nil) or
+      (FOrchestrator.Position.PositionKey <> FPvBasePosition.PositionKey) then
+    begin
+      FLastPrincipalVariation := LPvText;
+      AssignGamePosition(FPvBasePosition, FOrchestrator.Position);
+      FPvBasePly := FOrchestrator.MoveHistory.Count;
+    end;
+    Result.FPvSnapshot.SetData(FPvBasePosition, FPvBasePly, LPvText, LPvScore,
+      LPvDepth, LPvTimeText);
+  end;
+
+  if FRunnerFailed then
+  begin
+    Result.FState := gosError;
+    Result.FGameResult := '*';
+    Result.FLastError := FRunnerError;
+  end;
+end;
+
+procedure TGameRunnerThread.PublishSnapshot;
+var
+  Snapshot: TGameRunnerSnapshot;
+begin
+  FSnapshotLock.Acquire;
+  try
+    Snapshot := CreateSnapshot;
+    FLastFullSnapshot.AssignFrom(Snapshot);
+    FHasFullSnapshot := True;
+    if Assigned(FOnSnapshot) then
+      FOnSnapshot(Self, Snapshot)
+    else
+      Snapshot.Free;
+  finally
+    FSnapshotLock.Release;
+  end;
+end;
+
+procedure TGameRunnerThread.PublishSnapshotIfDue;
+var NowTick: QWord;
+begin
+  FSnapshotLock.Acquire;
+  try
+    NowTick := GetTickCount64;
+    if (FLastLogSnapshotTick = 0) or
+      (NowTick - FLastLogSnapshotTick >= RunnerLogSnapshotIntervalMs) then
+    begin FLastLogSnapshotTick := NowTick; PublishSnapshot; end;
+  finally FSnapshotLock.Release; end;
+end;
+
+procedure TGameRunnerThread.PublishLiveUpdate(AEngine: TGameEngine);
+var Snapshot: TGameRunnerSnapshot; NowTick: QWord; Pv, Score, Depth, TimeText: string;
+begin
+  FSnapshotLock.Acquire;
+  try
+    // Never read the orchestrator from an engine thread. Extend an immutable
+    // runner-owned position snapshot only while that engine's search is active.
+    if not FHasFullSnapshot or (AEngine <> FActiveSearchEngine) then Exit;
+    NowTick := GetTickCount64;
+    if (FLastLogSnapshotTick <> 0) and
+      (NowTick - FLastLogSnapshotTick < RunnerLogSnapshotIntervalMs) then Exit;
+    FLastLogSnapshotTick := NowTick;
+    Snapshot := TGameRunnerSnapshot.Create;
+    try
+      Snapshot.AssignFrom(FLastFullSnapshot);
+      Snapshot.FLiveUpdate := True;
+      FLogLock.Acquire;
+      try
+        Snapshot.FLogLines.Assign(FGameLog); Snapshot.FLogRevision := FLogRevision;
+      finally FLogLock.Release; end;
+      AEngine.ReadSearchInfo(Pv, Score, Depth, TimeText);
+      Snapshot.FPvSnapshot.SetData(Snapshot.FPosition, Snapshot.FPlyCount, Pv, Score, Depth, TimeText);
+      if Assigned(FOnSnapshot) then
+      begin FOnSnapshot(Self, Snapshot); Snapshot := nil; end;
+    finally Snapshot.Free; end;
+  finally FSnapshotLock.Release; end;
+end;
+
+procedure TGameRunnerThread.PublishFinished;
+begin
+  if Assigned(FOnFinished) then
+    FOnFinished(Self);
+end;
+
+procedure TGameRunnerThread.RuntimeLog(Sender: TObject; const AMessage: string);
+begin
+  if (not FShowStdout) and (Pos('stdout;', LowerCase(AMessage)) > 0) then
+    Exit;
+  AddGameLog(AMessage);
+  // Engine stdout may arrive on a worker thread while PlayMove mutates board
+  // and history. Logs are locked; snapshots belong exclusively to the runner.
+  if GetCurrentThreadID = ThreadID then PublishSnapshotIfDue
+  else if Sender is TGameEngine then PublishLiveUpdate(TGameEngine(Sender));
+end;
+
+procedure TGameRunnerThread.Execute;
+begin
+    try
+      try
+      FOrchestrator := TGameOrchestrator.Create(FVariant);
+      FOrchestrator.OnLog := @RuntimeLog;
+      AddGameLogLines(FOrchestrator.Log);
+      FOrchestrator.TimeControl := FSetup.TimeControl;
+      CreateEngines;
+      FOrchestrator.NewGame(FSetup.StartingFEN);
+      DrainCommands;
+      PublishSnapshot;
+
+      while (not Terminated) and (FOrchestrator.State = gosRunning) do
+      begin
+        DrainCommands;
+        if Terminated then
+          Break;
+
+        if CurrentPlayerKind = pkRegistered then
+        begin
+          FHumanTurnStartTick := 0;
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [runner] engine to move; side=' + SideToString(FOrchestrator.CurrentSide));
+          PublishSnapshot;
+          FSnapshotLock.Acquire;
+          try FActiveSearchEngine := FOrchestrator.Engine[FOrchestrator.CurrentSide];
+          finally FSnapshotLock.Release; end;
+          try FOrchestrator.PlayNextMove;
+          finally
+            FSnapshotLock.Acquire;
+            try FActiveSearchEngine := nil;
+            finally FSnapshotLock.Release; end;
+          end;
+          DrainCommands;
+          PublishSnapshot;
+        end
+        else
+        begin
+          FHumanTurnStartTick := GetTickCount64;
+          AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+            ' [runner] human to move; waiting');
+          PublishSnapshot;
+          while (not Terminated) and (FOrchestrator.State = gosRunning) and
+            (CurrentPlayerKind = pkHuman) do
+          begin
+            DrainCommands;
+            if (FOrchestrator.State <> gosRunning) or
+              (CurrentPlayerKind <> pkHuman) then
+              Break;
+            PublishSnapshotIfDue;
+            Sleep(100);
+          end;
+        end;
+      end;
+
+      DrainCommands;
+      PublishSnapshot;
+    finally
+      if FStopToken.IsCancelled or Terminated then
+        RequestStopFromRunner('runner shutdown');
+      FCommandQueue.Close;
+      if FOrchestrator <> nil then
+        FOrchestrator.StopEngines;
+    end;
+    except
+      on E: Exception do
+      begin
+        FRunnerFailed := True;
+        FRunnerError := E.Message;
+        AddGameLog(FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
+          ' [runner] error; message=' + E.Message);
+        PublishSnapshot;
+      end;
+    end;
+end;
+
+procedure TGameRunnerThread.DoTerminate;
+begin
+  // FPC can skip Execute entirely when Stop wins the scheduling race.
+  try PublishFinished; finally inherited DoTerminate; end;
+end;
+
+end.
