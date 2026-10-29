@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reviewed chess engine tournaments — 2026-10-29
 
+Commit: `433b035`.
+
 - Implement Claude's approved tournament integration using the existing dialog,
   pairings, scheduler, game runner, clocks, reservations, standings and recovery
   paths. Enable the existing tournament action for chess, with UCI participants,
