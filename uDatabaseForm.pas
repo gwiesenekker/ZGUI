@@ -81,6 +81,9 @@ type
     procedure StopImportClick(Sender: TObject);
     procedure UpdateBoardFromFen;
     procedure UpdateGamesGridHeaders;
+    procedure SizeFenColumn(Data: PtrInt);
+  protected
+    procedure DoShow; override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -274,7 +277,6 @@ begin
   LBoardPanel.Parent := LSearchPanel;
   LBoardPanel.Align := alRight;
   LBoardPanel.Width := 220;
-  if FProfile.FileFormat=gffPgn then LBoardPanel.Width:=440;
   LBoardPanel.BevelOuter := bvNone;
   LBoardPanel.BorderSpacing.Left := 8;
 
@@ -346,8 +348,32 @@ begin
   PopupMenu := LBoardPopup;
 end;
 
+procedure TDatabaseForm.DoShow;
+begin
+  inherited DoShow;
+  if FProfile.FileFormat = gffPgn then Application.QueueAsyncCall(@SizeFenColumn, 0);
+end;
+
+procedure TDatabaseForm.SizeFenColumn(Data: PtrInt);
+const LongFEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 99';
+var TextCanvas: TControlCanvas; ColumnWidth, ResultsWidth, I: Integer;
+begin
+  // Measure after handles exist, using the edit's actual font/theme metrics.
+  TextCanvas := TControlCanvas.Create;
+  try
+    TextCanvas.Control := FFenEdit;
+    TextCanvas.Font.Assign(FFenEdit.Font);
+    ColumnWidth := Max(440, TextCanvas.TextWidth(LongFEN) + 24);
+  finally TextCanvas.Free; end;
+  FFenEdit.Parent.Width := ColumnWidth;
+  ResultsWidth := 0;
+  for I := 0 to FResultsGrid.ColCount - 1 do Inc(ResultsWidth, FResultsGrid.ColWidths[I]);
+  Width := Max(Width, ColumnWidth + ResultsWidth + 64 + (Width - ClientWidth));
+end;
+
 destructor TDatabaseForm.Destroy;
 begin
+  Application.RemoveAsyncCalls(Self);
   ClearObjectList(FResults);
   FResults.Free;
   ClearObjectList(FGameInfos);

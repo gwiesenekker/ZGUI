@@ -6,7 +6,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,StdCtrls,ExtCtrls,
  uGameTree,uPreferences,uGameGuiProfile,uDraughtsPositionSetupForm;
 var Checks:Integer=0;V:TChessVariant;Main:TMainForm;F:TDatabaseForm;Browser:TPdnOpenDialog;
  Games,Results:TStringGrid;Board:TGameBoardControl;FenEdit:TEdit;Data:TStringList;
- Name,DbName,Before:string;I,ColumnGrowth:Integer;RootId:Int64;Setup:TPositionSetupForm;SetupFen:TEdit;OwnedDatabase:TDatabaseForm;Bounds:array of TRect;C:TControl;TextCanvas:TControlCanvas;
+ Name,DbName,Before:string;I,ColumnGrowth,WindowGrowth:Integer;RootId:Int64;Setup:TPositionSetupForm;SetupFen:TEdit;OwnedDatabase:TDatabaseForm;Bounds:array of TRect;C:TControl;TextCanvas:TControlCanvas;
 procedure Check(B:Boolean;const Text:string);
 begin Inc(Checks);if not B then raise Exception.Create(Text);end;
 procedure Button(Form:TForm;const Text:string);
@@ -192,14 +192,15 @@ begin
   Board:=nil;
   for I:=0 to F.ComponentCount-1 do if F.Components[I] is TGameBoardControl then
    Board:=TGameBoardControl(F.Components[I]);
-  ColumnGrowth:=0;
+  WindowGrowth:=F.Width-900;ColumnGrowth:=0;
   for I:=0 to F.ComponentCount-1 do if F.Components[I]=Board.Parent then
    ColumnGrowth:=Board.Parent.Width-(Bounds[I].Right-Bounds[I].Left);
   for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then begin
    C:=TControl(F.Components[I]);
-   if C=Board.Parent then Dec(Bounds[I].Left,ColumnGrowth)
+   if C=Board.Parent then begin Inc(Bounds[I].Left,WindowGrowth-ColumnGrowth);Inc(Bounds[I].Right,WindowGrowth);end
    else if C.Parent=Board.Parent then Inc(Bounds[I].Right,ColumnGrowth)
-   else if (C is TStringGrid) and (TStringGrid(C).ColCount=5) then Dec(Bounds[I].Right,ColumnGrowth);
+   else if (C is TStringGrid) and (TStringGrid(C).ColCount=5) then Inc(Bounds[I].Right,WindowGrowth-ColumnGrowth)
+   else if C.Align in [alTop,alBottom,alClient] then Inc(Bounds[I].Right,WindowGrowth);
    Check(EqualRect(Bounds[I],C.BoundsRect),'Only requested column width affects bounds '+IntToStr(I));
   end;
   Board:=nil;Games:=nil;Results:=nil;FenEdit:=nil;
@@ -215,7 +216,15 @@ begin
    TextCanvas.Control:=FenEdit;TextCanvas.Font.Assign(FenEdit.Font);
    Check(TextCanvas.TextWidth(FenEdit.Text)+16<=FenEdit.ClientWidth,Format('Complete starting FEN fits: text=%d, client=%d',[TextCanvas.TextWidth(FenEdit.Text),FenEdit.ClientWidth]));
   finally TextCanvas.Free;end;
-  Check(Results.ClientWidth>=420,'Default continuation grid retains room for its columns');
+  Check(Results.ClientWidth>=420,Format('Continuation client=%d window=%d column=%d sum=%d',[Results.ClientWidth,F.Width,FenEdit.Parent.Width,Results.ColWidths[0]+Results.ColWidths[1]+Results.ColWidths[2]+Results.ColWidths[3]+Results.ColWidths[4]]));
+  F.Hide;FenEdit.Font.Size:=18;F.Show;Pump;
+  TextCanvas:=TControlCanvas.Create;
+  try
+   TextCanvas.Control:=FenEdit;TextCanvas.Font.Assign(FenEdit.Font);
+   Check(TextCanvas.TextWidth('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 99')+24<=FenEdit.ClientWidth,'Large edit font sizes the full representative FEN');
+  finally TextCanvas.Free;end;
+  Check(Results.ClientWidth>=420,'Font-dependent width retains continuation columns');
+  F.Hide;FenEdit.ParentFont:=True;F.Show;Pump;
   Check(Menu(F,'Import PGN...')<>nil,'Existing import action uses PGN');
   Data.Text:='[Event "First"] 1.e4 {note} e5 (1...c5 $5) *'+#10+'[Event "Second"] 1.d4 d5 *';Data.SaveToFile(Name);
   F.CreateDatabase(DbName);F.ImportPdnFile(Name);Pump;
@@ -241,7 +250,7 @@ begin
   Check(Main.ActiveGameTree.Root.NodeId=RootId,'Failed Save keeps database replacement tree');
   GuiTestConfirmationResult:=mrNo;Games.OnDblClick(Games);Check(Main.ActiveGameTree.EventName='Second','Discard loads selected database game');
   Menu(F,'Setup position...').Click;Pump;
-  Check(F.Width=900,'Existing database window layout retained');
+  Check(F.Width>=900,'Database default window fits its content');
   Setup:=nil;for I:=0 to F.ComponentCount-1 do if F.Components[I] is TPositionSetupForm then Setup:=TPositionSetupForm(F.Components[I]);
   Check(Setup<>nil,'Existing setup dialog reused');SetupFen:=nil;
   for I:=0 to Setup.ComponentCount-1 do if Setup.Components[I] is TEdit then SetupFen:=TEdit(Setup.Components[I]);

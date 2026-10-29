@@ -4,7 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Font-aware database FEN width (U20) — 2026-10-29
+
+- Measure a representative long chess FEN with the edit field's actual font once
+  handles exist, with padding and a 440-pixel minimum. Size the existing window
+  as needed to retain room for the continuation columns; no controls are added.
+- Keep draughts geometry unchanged. Extend the existing GUI check with a larger
+  edit font so coverage tests the measured fit rather than a particular font.
+- Validation: focused database GUI suite passes all 127 checks, including larger
+  fonts and retained continuation-column space. Pending sizing callbacks are
+  removed when the window is destroyed.
+
 ### Chess import logging (D9) — 2026-10-29
+
+Commit: `6edae32`.
 
 - Log and count the failing chess record before propagating a fatal import error,
   matching the existing draughts failure behavior. Keep syntax/hash conflicts
