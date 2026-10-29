@@ -878,7 +878,8 @@ Double-click a continuation row to play that move on the database miniboard and
 search the resulting position. The FEN, continuation statistics and matching
 games update together, so you can keep double-clicking to explore an opening.
 This browsing leaves your main game unchanged. After editing the FEN or applying
-position setup, click **Search** before choosing a continuation.
+position setup, click **Search** before choosing a continuation. If a stored
+continuation is illegal, it is marked `(?)` and cannot be played.
 
 The database board's context menu can copy or paste FEN and open the position
 setup window.

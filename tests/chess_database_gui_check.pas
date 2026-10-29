@@ -138,6 +138,21 @@ var Form:TDatabaseForm;Moves,GameList:TStringGrid;B:TGameBoardControl;Edit:TEdit
    FindPosition(ChessStartingFEN);Form.CreateDatabase(OtherName);OldFen:=B.Position.ToFEN;OriginalFen:=Edit.Text;
    Unchanged('Database create invalidates prior continuation association');
    Form.OpenDatabase(DatabaseName);Unchanged('Database open invalidates prior continuation association');
+   FindPosition(ChessStartingFEN);Form.SetSearchFEN('4k3/8/8/8/8/8/8/4K3 w - - 0 1');
+   Check(Moves.Cells[0,1]='','Changed board clears continuations that are now illegal');
+   Form.CreateDatabase(OtherName+'.stale');
+   Check(FileExists(OtherName+'.stale') and (Moves.Cells[0,1]=''),'Create succeeds after changed-board search results');
+   Form.OpenDatabase(DatabaseName);FindPosition(ChessStartingFEN);
+   Form.SetSearchFEN('4k3/8/8/8/8/8/8/4K3 w - - 0 1');Form.OpenDatabase(OtherName);
+   Check((Pos(ExtractFileName(OtherName),Form.Caption)>0) and (Moves.Cells[0,1]=''),'Open succeeds after changed-board search results');
+   Form.OpenDatabase(DatabaseName);FindPosition(ChessStartingFEN);
+   ExecuteDatabaseSql(DatabaseName,'update continuations set next_move=''a1a9'' where next_move=''e2e4''');
+   try
+    Form.SearchCurrentPosition;
+    Check(MoveRow(Moves,'a1a9 (?)')>0,'Invalid stored continuation has an explicit display marker');
+    OldFen:=B.Position.ToFEN;DoubleClickCell(Moves,0,MoveRow(Moves,'a1a9 (?)'));
+    Check(B.Position.ToFEN=OldFen,'Invalid displayed continuation cannot execute');
+   finally ExecuteDatabaseSql(DatabaseName,'update continuations set next_move=''e2e4'' where next_move=''a1a9''');end;
    FindPosition(ChessStartingFEN);
    ExecuteDatabaseSql(DatabaseName,'alter table positions rename to unavailable_positions');
    try
@@ -160,7 +175,7 @@ var Form:TDatabaseForm;Moves,GameList:TStringGrid;B:TGameBoardControl;Edit:TEdit
    Advance('32-28','32-28');Check(Moves.Cells[0,1]='18-23','Draughts searches next continuation');Advance('18-23','18-23');
   finally
    Application.RemoveAsyncCalls(Probe);Probe.Free;Expected.Free;Form.Free;RegisterDefaultGameVariant(V);Text.Free;
-   DeleteFile(FileName);DeleteFile(DatabaseName);DeleteFile(OtherName);DeleteFile(DatabaseName+'.draughts');DeleteFile(ChangeFileExt(FileName,'.import.log'));
+   DeleteFile(FileName);DeleteFile(DatabaseName);DeleteFile(OtherName);DeleteFile(OtherName+'.stale');DeleteFile(DatabaseName+'.draughts');DeleteFile(ChangeFileExt(FileName,'.import.log'));
   end;
  end;
 begin

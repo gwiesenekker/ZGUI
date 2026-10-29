@@ -4,7 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Database stale-result display (U19) — 2026-10-29
+
+- Clear old continuations after a successful database Open/Create, when the
+  search board changes, after accepted setup and before import. Rendering stale
+  moves can no longer turn a successful database switch into an apparent failure.
+- Display an illegal stored chess continuation as its raw move with `(?)`;
+  retain the existing legality guard so it cannot execute. Keep the existing
+  controls, queries, scratch position and game-loading behavior.
+- Validation: application build and all 125 database GUI checks pass, including
+  Open/Create after a changed board and invalid stored-move display/activation.
+
 ### PGN collection recovery (P15) — 2026-10-29
+
+Commit: `15c9443`.
 
 - Use the existing browser's column-one tag-prefix recovery boundary for streaming
   imports too. A broken comment or variation rejects its own game instead of

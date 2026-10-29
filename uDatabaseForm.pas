@@ -55,6 +55,7 @@ type
     procedure BoardCopyFenClick(Sender: TObject);
     procedure BoardPasteFenClick(Sender: TObject);
     procedure ClearObjectList(AList: TList);
+    procedure ClearSearchResults;
     function CurrentGameFilterDescription: string;
     procedure FormCloseHandler(Sender: TObject; var CloseAction: TCloseAction);
     procedure GamesGridDblClick(Sender: TObject);
@@ -452,20 +453,18 @@ procedure TDatabaseForm.CreateDatabase(const AFileName: string);
 begin
   if FImportBusy then Exit;
   FDatabase.CreateDatabase(AFileName);
-  FResultsFEN := '';
+  ClearSearchResults;
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
-  PopulateResultsGrid;
 end;
 
 procedure TDatabaseForm.OpenDatabase(const AFileName: string);
 begin
   if FImportBusy then Exit;
   FDatabase.OpenDatabase(AFileName);
-  FResultsFEN := '';
+  ClearSearchResults;
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
-  PopulateResultsGrid;
 end;
 
 procedure TDatabaseForm.SetSearchFEN(const AFEN: string);
@@ -715,6 +714,13 @@ begin
   end;
 end;
 
+procedure TDatabaseForm.ClearSearchResults;
+begin
+  FResultsFEN := '';
+  ClearObjectList(FResults);
+  PopulateResultsGrid;
+end;
+
 procedure TDatabaseForm.PopulateResultsGrid;
 var
   Item: TDatabaseSearchResult;
@@ -737,7 +743,7 @@ begin
     Item := TDatabaseSearchResult(FResults[Row - 1]);
     if FProfile.FileFormat=gffPgn then begin
       if FBoard.IsLegal(Item.MoveText) then FResultsGrid.Cells[0,Row]:=FBoard.MoveNotation(Item.MoveText)
-      else raise EConvertError.Create('Invalid stored chess continuation: '+Item.MoveText);
+      else FResultsGrid.Cells[0,Row] := Item.MoveText + ' (?)';
     end else FResultsGrid.Cells[0, Row] := Item.MoveText;
     FResultsGrid.Cells[1, Row] := IntToStr(Item.GameCount);
     FResultsGrid.Cells[2, Row] := IntToStr(Item.Wins);
@@ -747,8 +753,11 @@ begin
 end;
 
 procedure TDatabaseForm.UpdateBoardFromFen;
+var OldFEN: string;
 begin
+  OldFEN := FBoard.ToFEN;
   FBoard.LoadFromFEN(Trim(FFenEdit.Text));
+  if FBoard.ToFEN <> OldFEN then ClearSearchResults;
   FFenEdit.Text := FBoard.ToFEN;
   FBoardControl.SetPosition(FBoard);
   FBoardControl.Invalidate;
@@ -859,7 +868,7 @@ procedure TDatabaseForm.SetupPositionAccepted(Sender: TObject; const AFEN: strin
 begin
   if FProfile.FileFormat=gffPgn then begin
     AAccepted:=False;
-    try FBoard.LoadFromFEN(AFEN);FFenEdit.Text:=FBoard.ToFEN;FBoardControl.SetPosition(FBoard);AAccepted:=True;
+    try FBoard.LoadFromFEN(AFEN);ClearSearchResults;FFenEdit.Text:=FBoard.ToFEN;FBoardControl.SetPosition(FBoard);AAccepted:=True;
     except on E:Exception do ShowGuiOkDialog(Self,'Database','Invalid FEN: '+E.Message);end;
     Exit;
   end;
@@ -901,7 +910,7 @@ begin
   if FImportBusy then Exit;
   DatabaseName := FDatabase.FileName;
   if DatabaseName = '' then raise EInvalidOperation.Create('No database is open');
-  FResultsFEN := '';
+  ClearSearchResults;
   FImportFileName := AFileName;
   FImportCancel := False;
   FImportFailure := '';
