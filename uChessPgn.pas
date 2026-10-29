@@ -2,25 +2,54 @@ unit uChessPgn;
 {$mode objfpc}{$H+}
 interface
 uses Classes, SysUtils, uChessPgnLexer, uGameTreeActor, uGamePosition,
-  uGameFileReader;
+  uGameFileReader, uGameFileMetadata;
 const MaxPgnGameBytes=16*1024*1024;
 type
+  // Lightweight, caller-owned output of the existing PGN grammar. No game tree
+  // or typed annotations are constructed. PositionKeys.Count=Moves.Count+1.
+  TChessPgnDatabaseGame = class
+  public
+    Tags: TGameFileTags;
+    StartingFEN, ResultText, CompletePgn: string;
+    Moves, PositionKeys: TStringList;
+    constructor Create;
+    destructor Destroy; override;
+  end;
+  // Text is borrowed for this callback only; an oversized record has ErrorText
+  // instead. Syntax errors belong to the parser/caller, IO failures propagate.
+  TChessPgnScanGameEvent = procedure(const Text, ErrorText: string;
+    BytesRead, TotalBytes: Int64; var Cancel: Boolean) of object;
+  TChessPgnScanProgressEvent = procedure(BytesRead, TotalBytes: Int64;
+    var Cancel: Boolean) of object;
   TChessPgnReader = class(TGameFileReader)
   private
     FVariant: TGameVariant; // borrowed
+    procedure Scan(const FileName: string; Collect: Boolean;
+      OnGame: TChessPgnScanGameEvent; OnProgress: TChessPgnScanProgressEvent);
   public
     constructor Create(AVariant: TGameVariant);
     procedure OpenFile(const FileName: string); override;
+    // Same scanner, one record in flight, cancellable at each 64 KiB block.
+    // Does not populate or alter Entries. Stops rather than guessing a boundary
+    // inside an unterminated comment/string/variation.
+    procedure ScanFile(const FileName: string; OnGame: TChessPgnScanGameEvent;
+      OnProgress: TChessPgnScanProgressEvent = nil);
   end;
 // Parse into a disposable existing tree first, then replay the immutable text
 // into the target actor. No IO or grammar/rules validation is deferred to UI.
 procedure ImportChessPgn(const Text: string; Actor: TGameTreeActor; Warnings: TStrings);
+function ReadChessPgnDatabaseGame(const Text: string; Variant: TGameVariant;
+  Warnings: TStrings = nil): TChessPgnDatabaseGame;
 function PgnUtf8(const Bytes: string; out Converted: Boolean): string;
 function PgnTournamentFileMatchesId(const FileName,Id:string):Boolean;
 implementation
-uses SHA1, StrUtils, uChessPosition, uGameTree, uGameTreeBuilder, uGameFileMetadata,
+uses SHA1, StrUtils, uChessPosition, uGameTree, uGameTreeBuilder,
   uGameTreeNodeData, uChessPgnAnnotations, uGameOrchestrator;
 var ImportSequence: QWord=0;
+constructor TChessPgnDatabaseGame.Create;
+begin inherited Create; Moves:=TStringList.Create; PositionKeys:=TStringList.Create; end;
+destructor TChessPgnDatabaseGame.Destroy;
+begin PositionKeys.Free; Moves.Free; inherited; end;
 function PgnUtf8(const Bytes: string; out Converted: Boolean): string;
 const CP: array[0..31] of Word=($20AC,$0081,$201A,$0192,$201E,$2026,$2020,$2021,
   $02C6,$2030,$0160,$2039,$0152,$008D,$017D,$008F,$0090,$2018,$2019,$201C,$201D,
@@ -74,18 +103,45 @@ type
   private
     L: TChessPgnLexer; T: TPgnToken; A: TGameTreeActor; W: TStrings;
     Tags: TGameFileTags; Header: TGameTreeHeaderInput;
+    Variant: TGameVariant; DatabaseGame: TChessPgnDatabaseGame;
+    TokenOutput: TStringStream; LastWritten: TPgnTokenKind;
+    procedure WriteToken;
     procedure Next;
     procedure Fail(const Msg: string);
     procedure Execute(C: TGameTreeCommand);
     procedure Store(Node: TGameTreePlyNode; const Data: TGameTreeNodeData);
     procedure Line(Parent: TGameTreePlyNode; Position: TGamePosition; Depth: Integer);
   public
-    constructor Create(const Text: string; Actor: TGameTreeActor; Warnings: TStrings);
+    constructor Create(const Text: string; Actor: TGameTreeActor; Warnings: TStrings;
+      ADatabaseGame: TChessPgnDatabaseGame = nil; AVariant: TGameVariant = nil);
     destructor Destroy; override;
     procedure Parse;
   end;
+procedure TPgnParser.WriteToken;
+var S: string;
+begin
+  if (TokenOutput=nil) or (T.Kind=ptEnd) then Exit;
+  case T.Kind of
+    ptString: S:='"'+PgnQuoteTag(T.Text)+'"';
+    ptComment: begin
+      // Preserve literal comment whitespace. The display/file exporter also
+      // indents column-one '['/'%' for its browser recovery boundary; the
+      // strict database scanner does not need that display transformation.
+      if Pos('}',T.Text)>0 then S:=PgnBraceComment(T.Text)
+      else S:='{'+T.Text+'}';
+    end;
+    ptNag: S:='$'+IntToStr(T.Nag);
+    else S:=T.Text;
+  end;
+  if (TokenOutput.Size>0) and not (LastWritten in [ptTagOpen,ptTagClose]) and
+    (T.Kind<>ptTagClose) then TokenOutput.WriteString(' ');
+  TokenOutput.WriteString(S);
+  if T.Kind=ptTagClose then TokenOutput.WriteString(#10);
+  if TokenOutput.Size>MaxPgnGameBytes then Fail('canonical PGN exceeds 16 MiB limit');
+  LastWritten:=T.Kind;
+end;
 procedure TPgnParser.Next;
-begin T:=L.NextToken; end;
+begin WriteToken; T:=L.NextToken; end;
 procedure TPgnParser.Fail(const Msg: string);
 begin raise EPgnSyntaxError.CreateFmt('PGN line %d, column %d: %s',[T.Line,T.Column,Msg]); end;
 procedure TPgnParser.Execute(C: TGameTreeCommand);
@@ -94,16 +150,20 @@ begin
 end;
 procedure TPgnParser.Store(Node: TGameTreePlyNode; const Data: TGameTreeNodeData);
 begin Execute(A.CreateRestoreNodeDataCommand(Node.NodeId,Data)); end;
-constructor TPgnParser.Create(const Text: string; Actor: TGameTreeActor; Warnings: TStrings);
+constructor TPgnParser.Create(const Text: string; Actor: TGameTreeActor; Warnings: TStrings;
+  ADatabaseGame: TChessPgnDatabaseGame; AVariant: TGameVariant);
 var Converted: Boolean;
 begin
-  inherited Create; A:=Actor; W:=Warnings;
+  inherited Create; A:=Actor; W:=Warnings; DatabaseGame:=ADatabaseGame;
+  if A<>nil then Variant:=A.GameTree.Variant else Variant:=AVariant;
+  if Variant=nil then raise EArgumentException.Create('PGN parser requires a variant');
+  if DatabaseGame<>nil then TokenOutput:=TStringStream.Create('');
   if Length(Text)>MaxPgnGameBytes then raise EPgnSyntaxError.Create('PGN game exceeds 16 MiB limit');
   L:=TChessPgnLexer.Create(PgnWhitespace(PgnUtf8(Text,Converted)));
   if Converted and (W<>nil) then W.Add('Legacy CP1252 text converted to UTF-8');
 end;
 destructor TPgnParser.Destroy;
-begin L.Free; inherited; end;
+begin TokenOutput.Free; L.Free; inherited; end;
 procedure TPgnParser.Parse;
 var Name,Value,Fen,Setup: string; Tag: TGameFileTag; I: Integer; Posn: TGamePosition;
 begin
@@ -119,11 +179,11 @@ begin
   Fen:=GameFileTagValue(Tags,'FEN',''); Setup:=GameFileTagValue(Tags,'SetUp','0');
   if not ((Setup='0') or (Setup='1')) then Fail('SetUp must be 0 or 1');
   if ((Setup='1') and (Fen='')) or ((Fen<>'') and (Setup<>'1')) then Fail('FEN requires SetUp "1"');
-  if Fen='' then Fen:=A.GameTree.Variant.DefaultStartingFEN;
-  try Posn:=A.GameTree.Variant.CreatePositionFromFEN(Fen);
+  if Fen='' then Fen:=Variant.DefaultStartingFEN;
+  try Posn:=Variant.CreatePositionFromFEN(Fen);
   except on E:Exception do begin Fail('invalid FEN: '+E.Message); Exit; end; end;
   try
-    Inc(ImportSequence);
+    if A<>nil then Inc(ImportSequence);
     Header:=GameTreeHeaderInput('pgn:'+IntToStr(ImportSequence),GameFileTagValue(Tags,'Event','?'),
       GameFileTagValue(Tags,'White','?'),GameFileTagValue(Tags,'Black','?'),
       GameFileTagValue(Tags,'Result','*'),Posn.ToFEN,False,DefaultTimeControl);
@@ -133,15 +193,29 @@ begin
       (Tag.Name<>'Result') and (Tag.Name<>'FEN') and (Tag.Name<>'SetUp') then begin
       SetLength(Header.ExtraTags,Length(Header.ExtraTags)+1); Header.ExtraTags[High(Header.ExtraTags)]:=Tag;
     end;
-    Execute(A.CreateRebuildFromInputsCommand(Header,GameTreeMainlineInput(nil,nil,False,0,0,0,0),
-      GameTreePvInput(False,0,'',''),GameTreePvInput(False,0,'','')));
-    Line(A.GameTree.Root,Posn,0);
+    if A<>nil then begin
+      Execute(A.CreateRebuildFromInputsCommand(Header,GameTreeMainlineInput(nil,nil,False,0,0,0,0),
+        GameTreePvInput(False,0,'',''),GameTreePvInput(False,0,'','')));
+      Line(A.GameTree.Root,Posn,0);
+    end else begin
+      DatabaseGame.StartingFEN:=Posn.ToFEN;
+      Line(nil,Posn,0);
+      DatabaseGame.PositionKeys.Add(Posn.PositionKey);
+    end;
     if T.Kind<>ptResult then Fail('missing game termination marker');
     if GameFileTagValue(Tags,'Result',T.Text)<>T.Text then Fail('Result tag and termination marker disagree');
-    Header.ResultText:=T.Text; Execute(A.CreateSetHeaderCommand(Header)); Next;
+    Header.ResultText:=T.Text;
+    if A<>nil then Execute(A.CreateSetHeaderCommand(Header));
+    Next;
     // Post-result comments belong to the next game or are ignored by collections.
     while T.Kind=ptComment do Next;
     if T.Kind<>ptEnd then Fail('unexpected data after game result');
+    if DatabaseGame<>nil then begin
+      DatabaseGame.Tags:=CopyGameFileTags(Tags); DatabaseGame.ResultText:=Header.ResultText;
+      DatabaseGame.CompletePgn:=TokenOutput.DataString+#10;
+      if Length(DatabaseGame.CompletePgn)>MaxPgnGameBytes then
+        Fail('canonical PGN exceeds 16 MiB limit');
+    end;
   finally Posn.Free; end;
 end;
 procedure TPgnParser.Line(Parent: TGameTreePlyNode; Position: TGamePosition; Depth: Integer);
@@ -155,20 +229,22 @@ begin
     while not (T.Kind in [ptEnd,ptVariationClose,ptResult]) do begin
       case T.Kind of
         ptComment: begin
-          D:=Node.NodeData;
-          if First and (Depth>0) then begin
-            D:=Default(TGameTreeNodeData); D.BeforeCommentText:=Leading;
-            ReadPgnComment(T.Text,Position.SideToMove,D,True); Leading:=D.BeforeCommentText;
-          end else begin ReadPgnComment(T.Text,Node.SideToMove,D); Store(Node,D); end;
-          Next;
+          if A<>nil then begin
+            D:=Node.NodeData;
+            if First and (Depth>0) then begin
+              D:=Default(TGameTreeNodeData); D.BeforeCommentText:=Leading;
+              ReadPgnComment(T.Text,Position.SideToMove,D,True); Leading:=D.BeforeCommentText;
+            end else begin ReadPgnComment(T.Text,Node.SideToMove,D); Store(Node,D); end;
+          end; Next;
         end;
         ptInteger,ptPeriod: Next;
         ptNag: begin
           if First then Fail('NAG without a preceding move');
-          D:=Node.NodeData; Found:=False;
-          for N in D.Nags do if N=T.Nag then Found:=True;
-          if not Found then begin SetLength(D.Nags,Length(D.Nags)+1); D.Nags[High(D.Nags)]:=T.Nag; Store(Node,D); end;
-          Next;
+          if A<>nil then begin
+            D:=Node.NodeData; Found:=False;
+            for N in D.Nags do if N=T.Nag then Found:=True;
+            if not Found then begin SetLength(D.Nags,Length(D.Nags)+1); D.Nags[High(D.Nags)]:=T.Nag; Store(Node,D); end;
+          end; Next;
         end;
         ptVariationOpen: begin
           if First or (Before=nil) then Fail('variation without a preceding move');
@@ -187,27 +263,33 @@ begin
           Position.MoveSquares(Move,FromSq,ToSq);
           LastEp:=(Abs(TChessPosition(Position).PieceAt(FromSq))=1) and
             (FromSq mod 8<>ToSq mod 8) and (TChessPosition(Position).PieceAt(ToSq)=0);
-          Caption:=Position.MoveNotation(Move); Existing:=A.GameTree.FindChildByMove(Node,Move);
-          if Position.SideToMove=gsBlack then Caption:='... '+Caption else Caption:='. '+Caption;
-          if (Existing<>nil) and (W<>nil) then W.Add('Repeated variation '+IntToStr(A.GameTree.Variant.StartingMoveNumberFromFEN(Position.ToFEN))+Caption+' merged');
-          if Depth=0 then C:=A.CreateAppendMainlineMoveCommand(Move,gmsUnknown)
-          else C:=A.CreateImportNodeCommand(Node.NodeId,Move,'');
-          try
-            A.ExecuteCommand(C); if not C.Accepted then Fail(C.ErrorText); Id:=C.CreatedNodeId;
-          finally C.Free; end;
-          Previous:=Node; Node:=A.GameTree.FindNodeById(Id);
-          D:=Node.NodeData;
-          if Leading<>'' then begin
-            if D.BeforeCommentText<>'' then D.BeforeCommentText+=#10;
-            D.BeforeCommentText+=Leading; Leading:='';
+          if A<>nil then begin
+            Caption:=Position.MoveNotation(Move); Existing:=A.GameTree.FindChildByMove(Node,Move);
+            if Position.SideToMove=gsBlack then Caption:='... '+Caption else Caption:='. '+Caption;
+            if (Existing<>nil) and (W<>nil) then W.Add('Repeated variation '+IntToStr(A.GameTree.Variant.StartingMoveNumberFromFEN(Position.ToFEN))+Caption+' merged');
+            if Depth=0 then C:=A.CreateAppendMainlineMoveCommand(Move,gmsUnknown)
+            else C:=A.CreateImportNodeCommand(Node.NodeId,Move,'');
+            try
+              A.ExecuteCommand(C); if not C.Accepted then Fail(C.ErrorText); Id:=C.CreatedNodeId;
+            finally C.Free; end;
+            Previous:=Node; Node:=A.GameTree.FindNodeById(Id);
+            D:=Node.NodeData;
+            if Leading<>'' then begin
+              if D.BeforeCommentText<>'' then D.BeforeCommentText+=#10;
+              D.BeforeCommentText+=Leading; Leading:='';
+            end;
+            // Inherit the other side's clock only; PGN clock commands describe
+            // the side that just moved, never a game-running clock authority.
+            if Existing=nil then begin
+              D.WhiteRemainingSeconds:=Previous.NodeData.WhiteRemainingSeconds;
+              D.BlackRemainingSeconds:=Previous.NodeData.BlackRemainingSeconds;
+            end;
+            Store(Node,D);
+          end else if Depth=0 then begin
+            DatabaseGame.PositionKeys.Add(Position.PositionKey);
+            DatabaseGame.Moves.Add(Move);
           end;
-          // Inherit the other side's clock only; PGN clock commands describe
-          // the side that just moved, never a game-running clock authority.
-          if Existing=nil then begin
-            D.WhiteRemainingSeconds:=Previous.NodeData.WhiteRemainingSeconds;
-            D.BlackRemainingSeconds:=Previous.NodeData.BlackRemainingSeconds;
-          end;
-          Store(Node,D); FreeAndNil(Before); Before:=Position.Clone;
+          FreeAndNil(Before); Before:=Position.Clone;
           Position.PlayMove(Move); First:=False; Next;
         end;
         else Fail('unexpected token '+T.Text);
@@ -229,6 +311,18 @@ begin
   Candidate:=TGameTreeActor.Create(TGameTree.Create(Actor.GameTree.Variant),True);
   try ParseText(Text,Candidate,Warnings); finally Candidate.Free; end;
   ParseText(Text,Actor,nil);
+end;
+function ReadChessPgnDatabaseGame(const Text: string; Variant: TGameVariant;
+  Warnings: TStrings): TChessPgnDatabaseGame;
+var P: TPgnParser;
+begin
+  if not (Variant is TChessVariant) then
+    raise EArgumentException.Create('Chess PGN database output requires a chess variant');
+  Result:=TChessPgnDatabaseGame.Create;
+  try
+    P:=TPgnParser.Create(Text,nil,Warnings,Result,Variant);
+    try P.Parse; finally P.Free; end;
+  except Result.Free; raise; end;
 end;
 type
   TPgnEntry = class(TGameFileEntry)
@@ -273,7 +367,17 @@ end;
 constructor TChessPgnReader.Create(AVariant: TGameVariant);
 begin inherited Create; FVariant:=AVariant; end;
 procedure TChessPgnReader.OpenFile(const FileName: string);
+begin Entries.Clear; Scan(FileName,True,nil,nil); end;
+procedure TChessPgnReader.ScanFile(const FileName: string; OnGame:TChessPgnScanGameEvent;
+  OnProgress:TChessPgnScanProgressEvent);
+begin
+  if not Assigned(OnGame) then raise EArgumentException.Create('PGN scan requires a callback');
+  Scan(FileName,False,OnGame,OnProgress);
+end;
+procedure TChessPgnReader.Scan(const FileName: string; Collect:Boolean;
+  OnGame:TChessPgnScanGameEvent; OnProgress:TChessPgnScanProgressEvent);
 var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
+  Cancel:Boolean; TotalBytes:Int64;
   Posn,Start: Int64; C: Char; HeaderBytes,Symbol: string;
   Brace,Quote,Escape,LineComment,Tag,ColumnOne,Body,HadTag: Boolean;
   procedure Reset;
@@ -283,10 +387,19 @@ var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
     Tag:=False; ColumnOne:=True; Body:=False; HadTag:=False;
   end;
   procedure Finish;
-  var Entry: TPgnEntry; L: TChessPgnLexer; T: TPgnToken; Name: string; Converted: Boolean; Seen:TStringList;
+  var Text,ErrorText:string; Entry: TPgnEntry; L: TChessPgnLexer; T: TPgnToken; Name: string; Converted: Boolean; Seen:TStringList;
   begin
     if not (Body or HadTag) then begin Start:=Posn; Reset; Exit; end;
     Entry:=TPgnEntry.Create; Entry.FileName:=FileName; Entry.Offset:=Start; Entry.Size:=Posn-Start;
+    if not Collect then begin
+      try
+        ErrorText:='';Text:='';
+        if Entry.Size>MaxPgnGameBytes then ErrorText:='PGN game exceeds 16 MiB limit'
+        else Text:=Entry.Text;
+        OnGame(Text,ErrorText,Posn,TotalBytes,Cancel);
+      finally Entry.Free; end;
+      Start:=Posn;Reset;Exit;
+    end;
     Entry.Variant:=FVariant; Entry.Deferred:=True; Entry.WhiteName:='?'; Entry.BlackName:='?'; Entry.EventName:='?'; Entry.ResultText:='*';
     // Only the bounded header prefix is decoded/lexed for listing. Move bytes
     // remain in the file and are read for the selected entry alone.
@@ -331,18 +444,24 @@ var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
   function IsResult: Boolean;
   begin Result:=(Symbol='*') or (Symbol='1-0') or (Symbol='0-1') or (Symbol='1/2-1/2'); end;
 begin
-  Entries.Clear; Start:=0; Posn:=0; Reset;
+  Start:=0; Posn:=0; Cancel:=False; Reset;
   F:=TFileStream.Create(FileName,fmOpenRead or fmShareDenyWrite);
   try
+    TotalBytes:=F.Size;
+    if Assigned(OnProgress) then OnProgress(0,TotalBytes,Cancel);
+    if Cancel then Exit;
     repeat
       Count:=F.Read(Buffer,SizeOf(Buffer));
       for I:=0 to Count-1 do begin
         C:=Chr(Buffer[I]);
-        // A fresh tag line is the collection recovery boundary, even when
-        // the preceding entry has an unclosed comment/string/variation.
-        if (C='[') and ColumnOne and Body and StartsTagLine then Finish
+        // Preserve the browser recovery boundary. Streaming mode only splits
+        // outside structural text; it never guesses at a header in a comment.
+        if (C='[') and ColumnOne and Body and
+          (Collect or (not Brace and not Quote and not LineComment and not Tag and (Depth=0)))
+          and StartsTagLine then Finish
         else if not Brace and not Quote and not LineComment and not Tag and (Depth=0) and
           not (C in ['0'..'9','a'..'z','A'..'Z','/','-','*']) and IsResult then Finish;
+        if Cancel then Exit;
         Inc(Posn);
         if not Body and (Length(HeaderBytes)<1024*1024) then HeaderBytes+=C;
         if (Posn=3) and (HeaderBytes=#$EF#$BB#$BF) then begin ColumnOne:=True; Continue; end;
@@ -364,6 +483,8 @@ begin
         end;
         ColumnOne:=C in [#10,#13];
       end;
+      if Assigned(OnProgress) then OnProgress(Posn,TotalBytes,Cancel);
+      if Cancel then Exit;
     until Count=0;
     Finish;
   finally F.Free; end;

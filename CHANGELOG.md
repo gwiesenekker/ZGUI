@@ -4,7 +4,33 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed PGN database-output milestone (F4) — 2026-10-29
+
+- Extend the existing PGN scanner with per-game callbacks and 64 KiB progress /
+  cancellation checks, retaining browser collection/recovery behavior. Streaming
+  retains one record, reports oversized games without loading them, and avoids
+  guessed boundaries inside comments, strings and variations.
+- Add a database-output mode to the existing recursive PGN grammar: validate
+  once, preserve complete token-based PGN/tags/comments/NAGs/RAVs, and emit UCI
+  mainline moves plus initial-through-terminal position keys. Construct no game
+  tree or typed annotation model. Reuse the renderer's extracted tag quoting.
+- Add 2,903 focused checks, an independent PGN-output oracle, a benchmark runner
+  and reproducible CC0 full-game corpus preparation/provenance. The 100k-game
+  corpus averages 90.7 plies and contains 7,642 annotated games.
+- Validation: application builds, full headless regression and all eight GTK
+  suites pass. The independent output oracle passes 80 games / 3,650 nodes.
+- Measure 100,000 games / 9,070,786 plies before SQLite in 213.259 seconds:
+  468.91 games/sec and 2,848 KiB peak RSS. A scanner-only million-record run peaks
+  at 2,316 KiB. Record raw results in testdata/benchmarks. These are parser-stage
+  results, not database import throughput.
+- Choose the reviewed F4 alternative of a 250 games/sec end-to-end import gate;
+  defer a move-generator rewrite. Follow the requested parser-first sequence:
+  database schema/adapters/GUI integration remain next, with gfDatabase disabled
+  until full-import performance and cross-format/recovery acceptance pass.
+
 ### Reviewed FEN error wording (U18) — 2026-10-29
+
+Commit: `26428dd`.
 
 - Raise the specific reason from the chess FEN validator, allowing existing
   callers to supply their single "Invalid FEN:" prefix. Draughts wording and

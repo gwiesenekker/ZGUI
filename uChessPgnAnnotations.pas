@@ -8,8 +8,14 @@ procedure ReadPgnComment(const Text: string; Side: TGameSide;
 function PgnNodeComment(const Data: TGameTreeNodeData; Side: TGameSide;
   ShowScore, ShowClocks, Lossless: Boolean): string;
 function PgnBraceComment(const Text: string): string;
+function PgnQuoteTag(const Text: string): string;
 implementation
 uses Classes, Math, StrUtils;
+function PgnQuoteTag(const Text: string): string;
+begin
+  Result:=StringReplace(Text,'\','\\',[rfReplaceAll]);
+  Result:=StringReplace(Result,'"','\"',[rfReplaceAll]);
+end;
 function PgnBraceComment(const Text: string): string;
 var S: string; I: Integer;
 begin

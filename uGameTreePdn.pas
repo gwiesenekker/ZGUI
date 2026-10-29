@@ -806,8 +806,7 @@ var
   const Roster: array[0..6] of string=('Event','Site','Date','Round','White','Black','Result');
   function Quote(const S: string): string;
   begin
-    Result:=StringReplace(S,'\','\\',[rfReplaceAll]);
-    Result:=StringReplace(Result,'"','\"',[rfReplaceAll]);
+    Result:=PgnQuoteTag(S);
   end;
 begin
   Result := '';
