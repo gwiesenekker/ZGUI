@@ -14,6 +14,7 @@ type
     FSearching,FFaulted,FExpectUci,FExpectReady: Boolean;
     FStartedTick: QWord;
     FGameMode,FHasClock,FForcePonderOff,FStoppingPonder: Boolean;
+    FInfiniteSearch:Boolean; // Live annotation, separate from timed/clocked searches.
     FClock,FPonderClock: TEngineGameClockState;
     FPonderActive,FHasPending: Boolean;
     FPendingRoot,FSearchRoot,FSearchMoves,FNextReply: string;
@@ -35,7 +36,7 @@ type
     function Initialize: Boolean;
     procedure SendOptions;
     procedure StopCurrentSearch(WaitLimitMs: Integer=-1);
-    procedure StartSearch;
+    procedure StartSearch(Infinite:Boolean=False);
     procedure Poll;
     procedure ApplyPosition(const Fen: string; Moves: TStrings);
     procedure RequireReady;
@@ -317,7 +318,7 @@ begin
     while FWorker.TakeReceivedLine('bestmove',Line) do ;
     if Root=ChessStartingFEN then Line:='position startpos' else Line:='position fen '+Root;
     Line+=' moves'; for I:=0 to MovesPlayed.Count-1 do Line+=' '+MovesPlayed[I];
-    FWorker.SendLine(Line); FBestMove:=''; FPonderActive:=True; FSearching:=True;
+    FWorker.SendLine(Line); FBestMove:=''; FPonderActive:=True;FSearching:=True;FInfiniteSearch:=False;
     FWorker.SendLine(ClockGo(Clock,True)); Log('ponder started');
   finally Trial.Free; end;
 end;
@@ -361,7 +362,7 @@ begin
     ' winc '+UciMilliseconds(Clock.Increment[gsWhite])+' binc '+UciMilliseconds(Clock.Increment[gsBlack]);
   if Clock.MovesRemaining>0 then Result+=' movestogo '+IntToStr(Clock.MovesRemaining);
 end;
-procedure TUciEngine.StartSearch;
+procedure TUciEngine.StartSearch(Infinite:Boolean);
 var Line: string; I: Integer;
 begin
   RequireReady; StopCurrentSearch;
@@ -373,8 +374,9 @@ begin
   if StartingFEN=ChessStartingFEN then Line:='position startpos' else Line:='position fen '+StartingFEN;
   if MovesPlayed.Count>0 then begin Line+=' moves'; for I:=0 to MovesPlayed.Count-1 do Line+=' '+MovesPlayed[I]; end;
   FSearchRoot:=StartingFEN; FSearchMoves:=MovesPlayed.Text; FNextReply:='';
-  FWorker.SendLine(Line); FBestMove:=''; FSearching:=True; FStartedTick:=GetTickCount64;
-  if FGameMode then begin
+  FWorker.SendLine(Line); FBestMove:=''; FSearching:=True;FInfiniteSearch:=Infinite;FStartedTick:=GetTickCount64;
+  if Infinite then Line:='go infinite'
+  else if FGameMode then begin
     Line:=ClockGo(FClock,False);
     FHasClock:=False;
   end else Line:='go movetime '+IntToStr(FDurationMs);
@@ -409,7 +411,7 @@ begin
   if not WorkerStopping then begin
     if not FWorker.Process.IsRunning then begin Fault('UCI process exited'); raise EInvalidOperation.Create(LastError); end;
     if FFaulted then raise EInvalidOperation.Create(LastError);
-    if FSearching and not FPonderActive and (GetTickCount64-FStartedTick>QWord(SearchWaitMs)) then begin
+    if FSearching and not FPonderActive and not FInfiniteSearch and (GetTickCount64-FStartedTick>QWord(SearchWaitMs)) then begin
       Fault('UCI search exceeded its finite budget'); FWorker.StopProcess; raise EInvalidOperation.Create(LastError);
     end;
   end;
@@ -507,7 +509,7 @@ begin
       try Accepted(C.Text,C.Moves,C.Clock);
       except on E:Exception do Fault('Ponder setup failed: '+E.Message); end;
     end;
-    ucAnalyze:StartSearch;
+    ucAnalyze:begin FGameMode:=False;FHasClock:=False;StartSearch(True);end;
     ucThink:C.StringResult:=inherited StartThinking;
     ucPoll:Poll;
     ucStopSearch:StopCurrentSearch;

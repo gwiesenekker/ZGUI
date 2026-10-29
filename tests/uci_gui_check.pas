@@ -23,9 +23,9 @@ procedure Check(Value: Boolean; const Text: string);
 begin Inc(Checks); if not Value then raise Exception.Create(Text); end;
 procedure Fake;
 var Line,Move,Fen: string; P: TChessPosition; L: TStringList; I,N: Integer;
-  Active,FirstSearch:Boolean;Trace:TextFile;Tracing:Boolean;
+  Active:Boolean;Trace:TextFile;Tracing:Boolean;
 begin
-  P:=TChessPosition.Create; L:=TStringList.Create; Move:='e2e4';Active:=False;FirstSearch:=True;
+  P:=TChessPosition.Create; L:=TStringList.Create; Move:='e2e4';Active:=False;
   Tracing:=(ParamStr(2)='autoplay') and (ParamStr(3)<>'');
   if Tracing then begin AssignFile(Trace,ParamStr(3));Rewrite(Trace);end;
   try
@@ -52,8 +52,8 @@ begin
         WriteLn('bestmove '+Move);Active:=False;
       end else if Copy(Line,1,3)='go ' then begin
         if ParamStr(2)='autoplay' then begin
-          if FirstSearch then begin
-            FirstSearch:=False;Active:=True;WriteLn('info depth 2 score cp 35 pv '+Move);
+          if Line='go infinite' then begin
+            Active:=True;WriteLn('info depth 2 score cp 35 pv '+Move);
           end else begin
             // Deliberately differ from the cancelled live search's bestmove.
             if P.LegalMoveCount>1 then Move:=P.LegalMove(1);
@@ -243,7 +243,7 @@ begin
     Check(Button(F,'Auto Play').Enabled,'Escape restores chess Auto Play button');
     Lines.LoadFromFile(Trace);
     Check(Pos('go movetime 1000',Lines.Text)>0,'Think-once uses configured analysis time via UCI movetime');
-    Check(Pos('go movetime',Copy(Lines.Text,Length(Wire)+1,MaxInt))>0,'Live UCI analysis resumes after Auto Play');
+    Check(Pos('go infinite',Copy(Lines.Text,Length(Wire)+1,MaxInt))>0,'Infinite live UCI analysis resumes after Auto Play');
     Escape; // Leave the Auto Play PV browsing view.
     // An already drawn position must not send a think-once request.
     Popup.OnPopup(Popup);Menu(F,'Close Annotator').Click;Tick:=GetTickCount64;

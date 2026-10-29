@@ -4,6 +4,25 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Indefinite live UCI annotation — 2026-10-29
+
+- Correct live UCI annotation to send go infinite and exclude that search from
+  the finite-search watchdog. The previous adapter incorrectly applied the
+  Auto Play time allowance to live annotation, causing Arasan to stop with
+  "UCI search exceeded its finite budget".
+- Retain configured movetime for one-shot analysis/Auto Play and the existing
+  clock budgets for games. Position changes and cancellation still stop and
+  drain bestmove before another search; process-exit and missing-stop failures
+  remain errors. Preserve the GUI, shared runner and existing book policy.
+- Extend the existing UCI peers and GUI wire checks to cover indefinite analysis,
+  survival beyond finite allowances/watchdogs, stop acknowledgement, transitions
+  to/from timed searches, finite nonresponse and resumed go infinite after Escape.
+  Clarify the analysis-time edit's scope in the manual.
+- Validation: application build, full headless regression and all nine GTK GUI
+  suites pass. Actual Arasan passes 90 adapter checks (including continued
+  analysis beyond the former finite budget) and 110 GUI checks. Range, overflow
+  and heap checks pass; clocked-game and pondering regression checks are retained.
+
 ### Arasan annotator opening-book replies — 2026-10-29
 
 Commit: `3930073`.

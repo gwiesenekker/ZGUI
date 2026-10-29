@@ -496,9 +496,10 @@ game that requires the same engine instance.
 ### 5.2 Analysis time
 
 The edit box between **Tournament...** and **Auto Play** contains the analysis
-time in seconds. Its default is `1`. This value is used for timed annotator
-requests and Auto Play searches. A missing, invalid, or non-positive value is
-treated as one second.
+time in seconds. Its default is `1`. This value controls one-move requests such
+as Auto Play searches. A missing, invalid, or non-positive value is treated as
+one second. The live UCI annotator searches indefinitely (`go infinite`), until
+you change position or stop/close it; this edit does not limit live analysis.
 
 During UCI annotation and Auto Play, an engine's advertised `OwnBook` check
 option is temporarily disabled so it searches and reports a scored PV. Some
