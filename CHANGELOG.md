@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Chess Auto Play — 2026-10-29
 
+Commit: `08fce14`.
+
 - Enable the existing Auto Play button for stopped chess games with a UCI
   annotator. Reuse timed annotator searches, search references, PV browsing,
   Escape cancellation and typed Auto Play PV storage; keep the GUI layout.
