@@ -4,6 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Score display QA review candidate — 2026-10-29
+
+- Reproduce rejected mate scores and root/variation evaluation-bar mismatches.
+  Prepare an isolated, tested shared-display candidate for Claude's review, as
+  required by the repository policy. Production display code remains unchanged.
+- The candidate maps signed mate scores to the configured endpoints and binds
+  the existing bar to the resolved displayed node, preserving original scores,
+  mainline history, tree topology and GUI layout. Candidate build, full headless
+  regression and all nine GUI suites pass, including six added browsing checks.
+- Correct a temporary probe fixture that passed an empty engine PV and caused
+  an "engine PV was not recorded" warning. This was a probe error, not a game
+  data or engine failure; the corrected probe catches/logs errors without dialogs.
+
 ### Indefinite live UCI annotation — 2026-10-29
 
 Commit: `64c5eeb`.
