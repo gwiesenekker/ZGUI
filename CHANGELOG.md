@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reviewed chess setup and score-history preferences — 2026-10-29
 
+Commit: `abf927e`.
+
 - Implement the approved position setup adapters in the existing dialog and
   enable chess setup. Keep its outer layout and draughts palette, and fit twelve
   chess pieces into the existing palette region. Reuse board geometry, artwork,
