@@ -4,7 +4,30 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Chess SAN parsing and revised database design — 2026-10-29
+
+- Filter legal SAN candidates by piece and destination before using the existing
+  formatter for final matching. Skip check/mate suffix calculation when input
+  omits it; keep coordinate moves, castling, promotions and disambiguation rules.
+- Add a reference-formatting equivalence check covering 319,542 spellings across
+  967 positions, including special moves, malformed input and suffixes. An
+  independent PGN oracle passes 80 games / 3,650 annotated variation nodes.
+- Validation: application builds, full headless regression passes, and all 3,865
+  downloaded opening records validate through the existing PGN/rules adapter.
+- On the existing 200-ply / 676-node annotated fixture, three paired optimized
+  builds measured median validate/replay times of 574 ms before and 462 ms after.
+  This is a PGN parsing improvement, not the database import acceptance result.
+- Revise the database proposal for review: P13 hashes in the existing two integer
+  key columns; U17 Date/ECO/Elo metadata; F3 a single-pass mode of the existing
+  parser without per-game trees, a fixed 100k full-game benchmark and a measured
+  500 games/sec gate. Preserve C4/C5 recovery and the existing GUI/infrastructure.
+  Shared database implementation awaits review; chess gfDatabase stays disabled.
+- Correct the port-status snapshot: C5 is already fixed in cf76b39; the pending
+  SAN optimization was not R1. FEN diagnostics were implemented separately below.
+
 ### Chess FEN diagnostics (R1) — 2026-10-29
+
+Commit: `11789a0`.
 
 - Explain rejected chess FENs at the existing validator's call sites: placement,
   king counts, side, castling, en passant, counters and piece limits. Retain the

@@ -7,6 +7,7 @@ export GWDGUI_ROOT="$ROOT_DIR"
 CHECKS=(
   position_contract_check.pas
   chess_position_check.pas
+  chess_san_parse_check.pas
   chess_pgn_lexer_check.pas
   chess_pgn_check.pas
   game_tree_variant_check.pas

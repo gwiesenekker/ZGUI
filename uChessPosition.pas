@@ -30,7 +30,7 @@ type
     FMoves: TStringList;
     FMovesValid: Boolean;
     procedure EnsureMoves;
-    function SAN(AIndex: Integer): string;
+    function SAN(AIndex: Integer; IncludeCheck:Boolean=True): string;
   public
     constructor Create;
     destructor Destroy; override;
@@ -582,7 +582,7 @@ end;
 function TChessPosition.IsLegal(const ACanonical: string): Boolean;
 begin EnsureMoves; Result := FMoves.IndexOf(ACanonical) >= 0; end;
 
-function TChessPosition.SAN(AIndex: Integer): string;
+function TChessPosition.SAN(AIndex: Integer; IncludeCheck:Boolean): string;
 var M,Other: string; F,T,P,I,OF_: Integer;
     Capture,OtherFound,SameFile,SameRank: Boolean;
     Child: TChessState; Replies: TStringList;
@@ -619,6 +619,7 @@ begin
     Result += Copy(M,3,2);
     if Length(M) = 5 then Result += '='+UpCase(M[5]);
   end;
+  if not IncludeCheck then Exit;
   Child := FState; ApplyMove(Child,M);
   if Checked(Child,Child.Turn) then
   begin
@@ -631,7 +632,8 @@ begin
 end;
 
 function TChessPosition.TryParseMove(const AText: string; out ACanonical: string): Boolean;
-var I,Found: Integer; Text,Notation: string; HasSuffix: Boolean;
+var I,Found,Piece,Target,Last,FromSq,ToSq: Integer; Text,Notation,Base: string;
+ HasSuffix,Castle: Boolean;
 begin
   ACanonical := ''; EnsureMoves;
   Text := CoordinateMove(AText);
@@ -644,10 +646,25 @@ begin
   Text := SANSpelling(AText);
   if Text = '' then Exit(False);
   HasSuffix := Text[Length(Text)] in ['+','#'];
+  // Filter by the SAN destination/piece before formatting candidates. The
+  // existing formatter remains the final authority (including disambiguation).
+  Base:=Text;if HasSuffix then Delete(Base,Length(Base),1);
+  Castle:=(Base='O-O') or (Base='O-O-O');Piece:=6;Target:=-1;
+  if not Castle then begin
+    Last:=Length(Base);
+    if (Last>=2) and (Base[Last-1]='=') then Dec(Last,2);
+    if Last<2 then Exit(False);
+    Target:=ParseSquare(Copy(Base,Last-1,2));if Target<0 then Exit(False);
+    Piece:=Pos(Base[1],PieceLetters);if Piece=0 then Piece:=1;
+  end;
   Found := -1;
   for I := 0 to FMoves.Count-1 do
   begin
-    Notation := SAN(I);
+    FromSq:=ParseSquare(Copy(FMoves[I],1,2));ToSq:=ParseSquare(Copy(FMoves[I],3,2));
+    if Abs(FState.Board[FromSq])<>Piece then Continue;
+    if Castle then begin if Abs(ToSq-FromSq)<>2 then Continue;end
+    else if ToSq<>Target then Continue;
+    Notation := SAN(I,HasSuffix);
     if not HasSuffix and (Notation[Length(Notation)] in ['+','#']) then
       Delete(Notation,Length(Notation),1);
     if Text = Notation then
