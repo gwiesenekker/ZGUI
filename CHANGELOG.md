@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Legal SAN aliases and compatible PGN storage (P14/P16) — 2026-10-29
 
+Commit: `4ac129c`.
+
 - Implement Claude's approved compatibility policy through the existing chess
   position adapter, PGN parser/token writer and database importer. Accept only
   unique legal interpretations of the documented SAN aliases; lower-case `b`
@@ -25,10 +27,16 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
   suites and application build pass. The alias oracle covers 1,075,439 spellings
   over 967 positions; python-chess agrees on 6,143 positions / 180,183 legal moves
   and 80 PGN games / 3,650 nodes. A real schema-7 fixture made by the previous
-  executable retains its rows, hashes, text, keys and metadata; new v7 writes
-  remain readable by that executable. Schema-8 aliases deduplicate while changes
+  executable retains its rows, hashes, text, keys and metadata; the fixture's new
+  legacy write remains a duplicate in that executable. Schema-8 aliases deduplicate while changes
   to tags/comments/NAGs/branches remain distinct. Draughts database rendering
   matches the baseline at default/minimum sizes.
+- Full fresh schema-8 imports pass the reference performance/memory gates:
+  prepared 100k at 312.52 games/sec and 424.59 MiB; raw 100k at 307.55 games/sec
+  and 423.09 MiB. Both import all games without duplicates/errors. Raw input has
+  80,187 normalized games, each warned once; the prepared corpus remains intact.
+  Record provenance, raw measurements and database integrity/count verification
+  in the benchmark directory.
 
 ### Font-aware database FEN width (U20) — 2026-10-29
 

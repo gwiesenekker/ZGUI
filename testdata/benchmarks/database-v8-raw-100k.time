@@ -1,0 +1,34 @@
+Games 10000 at 29577 ms
+Games 20000 at 59344 ms
+Games 30007 at 89226 ms
+Games 40080 at 118815 ms
+Games 50160 at 148133 ms
+Games 60170 at 177829 ms
+Games 70245 at 207036 ms
+Games 80257 at 236597 ms
+Games 90259 at 266282 ms
+Records complete at 294794 ms
+Records complete at 294794 ms
+	Command being timed: "/tmp/zgui-pgn-v2/core/chess_database_benchmark testdata/benchmarks/lichess-2013-12-rapid-100k-raw.pgn /tmp/zgui-pgn-v2/raw.db 0  /tmp/zgui-pgn-v2/raw.log"
+	User time (seconds): 307.92
+	System time (seconds): 12.73
+	Percent of CPU this job got: 98%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 5:25.20
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 433240
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 3595644
+	Voluntary context switches: 8219
+	Involuntary context switches: 3449
+	Swaps: 0
+	File system inputs: 112
+	File system outputs: 4657880
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

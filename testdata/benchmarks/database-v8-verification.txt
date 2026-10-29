@@ -1,0 +1,50 @@
+{
+  "prepared": {
+    "schema": 8,
+    "games": 100000,
+    "plies": 9070786,
+    "positions": 9170786,
+    "terminal": 100000,
+    "orphans": 0,
+    "summary_occurrences": 9070786,
+    "summary_dirty": 0,
+    "metadata": {
+      "game_variant": "chess",
+      "notation_format": "pgn",
+      "position_key_format": "chess-position-key-v1-fnv128",
+      "game_identity_format": "canonical-legal-pgn-token-v2"
+    },
+    "hash_versions": [
+      [
+        8
+      ]
+    ],
+    "integrity": "ok",
+    "san_normalized_games": 0,
+    "unique_warning_games": 0
+  },
+  "raw": {
+    "schema": 8,
+    "games": 100000,
+    "plies": 9070786,
+    "positions": 9170786,
+    "terminal": 100000,
+    "orphans": 0,
+    "summary_occurrences": 9070786,
+    "summary_dirty": 0,
+    "metadata": {
+      "game_variant": "chess",
+      "notation_format": "pgn",
+      "position_key_format": "chess-position-key-v1-fnv128",
+      "game_identity_format": "canonical-legal-pgn-token-v2"
+    },
+    "hash_versions": [
+      [
+        8
+      ]
+    ],
+    "integrity": "ok",
+    "san_normalized_games": 80187,
+    "unique_warning_games": 80187
+  }
+}

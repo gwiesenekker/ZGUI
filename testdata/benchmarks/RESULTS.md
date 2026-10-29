@@ -80,3 +80,42 @@ throughput is claimed here. Generated PGNs and databases are not committed.
 The existing opening catalogue is a separate functional fixture: all 3,865 games
 imported without errors and populated all 500 ECO codes A00–E99. Its short lines
 are not used for the full-game throughput gate.
+
+
+## P14/P16: schema 8, prepared and original PGN
+
+The approved implementation reuses the position formatter's canonical SAN once
+per chosen move, including check/mate suffixes. Same reference host, FPC 3.2.2
+`-O2`, one importer thread, fresh schema-8 databases. Normal import logging was
+enabled for both runs. Each run includes scanning, legal validation, complete
+canonical game identity, packing, SQLite inserts/commits, summaries and indexes.
+Compilation and empty-database creation are outside the CSV timer.
+
+| Input | Imported | Duplicates | Errors | Import time | Games/sec | Peak RSS | Games needing SAN normalization |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Original prepared corpus | 100,000 | 0 | 0 | 319.978 s | 312.52 | 434,776 KiB (424.59 MiB) | 0 |
+| Separately pinned original movetext | 100,000 | 0 | 0 | 325.151 s | 307.55 | 433,240 KiB (423.09 MiB) | 80,187 |
+
+Both pass the reference gates of 250 games/sec and 512 MiB. The raw input retains
+source spellings (including redundant disambiguation); it is not rewritten before
+import. Its 80,187 SAN warning entries have 80,187 distinct game numbers, proving
+one warning per normalized game rather than one per move. There were no other
+warnings or errors. The prepared input remains unchanged and has no SAN warnings.
+
+The raw selection contains the exact same 100,000 independently replayed games
+and 9,070,786 mainline plies as the prepared corpus, with 105,072,727 source bytes.
+`RAW_CORPUS.json` pins SHA-256
+`af10a02a07e5de516ea0301524417d1f9575bab726f83e01298b7db4a5471480`.
+The original `CORPUS.json` and prepared PGN checksum remain unchanged.
+
+Post-import verification of both files checks schema/hash version 8 and canonical
+identity metadata, 100,000 games, 9,170,786 position rows including 100,000 terminal
+rows, zero orphans, 9,070,786 continuation occurrences, clean summaries and SQLite
+integrity. Raw evidence is in `database-v8-prepared-100k.csv/.time`,
+`database-v8-raw-100k.csv/.time` and `database-v8-verification.txt`.
+
+Schema-7 compatibility is separately checked against an executable compiled from
+6edae32: original rows/hashes/stored text/keys/metadata are unchanged after new
+binary reimport; new legacy writes are duplicates in that old executable.
+Schema-8 aliases deduplicate while changed tags/comments/NAGs/RAVs remain distinct.
+No legacy database is migrated by these measurements or by opening it.
