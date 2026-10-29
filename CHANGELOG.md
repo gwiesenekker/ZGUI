@@ -4,6 +4,11 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Ignore local SQLite databases — 2026-10-29
+
+- Add `*.sqlite` to `.gitignore`, including the local `GW.sqlite` database.
+  Existing database files remain untouched.
+
 ### Score display QA review candidate — 2026-10-29
 
 - Reproduce rejected mate scores and root/variation evaluation-bar mismatches.

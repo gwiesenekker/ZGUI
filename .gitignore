@@ -16,6 +16,9 @@ gwdgui.exe
 *.log
 *.tmp
 
+# Local SQLite databases
+*.sqlite
+
 # Engines / large assets
 GWD/
 engine*/
