@@ -872,12 +872,19 @@ and losses are from the side-to-move perspective. Games with result `*` contribu
 to occurrences but not to wins, draws or losses. A final position without a next
 move can appear in the matching-game list without a continuation row.
 
+Double-click a continuation row to play that move on the database miniboard and
+search the resulting position. The FEN, continuation statistics and matching
+games update together, so you can keep double-clicking to explore an opening.
+This browsing leaves your main game unchanged. After editing the FEN or applying
+position setup, click **Search** before choosing a continuation.
+
 The database board's context menu can copy or paste FEN and open the position
 setup window.
 
 When a database is open, enable **Search position in database** from the main
 board's context menu. The database search then follows the position displayed
-while you play or browse.
+while you play or browse. If this option is enabled, the next main-board
+navigation also replaces any position you explored inside the database window.
 
 ## 10. Preferences
 

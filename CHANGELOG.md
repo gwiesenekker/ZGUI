@@ -4,7 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Database continuation browsing — 2026-10-29
+
+- Connect continuation-row double-clicks to the existing position adapter,
+  miniboard/FEN update and position search. Use the stored canonical move while
+  preserving SAN presentation for chess. Support chess and draughts through the
+  same handler, without changing the window layout or main game tree.
+- Associate results with the complete FEN of a successful search. Ignore stale
+  results after FEN/setup changes, database replacement/import or failed searches;
+  ignore header/empty rows and activation during search/import. Hit-test the
+  clicked cell instead of trusting the grid's retained selection.
+- Document opening exploration and the existing main-board follow behavior in
+  the manual. Test chained moves, matching games, terminal positions, special
+  chess moves, stale/busy/error cases, canonical move routing, draughts browsing
+  and unchanged main-game nodes/annotations in the existing database GUI suite.
+- Validation: application build, full headless regression and all nine GTK GUI
+  suites pass, including 119 database GUI checks with no memory leaks. Draughts
+  database images still match the baseline at default/minimum sizes.
+
 ### Database continuation browsing proposal — 2026-10-29
+
+Commit: `93fdf9e`.
 
 - Prepare the requested double-click continuation browsing for Claude's review:
   play the stored canonical move through the existing position interface, update

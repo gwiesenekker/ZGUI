@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
-  Grids, Math, Menus, StdCtrls, SysUtils, uDraughtsBoardControl, uDraughtsBoard,
+  Grids, Math, Menus, StdCtrls, SysUtils, Types, uDraughtsBoardControl, uDraughtsBoard,
   uGamePosition,uGameGuiProfile,uGameBoardFactory,uGameBoardControl,uGameFileReader,uGameTreePdn,
   uGameDatabase, uDatabaseImportWorker, uGuiDialogs, uDraughtsPdn, uDraughtsPositionSetupForm, uPreferences;
 
@@ -44,6 +44,7 @@ type
     FPreferences: TGuiPreferences;
     FPlayerFilterEdit: TEdit;
     FResults: TList;
+    FResultsFEN: string;
     FResultsGrid: TStringGrid;
     FRowLimitEdit: TEdit;
     FPositionSetupForm: TPositionSetupForm;
@@ -57,6 +58,7 @@ type
     function CurrentGameFilterDescription: string;
     procedure FormCloseHandler(Sender: TObject; var CloseAction: TCloseAction);
     procedure GamesGridDblClick(Sender: TObject);
+    procedure ResultsGridDblClick(Sender: TObject);
     procedure GamesGridMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     function GameDisplayLimit: Integer;
@@ -319,6 +321,7 @@ begin
   FResultsGrid.RowCount := 2;
   FResultsGrid.Options := FResultsGrid.Options + [goRowSelect] -
     [goEditing, goRangeSelect];
+  FResultsGrid.OnDblClick := @ResultsGridDblClick;
   FResultsGrid.Cells[0, 0] := 'Move';
   FResultsGrid.Cells[1, 0] := 'Games';
   FResultsGrid.Cells[2, 0] := 'Won';
@@ -449,6 +452,7 @@ procedure TDatabaseForm.CreateDatabase(const AFileName: string);
 begin
   if FImportBusy then Exit;
   FDatabase.CreateDatabase(AFileName);
+  FResultsFEN := '';
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
   PopulateResultsGrid;
@@ -458,6 +462,7 @@ procedure TDatabaseForm.OpenDatabase(const AFileName: string);
 begin
   if FImportBusy then Exit;
   FDatabase.OpenDatabase(AFileName);
+  FResultsFEN := '';
   Caption := 'Database - ' + ExtractFileName(AFileName);
   PopulateGamesGrid;
   PopulateResultsGrid;
@@ -675,6 +680,41 @@ begin
   end;
 end;
 
+procedure TDatabaseForm.ResultsGridDblClick(Sender: TObject);
+var
+  Cell: TPoint;
+  Col, Row: Integer;
+  MoveText: string;
+begin
+  if FImportBusy or not FSearchButton.Enabled then Exit;
+  // A header double-click may leave Row pointing at a previously selected move.
+  Cell := FResultsGrid.ScreenToClient(Mouse.CursorPos);
+  if not PtInRect(FResultsGrid.ClientRect, Cell) then Exit;
+  FResultsGrid.MouseToCell(Cell.X, Cell.Y, Col, Row);
+  if (Col < 0) or (Col >= FResultsGrid.ColCount) or
+    (Row <= 0) or (Row > FResults.Count) then Exit;
+  if (FResultsFEN = '') or (FBoard.ToFEN <> FResultsFEN) or
+    (Trim(FFenEdit.Text) <> FResultsFEN) then
+  begin
+    FStatusLabel.Caption := 'Click Search before choosing a continuation for this position';
+    Exit;
+  end;
+  // Searching replaces FResults; keep the canonical move, not a result pointer
+  // or its displayed SAN spelling, across that call.
+  MoveText := TDatabaseSearchResult(FResults[Row - 1]).MoveText;
+  if MoveText = '' then Exit;
+  try
+    if not FBoard.IsLegal(MoveText) then
+      raise EGamePositionError.Create('Invalid database continuation: ' + MoveText);
+    FBoard.PlayMove(MoveText);
+    SetSearchFEN(FBoard.ToFEN);
+    SearchCurrentPosition;
+  except
+    on E: Exception do
+      ShowGuiOkDialog(Self, 'Database move', E.Message);
+  end;
+end;
+
 procedure TDatabaseForm.PopulateResultsGrid;
 var
   Item: TDatabaseSearchResult;
@@ -733,6 +773,7 @@ var
   TotalGames: Integer;
 begin
   if FImportBusy then Exit;
+  FResultsFEN := '';
   if FSearchButton <> nil then
     FSearchButton.Enabled := False;
   FStatusLabel.Caption := 'Searching...';
@@ -777,6 +818,7 @@ begin
             ' continuation(s), ' + IntToStr(TotalGames) +
             ' game(s) containing ' + FBoard.ToFEN);
       end;
+      FResultsFEN := FBoard.ToFEN;
     except
       on E: Exception do
       begin
@@ -859,6 +901,7 @@ begin
   if FImportBusy then Exit;
   DatabaseName := FDatabase.FileName;
   if DatabaseName = '' then raise EInvalidOperation.Create('No database is open');
+  FResultsFEN := '';
   FImportFileName := AFileName;
   FImportCancel := False;
   FImportFailure := '';
