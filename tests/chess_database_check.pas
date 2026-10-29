@@ -72,8 +72,8 @@ begin
   C.ExecuteDirect('update database_metadata set value=''bad'' where name=''position_key_format''');T.Commit;
   Rejected(Db,Name);
   C.ExecuteDirect('update database_metadata set value=''chess-position-key-v1-fnv128'' where name=''position_key_format''');T.Commit;
-  C.ExecuteDirect('pragma user_version=8');T.Commit;Rejected(Db,Name);Rejected(Other,Name);
-  C.ExecuteDirect('pragma user_version=7');T.Commit;C.Close;Db.OpenDatabase(Name);
+  C.ExecuteDirect('pragma user_version=9');T.Commit;Rejected(Db,Name);Rejected(Other,Name);
+  C.ExecuteDirect('pragma user_version=8');T.Commit;C.Close;Db.OpenDatabase(Name);
   // Counter-only changes must find the same stored position.
   P.LoadFromFEN('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 19 37');
   Clear;Db.SearchPosition(P,List);Check(List.Count=1,'Position counters excluded from database identity');
@@ -118,6 +118,19 @@ begin
   Check((List.Count=1) and (TDatabaseSearchResult(List[0]).MoveText='e1e2'),'Unusable en passant target does not split identity');
   P.LoadFromFEN('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1');
   Clear;Db.SearchPosition(P,List);Check(List.Count=0,'Side to move separates stored keys');
+  // Canonical aliases share v8 identity while source annotations stay intact.
+  Save('[Event "Aliases"] 1.e4+ e5# 2.Ngf3 (2.Bf1c4) nc6 *'+#10+
+    '[Event "Aliases"] 1.e4 e5 2.Nf3 (2.Bc4) Nc6 *');
+  Db.ImportFile(Pgn,Imported,Duplicates,Errors);
+  Check((Imported=1) and (Duplicates=1) and (Errors=0),'Schema 8 aliases deduplicate across mainline and RAV');
+  C.Open;Q.SQL.Text:='pragma user_version';Q.Open;
+  Check(Q.Fields[0].AsInteger=8,'New chess databases use schema 8');Q.Close;T.Rollback;
+  Q.SQL.Text:='select distinct hash_version from games';Q.Open;
+  Check(Q.Fields[0].AsInteger=8,'Schema 8 hash version');Q.Next;
+  Check(Q.EOF,'One identity policy per database');Q.Close;T.Rollback;
+  C.ExecuteDirect('update games set hash_version=7 where id=1');T.Commit;
+  Rejected(Db,Name);
+  C.ExecuteDirect('update games set hash_version=8 where id=1');T.Commit;C.Close;
   Db.Close;
   WriteLn('Chess database checks passed (',Checks,' checks)');
  finally Q.Free;T.Free;C.Free;Actor.Free;V.Free;Clear;List.Free;P.Free;Other.Free;Db.Free;

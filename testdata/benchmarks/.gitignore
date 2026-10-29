@@ -2,3 +2,4 @@
 *.json
 
 !CORPUS.json
+!RAW_CORPUS.json

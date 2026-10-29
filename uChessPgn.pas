@@ -5,6 +5,7 @@ uses Classes, SysUtils, uChessPgnLexer, uGameTreeActor, uGamePosition,
   uGameFileReader, uGameFileMetadata;
 const MaxPgnGameBytes=16*1024*1024;
 type
+  TPgnStoragePolicy = (pspLegacyV1, pspCanonicalV2);
   // Lightweight, caller-owned output of the existing PGN grammar. No game tree
   // or typed annotations are constructed. PositionKeys.Count=Moves.Count+1.
   TChessPgnDatabaseGame = class
@@ -41,7 +42,7 @@ procedure ImportChessPgn(const Text: string; Actor: TGameTreeActor; Warnings: TS
 // Immutable memory-backed entry; caller owns it and keeps Variant alive.
 function ChessPgnEntryFromText(const Text:string;Variant:TGameVariant):TGameFileEntry;
 function ReadChessPgnDatabaseGame(const Text: string; Variant: TGameVariant;
-  Warnings: TStrings = nil): TChessPgnDatabaseGame;
+  Warnings: TStrings = nil; Policy:TPgnStoragePolicy=pspCanonicalV2): TChessPgnDatabaseGame;
 function PgnUtf8(const Bytes: string; out Converted: Boolean): string;
 function PgnTournamentFileMatchesId(const FileName,Id:string):Boolean;
 implementation
@@ -107,6 +108,7 @@ type
     Tags: TGameFileTags; Header: TGameTreeHeaderInput;
     Variant: TGameVariant; DatabaseGame: TChessPgnDatabaseGame;
     TokenOutput: TStringStream; LastWritten: TPgnTokenKind;
+    StoragePolicy:TPgnStoragePolicy;WarnedSAN:Boolean;
     procedure WriteToken;
     procedure Next;
     procedure Fail(const Msg: string);
@@ -115,7 +117,8 @@ type
     procedure Line(Parent: TGameTreePlyNode; Position: TGamePosition; Depth: Integer);
   public
     constructor Create(const Text: string; Actor: TGameTreeActor; Warnings: TStrings;
-      ADatabaseGame: TChessPgnDatabaseGame = nil; AVariant: TGameVariant = nil);
+      ADatabaseGame: TChessPgnDatabaseGame = nil; AVariant: TGameVariant = nil;
+      Policy:TPgnStoragePolicy=pspCanonicalV2);
     destructor Destroy; override;
     procedure Parse;
   end;
@@ -135,8 +138,16 @@ begin
     ptNag: S:='$'+IntToStr(T.Nag);
     else S:=T.Text;
   end;
-  if (TokenOutput.Size>0) and not (LastWritten in [ptTagOpen,ptTagClose]) and
-    (T.Kind<>ptTagClose) then TokenOutput.WriteString(' ');
+  if StoragePolicy=pspLegacyV1 then begin
+    // Schema 7 hashes these exact bytes: retain its original representation.
+    if (TokenOutput.Size>0) and not (LastWritten in [ptTagOpen,ptTagClose]) and
+      (T.Kind<>ptTagClose) then TokenOutput.WriteString(' ');
+  end else begin
+    if (LastWritten=ptTagClose) and (T.Kind<>ptTagOpen) then TokenOutput.WriteString(#10)
+    else if (TokenOutput.Size>0) and not (LastWritten in [ptTagOpen,ptTagClose,ptVariationOpen,ptPeriod]) and
+      not (T.Kind in [ptTagClose,ptVariationClose]) and
+      not ((LastWritten=ptInteger) and (T.Kind=ptPeriod)) then TokenOutput.WriteString(' ');
+  end;
   TokenOutput.WriteString(S);
   if T.Kind=ptTagClose then TokenOutput.WriteString(#10);
   if TokenOutput.Size>MaxPgnGameBytes then Fail('canonical PGN exceeds 16 MiB limit');
@@ -153,10 +164,10 @@ end;
 procedure TPgnParser.Store(Node: TGameTreePlyNode; const Data: TGameTreeNodeData);
 begin Execute(A.CreateRestoreNodeDataCommand(Node.NodeId,Data)); end;
 constructor TPgnParser.Create(const Text: string; Actor: TGameTreeActor; Warnings: TStrings;
-  ADatabaseGame: TChessPgnDatabaseGame; AVariant: TGameVariant);
+  ADatabaseGame: TChessPgnDatabaseGame; AVariant: TGameVariant; Policy:TPgnStoragePolicy);
 var Converted: Boolean;
 begin
-  inherited Create; A:=Actor; W:=Warnings; DatabaseGame:=ADatabaseGame;
+  inherited Create; A:=Actor; W:=Warnings; DatabaseGame:=ADatabaseGame;StoragePolicy:=Policy;
   if A<>nil then Variant:=A.GameTree.Variant else Variant:=AVariant;
   if Variant=nil then raise EArgumentException.Create('PGN parser requires a variant');
   if DatabaseGame<>nil then TokenOutput:=TStringStream.Create('');
@@ -222,7 +233,7 @@ begin
 end;
 procedure TPgnParser.Line(Parent: TGameTreePlyNode; Position: TGamePosition; Depth: Integer);
 var Node,Previous,Existing: TGameTreePlyNode; Before: TGamePosition;
-  D: TGameTreeNodeData; Move,Caption,Leading: string; N: Byte;
+  D: TGameTreeNodeData; Move,Caption,Leading,Notation: string; N: Byte;Normalized:Boolean;
   C: TGameTreeCommand; Id: Int64; Found,First,LastEp: Boolean; FromSq,ToSq: Integer;
 begin
   Node:=Parent; Previous:=nil; Before:=nil; First:=True; LastEp:=False; Leading:='';
@@ -261,12 +272,17 @@ begin
             Next; if (T.Kind<>ptSymbol) or (T.Text<>'p') then Fail('expected e.p. suffix');
             Next; if T.Kind<>ptPeriod then Fail('expected e.p. suffix'); Next; LastEp:=False; Continue;
           end;
-          if not Position.TryParseMove(T.Text,Move) then Fail('illegal or unrecognized SAN move '+T.Text);
+          if not TChessPosition(Position).TryParsePgnMove(T.Text,Move,Notation,Normalized) then
+            Fail('illegal, ambiguous or unrecognized SAN move '+T.Text);
+          if Normalized and not WarnedSAN then begin
+            if W<>nil then W.Add('Non-standard SAN normalised');
+            WarnedSAN:=True;
+          end;
           Position.MoveSquares(Move,FromSq,ToSq);
           LastEp:=(Abs(TChessPosition(Position).PieceAt(FromSq))=1) and
             (FromSq mod 8<>ToSq mod 8) and (TChessPosition(Position).PieceAt(ToSq)=0);
           if A<>nil then begin
-            Caption:=Position.MoveNotation(Move); Existing:=A.GameTree.FindChildByMove(Node,Move);
+            Caption:=Notation; Existing:=A.GameTree.FindChildByMove(Node,Move);
             if Position.SideToMove=gsBlack then Caption:='... '+Caption else Caption:='. '+Caption;
             if (Existing<>nil) and (W<>nil) then W.Add('Repeated variation '+IntToStr(A.GameTree.Variant.StartingMoveNumberFromFEN(Position.ToFEN))+Caption+' merged');
             if Depth=0 then C:=A.CreateAppendMainlineMoveCommand(Move,gmsUnknown)
@@ -292,7 +308,9 @@ begin
             DatabaseGame.Moves.Add(Move);
           end;
           FreeAndNil(Before); Before:=Position.Clone;
-          Position.PlayMove(Move); First:=False; Next;
+          Position.PlayMove(Move); First:=False;
+          if (DatabaseGame<>nil) and (StoragePolicy=pspCanonicalV2) then T.Text:=Notation;
+          Next;
         end;
         else Fail('unexpected token '+T.Text);
       end;
@@ -315,14 +333,14 @@ begin
   ParseText(Text,Actor,nil);
 end;
 function ReadChessPgnDatabaseGame(const Text: string; Variant: TGameVariant;
-  Warnings: TStrings): TChessPgnDatabaseGame;
+  Warnings: TStrings; Policy:TPgnStoragePolicy): TChessPgnDatabaseGame;
 var P: TPgnParser;
 begin
   if not (Variant is TChessVariant) then
     raise EArgumentException.Create('Chess PGN database output requires a chess variant');
   Result:=TChessPgnDatabaseGame.Create;
   try
-    P:=TPgnParser.Create(Text,nil,Warnings,Result,Variant);
+    P:=TPgnParser.Create(Text,nil,Warnings,Result,Variant,Policy);
     try P.Parse; finally P.Free; end;
   except Result.Free; raise; end;
 end;

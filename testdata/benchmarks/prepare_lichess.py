@@ -3,7 +3,7 @@
 
 This is a fixture preparation tool for the export's [Event ...] record layout,
 not a PGN importer. The application parser validates all emitted games.
-Usage: python3 prepare_lichess.py SOURCE.pgn.zst OUTPUT.pgn
+Usage: python3 prepare_lichess.py SOURCE.pgn.zst OUTPUT.pgn [--raw]
 Requires zstd and python-chess (chess==1.11.2); no network access.
 """
 import collections
@@ -33,7 +33,8 @@ def records(stream):
 
 
 def main():
-    source, target = map(pathlib.Path, sys.argv[1:])
+    raw = '--raw' in sys.argv[1:]
+    source, target = map(pathlib.Path, [s for s in sys.argv[1:] if s != '--raw'])
     digest = hashlib.file_digest(source.open('rb'), 'sha256').hexdigest()
     if digest != SOURCE_SHA256:
         raise SystemExit('Source checksum differs from the pinned archive')
@@ -71,7 +72,7 @@ def main():
                 # rules oracle; keep the source header verbatim and annotations.
                 canonical_body = game.accept(chess.pgn.StringExporter(
                     headers=False, variations=True, comments=True, columns=80))
-                out.write(header + '\n\n' + canonical_body.rstrip() + '\n\n')
+                out.write(text if raw else header + '\n\n' + canonical_body.rstrip() + '\n\n')
                 count += 1
                 plies += len(tokens)
                 annotated += '{' in body
@@ -86,7 +87,7 @@ def main():
         process.wait()
     if count != 100000 or plies / count < 80:
         raise SystemExit(f'Insufficient corpus: {count} games, {plies} plies')
-    manifest = dict(canonical_san_oracle='python-chess '+chess.__version__, source_url=SOURCE_URL, source_sha256=digest, licence='CC0-1.0',
+    manifest = dict(representation='raw-source' if raw else 'canonical-san', canonical_san_oracle='python-chess '+chess.__version__, source_url=SOURCE_URL, source_sha256=digest, licence='CC0-1.0',
                     output_sha256=hashlib.file_digest(target.open('rb'), 'sha256').hexdigest(),
                     games=count, plies=plies, mean_plies=plies/count, annotated_games=annotated,
                     source_records_examined=examined, length_histogram_40_plies=dict(lengths),

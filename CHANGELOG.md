@@ -4,7 +4,35 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Legal SAN aliases and compatible PGN storage (P14/P16) — 2026-10-29
+
+- Implement Claude's approved compatibility policy through the existing chess
+  position adapter, PGN parser/token writer and database importer. Accept only
+  unique legal interpretations of the documented SAN aliases; lower-case `b`
+  always denotes the b-file. Ambiguous/illegal moves, spurious capture markers
+  and invalid promotions remain errors.
+- Format the chosen move once, reusing canonical SAN with check/mate suffixes for
+  GUI captions and schema-8 storage. File/Open and database imports warn at most
+  once per game about normalized SAN, including moves inside variations.
+- New chess databases use schema 8 with canonical-legal-pgn-token-v2 identity and
+  conventional token layout. Existing schema 7 stays readable/writable with its
+  original token bytes, hash domain/version and metadata. No automatic migration
+  or mixed identity versions; keep position keys, tables and search unchanged.
+- Pin a separate raw 100,000-game Lichess corpus alongside the original prepared
+  benchmark. Document supported spellings, warning behavior and schema policy in
+  the manual; the application still has no Python dependency.
+- Validation: full headless regression, all nine GTK GUI suites, both tournament
+  suites and application build pass. The alias oracle covers 1,075,439 spellings
+  over 967 positions; python-chess agrees on 6,143 positions / 180,183 legal moves
+  and 80 PGN games / 3,650 nodes. A real schema-7 fixture made by the previous
+  executable retains its rows, hashes, text, keys and metadata; new v7 writes
+  remain readable by that executable. Schema-8 aliases deduplicate while changes
+  to tags/comments/NAGs/branches remain distinct. Draughts database rendering
+  matches the baseline at default/minimum sizes.
+
 ### Font-aware database FEN width (U20) — 2026-10-29
+
+Commit: `7cf4f40`.
 
 - Measure a representative long chess FEN with the edit field's actual font once
   handles exist, with padding and a 440-pixel minimum. Size the existing window

@@ -30,6 +30,7 @@ type
     FMoves: TStringList;
     FMovesValid: Boolean;
     procedure EnsureMoves;
+    function ParseMove(const Text:string;out Canonical,Notation:string;out Normalized:Boolean;NeedNotation:Boolean):Boolean;
     function SAN(AIndex: Integer; IncludeCheck:Boolean=True): string;
   public
     constructor Create;
@@ -44,6 +45,7 @@ type
     function LegalMove(AIndex: Integer): string; override;
     function IsLegal(const ACanonical: string): Boolean; override;
     function TryParseMove(const AText: string; out ACanonical: string): Boolean; override;
+    function TryParsePgnMove(const Text:string;out Canonical,Notation:string;out Normalized:Boolean):Boolean;
     function SameMove(const A, B: string): Boolean; override;
     procedure PlayMove(const ACanonical: string); override;
     procedure PlayTrustedMove(const ACanonical: string); override;
@@ -631,51 +633,95 @@ begin
   end;
 end;
 
-function TChessPosition.TryParseMove(const AText: string; out ACanonical: string): Boolean;
-var I,Found,Piece,Target,Last,FromSq,ToSq: Integer; Text,Notation,Base: string;
- HasSuffix,Castle: Boolean;
+function TChessPosition.ParseMove(const Text:string;out Canonical,Notation:string;
+  out Normalized:Boolean;NeedNotation:Boolean):Boolean;
+var S,Base,Prefix,M:string;I,Found,Piece,Target,FromSq,ToSq,SourceSquare:Integer;
+    Promotion:Char;Castle,HasCapture,ActualCapture,LongAlgebraic,PieceExplicit:Boolean;
 begin
-  ACanonical := ''; EnsureMoves;
-  Text := CoordinateMove(AText);
-  if Text <> '' then
-  begin
-    Result := IsLegal(Text);
-    if Result then ACanonical := Text;
-    Exit;
-  end;
-  Text := SANSpelling(AText);
-  if Text = '' then Exit(False);
-  HasSuffix := Text[Length(Text)] in ['+','#'];
-  // Filter by the SAN destination/piece before formatting candidates. The
-  // existing formatter remains the final authority (including disambiguation).
-  Base:=Text;if HasSuffix then Delete(Base,Length(Base),1);
-  Castle:=(Base='O-O') or (Base='O-O-O');Piece:=6;Target:=-1;
-  if not Castle then begin
-    Last:=Length(Base);
-    if (Last>=2) and (Base[Last-1]='=') then Dec(Last,2);
-    if Last<2 then Exit(False);
-    Target:=ParseSquare(Copy(Base,Last-1,2));if Target<0 then Exit(False);
-    Piece:=Pos(Base[1],PieceLetters);if Piece=0 then Piece:=1;
-  end;
-  Found := -1;
-  for I := 0 to FMoves.Count-1 do
-  begin
-    FromSq:=ParseSquare(Copy(FMoves[I],1,2));ToSq:=ParseSquare(Copy(FMoves[I],3,2));
-    if Abs(FState.Board[FromSq])<>Piece then Continue;
-    if Castle then begin if Abs(ToSq-FromSq)<>2 then Continue;end
-    else if ToSq<>Target then Continue;
-    Notation := SAN(I,HasSuffix);
-    if not HasSuffix and (Notation[Length(Notation)] in ['+','#']) then
-      Delete(Notation,Length(Notation),1);
-    if Text = Notation then
-    begin
-      if Found >= 0 then Exit(False);
-      Found := I;
+  Result:=False;Canonical:='';Notation:='';Normalized:=False;EnsureMoves;
+  S:=CoordinateMove(Text);Found:=-1;
+  if S<>'' then begin
+    Found:=FMoves.IndexOf(S);
+    if Found<0 then Exit;
+  end else begin
+    Base:=SANSpelling(Text);if Base='' then Exit;
+    if Base[Length(Base)] in ['+','#'] then Delete(Base,Length(Base),1);
+    Castle:=(Base='O-O') or (Base='O-O-O');Piece:=6;Target:=-1;
+    Prefix:='';Promotion:=#0;HasCapture:=False;
+    if not Castle then begin
+      if Length(Base)<2 then Exit;
+      if UpCase(Base[Length(Base)]) in ['Q','R','B','N'] then begin
+        Promotion:=Chr(Ord(UpCase(Base[Length(Base)]))+Ord('a')-Ord('A'));
+        Delete(Base,Length(Base),1);
+        if (Base<>'') and (Base[Length(Base)]='=') then Delete(Base,Length(Base),1);
+      end;
+      if Length(Base)<2 then Exit;
+      Target:=ParseSquare(Copy(Base,Length(Base)-1,2));if Target<0 then Exit;
+      Prefix:=Copy(Base,1,Length(Base)-2);Piece:=1;PieceExplicit:=False;
+      if (Prefix<>'') and (Prefix[1] in ['N','B','R','Q','K','n','r','q','k']) then begin
+        Piece:=Pos(UpCase(Prefix[1]),PieceLetters);PieceExplicit:=True;Delete(Prefix,1,1);
+      end;
+      // Lowercase b is ALWAYS the b-file, never a bishop abbreviation.
+      HasCapture:=(Prefix<>'') and (Prefix[Length(Prefix)]='x');
+      if HasCapture then Delete(Prefix,Length(Prefix),1);
+      LongAlgebraic:=(Prefix<>'') and (Prefix[Length(Prefix)]='-');
+      if LongAlgebraic then begin
+        if HasCapture then Exit;
+        Delete(Prefix,Length(Prefix),1);
+        if ParseSquare(Prefix)<0 then Exit;
+      end;
+      case Length(Prefix) of
+        0: ;
+        1: if not (Prefix[1] in ['a'..'h','1'..'8']) then Exit;
+        2: begin
+          SourceSquare:=ParseSquare(Prefix);if SourceSquare<0 then Exit;
+          if not PieceExplicit then Piece:=Abs(FState.Board[SourceSquare]);
+        end;
+        else Exit;
+      end;
     end;
+    for I:=0 to FMoves.Count-1 do begin
+      M:=FMoves[I];FromSq:=ParseSquare(Copy(M,1,2));ToSq:=ParseSquare(Copy(M,3,2));
+      if Abs(FState.Board[FromSq])<>Piece then Continue;
+      if Castle then begin
+        if Abs(ToSq-FromSq)<>2 then Continue;
+        if (Base='O-O')<>(ToSq>FromSq) then Continue;
+      end else begin
+        if ToSq<>Target then Continue;
+        if (Piece=6) and (Abs(ToSq-FromSq)=2) and (Length(Prefix)<>2) then Continue;
+        if (Length(M)=5)<>(Promotion<>#0) then Continue;
+        if (Promotion<>#0) and (M[5]<>Promotion) then Continue;
+        if Length(Prefix)=1 then begin
+          if (Prefix[1] in ['a'..'h']) and (M[1]<>Prefix[1]) then Continue;
+          if (Prefix[1] in ['1'..'8']) and (M[2]<>Prefix[1]) then Continue;
+        end else if Length(Prefix)=2 then begin
+          SourceSquare:=ParseSquare(Prefix);if FromSq<>SourceSquare then Continue;
+        end;
+        ActualCapture:=(FState.Board[ToSq]<>0) or ((Piece=1) and (FromSq mod 8<>ToSq mod 8));
+        if HasCapture and not ActualCapture then Continue;
+        if (Piece=1) and ActualCapture and ((Prefix='') or (Prefix[1] in ['1'..'8'])) then Continue;
+      end;
+      if Found>=0 then Exit; // An underspecified move must remain ambiguous.
+      Found:=I;
+    end;
+    if Found<0 then Exit;
   end;
-  Result := Found >= 0;
-  if Result then ACanonical := FMoves[Found];
+  Canonical:=FMoves[Found];Result:=True;
+  if NeedNotation then begin
+    // Only the chosen legal move is formatted, with its suffix computed once.
+    // Both PGN storage and the GUI reuse this same formatter result.
+    Notation:=SAN(Found);
+    Normalized:=Trim(Text)<>Notation;
+  end;
 end;
+
+function TChessPosition.TryParseMove(const AText:string;out ACanonical:string):Boolean;
+var Notation:string;Normalized:Boolean;
+begin Result:=ParseMove(AText,ACanonical,Notation,Normalized,False);end;
+
+function TChessPosition.TryParsePgnMove(const Text:string;out Canonical,Notation:string;
+  out Normalized:Boolean):Boolean;
+begin Result:=ParseMove(Text,Canonical,Notation,Normalized,True);end;
 
 function TChessPosition.SameMove(const A, B: string): Boolean;
 var CA,CB: string;

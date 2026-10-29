@@ -30,8 +30,8 @@ plies. This is an explicit full-length-game filter, not a representative sample
 of all Lichess speeds or all game lengths. Original headers and annotations are
 retained. Old exports sometimes contain redundant SAN disambiguation (e.g.
 `Rfe8` where canonical SAN is `Re8`). The preparation tool canonicalizes movetext
-with python-chess, independently checking the selected games. It does not change
-ZGUI's strict move acceptance. No game is fabricated or repeated in the corpus.
+with python-chess, independently checking the selected games. This remains the original, separately pinned prepared corpus. Schema 8 also
+accepts the reviewed legal SAN aliases, without changing that reference input. No game is fabricated or repeated in the corpus.
 
 The benchmark measures scanner callbacks, the existing parser in database-output
 mode, full variation validation, canonical token output and mainline UCI/key
@@ -56,3 +56,23 @@ See `RESULTS.md` for the separately measured parser and full-database results,
 the accepted performance/memory gates and raw measurements. The database runner
 uses a temporary database by default; pass a new pathname as the second argument
 to retain it. Do not commit generated PGNs or databases.
+
+For the separately pinned original movetext from the same selected games:
+
+```sh
+python3 testdata/benchmarks/prepare_lichess.py /tmp/lichess-2013-12.pgn.zst testdata/benchmarks/lichess-2013-12-rapid-100k-raw.pgn --raw
+bash tests/run_chess_database_benchmark.sh testdata/benchmarks/lichess-2013-12-rapid-100k-raw.pgn /tmp/raw-v8.db 0 '' /tmp/raw-v8.log
+```
+
+`RAW_CORPUS.json` pins this independent raw representation. Selection and legal
+replay checks are identical to the prepared corpus; `--raw` retains the source
+movetext instead of formatting it. The optional fifth benchmark argument enables
+normal import logging, allowing the one-per-game SAN warning count to be measured.
+The application has no Python dependency.
+
+Schema compatibility is checked independently using a schema-7 database generated
+by the previous executable (git history is required):
+
+```sh
+python3 tests/chess_schema_compatibility_check.py
+```

@@ -53,6 +53,9 @@ begin
   Check(A.GameTree.Root.Children[1].NodeData.Nags[0]=146,'Node getter isolation');
   C:=A.CreateRestoreNodeDataCommand(A.GameTree.Root.Children[1].NodeId,D); D.Nags[0]:=8;
   Execute(C); Check(A.GameTree.Root.Children[1].NodeData.Nags[0]=0,'Command owns NAG array');
+  RoundTrip('1.e4+ e5# 2.Ngf3 (2.Bf1c4) nc6 *');
+  Check((W.Count=1) and (W[0]='Non-standard SAN normalised'),'GUI PGN import warns once across mainline and variations');
+  Check(A.GameTree.MainlineNode[3].MoveText='g1f3','GUI imports unique redundant SAN');
   RoundTrip('[Result "0-1"] 1.f3 e5 2.g4 Qh4# 0-1');
   RoundTrip('[Result "1/2-1/2"] 1.Nf3 Nf6 1/2-1/2');
   RoundTrip('[SetUp "1"] [FEN "4k3/8/8/8/8/8/8/R3K3 b - - 0 37"] '+
@@ -108,6 +111,14 @@ begin
     TGameFileEntry(Reader.Entries[2]).ImportInto(A);
     Check((A.GameTree.MainlineCount=2) and (A.GameTree.MainlineNode[1].MoveText='d2d4'),'Selected game offset import');
     Check(Pos('CP1252',TGameFileEntry(Reader.Entries[2]).WarningsText)>0,'Collection encoding warning');
+    Saved.Text:='[Event "Variation alias"] 1.e4 (1.d2-d4 d7d5) e5 *';Saved.SaveToFile(Name);
+    Reader.OpenFile(Name);TGameFileEntry(Reader.Entries[0]).Validate;
+    Check(TGameFileEntry(Reader.Entries[0]).ErrorText='','File/Open accepts legal aliases in a variation');
+    Check(Trim(TGameFileEntry(Reader.Entries[0]).WarningsText)='Non-standard SAN normalised',
+      'File/Open shows exactly one warning when only the variation needs normalization');
+    TGameFileEntry(Reader.Entries[0]).ImportInto(A);
+    Check(Pos('d2-d4',Export(A))=0,'File/Open save writes canonical SAN');
+
   finally Saved.Free; Reader.Free; DeleteFile(Name); end;
   Name:=GetTempFileName(GetTempDir,'zpr'); Reader:=TChessPgnReader.Create(V); Saved:=TStringList.Create;
   try

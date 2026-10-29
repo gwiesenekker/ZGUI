@@ -1,0 +1,23 @@
+{
+  "representation": "raw-source",
+  "canonical_san_oracle": "python-chess 1.11.2",
+  "source_url": "https://database.lichess.org/standard/lichess_db_standard_rated_2013-12.pgn.zst",
+  "source_sha256": "a77d132bdf7aece20f7f3b9b3aa69eae891f2a339e59bb148984c1577eba2de9",
+  "licence": "CC0-1.0",
+  "output_sha256": "af10a02a07e5de516ea0301524417d1f9575bab726f83e01298b7db4a5471480",
+  "games": 100000,
+  "plies": 9070786,
+  "mean_plies": 90.70786,
+  "annotated_games": 7642,
+  "source_records_examined": 556964,
+  "length_histogram_40_plies": {
+    "40": 43072,
+    "120": 12185,
+    "80": 42696,
+    "160": 1775,
+    "200": 250,
+    "240": 18,
+    "280": 4
+  },
+  "filter": "First 100k rated Standard; base+40*increment>=480; >=60 mainline plies; source order"
+}

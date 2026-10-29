@@ -148,6 +148,23 @@ begin
   Root:=GetEnvironmentVariable('GWDGUI_ROOT');if Root='' then Root:=GetCurrentDir;
   F:=TStringList.Create;
   try F.LoadFromFile(IncludeTrailingPathDelimiter(Root)+'tests/fixtures/chess-long-variations.pgn');RoundTrip(F.Text);finally F.Free;end;
+  W:=TStringList.Create;
+  try
+   G:=ReadChessPgnDatabaseGame('[Event "Aliases"] 1.e4+ e5# 2.Ngf3 (2.Bf1c4) Nc6 *',V,W);
+   try
+    Check((W.Count=1) and (W[0]='Non-standard SAN normalised'),'One normalization warning across mainline and RAV');
+    Check(Pos('[Event "Aliases"]'+#10+#10+'1.e4 e5 2.Nf3 (2.Bc4) Nc6 *',G.CompletePgn)>0,'Schema 8 canonical SAN and conventional token layout');
+   finally G.Free;end;
+   W.Clear;
+   G:=ReadChessPgnDatabaseGame('1.f3 e5 2.g4 Qh4 *',V,W);
+   try
+    Check(Pos('Qh4#',G.CompletePgn)>0,'Canonical storage adds a missing mate suffix');
+    Check((W.Count=1) and (W[0]='Non-standard SAN normalised'),'Missing mate suffix warns once');
+   finally G.Free;end;
+   W.Clear;
+   G:=ReadChessPgnDatabaseGame('1.Ngf3 Nf6 *',V,W,pspLegacyV1);
+   try Check(G.CompletePgn='1 . Ngf3 Nf6 *'+#10,'Schema 7 retains raw move tokens and layout');finally G.Free;end;
+  finally W.Free;end;
   Scanning;
   WriteLn('Chess PGN database output checks passed (',Checks,' checks)');
  finally V.Free;end;

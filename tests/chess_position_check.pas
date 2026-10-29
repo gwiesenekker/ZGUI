@@ -191,9 +191,19 @@ begin
   P := TChessPosition.Create;
   try
     CheckMove(P,'g1f3','Nf3');
-    Check(not P.TryParseMove('e4#',M),'False mate suffix rejected');
-    Check(not P.TryParseMove('e4+',M),'False check suffix rejected');
+    Check(P.TryParseMove('e4#',M) and (M='e2e4'),'False mate suffix normalized');
+    Check(P.TryParseMove('e4+',M) and (M='e2e4'),'False check suffix normalized');
     Check(P.TryParseMove(' E2E4 ',M) and (M = 'e2e4'),'Coordinate spelling normalization');
+    Check(P.TryParseMove('Ng1f3',M) and (M='g1f3'),'Full redundant disambiguation');
+    Check(P.TryParseMove('nf3',M) and (M='g1f3'),'Lowercase knight');
+    Check(P.TryParseMove('g1-f3',M) and (M='g1f3'),'Long algebraic uses the source piece');
+    Check(not P.TryParseMove('Nxf3',M),'Spurious capture rejected');
+    P.LoadFromFEN('4k3/8/5B2/8/8/2n5/1P6/4K3 w - - 0 1');
+    Check(P.TryParseMove('bxc3',M) and (M='b2c3'),'Lowercase b is the pawn even when a bishop can capture');
+    Check(P.TryParseMove('Bxc3',M) and (M='f6c3'),'Uppercase B is a bishop');
+    P.LoadFromFEN('4k3/8/5B2/8/8/2n5/8/4K3 w - - 0 1');
+    Check(not P.TryParseMove('bxc3',M),'Lowercase b cannot stand for a bishop without a pawn');
+
     P.LoadFromFEN('4k3/8/8/8/8/8/8/1N2KN2 w - - 0 1');
     CheckMove(P,'b1d2','Nbd2'); CheckMove(P,'f1d2','Nfd2');
     Check(not P.TryParseMove('Nd2',M),'Ambiguous SAN rejected');

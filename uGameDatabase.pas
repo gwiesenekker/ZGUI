@@ -36,6 +36,7 @@ type
   TGameDatabase = class
   private
     FFormat: TGameFileFormat;
+    FSchemaVersion: Integer;
     FVariant: TGameVariant;
     FWhiteWin, FDraw, FBlackWin: string;
     FConnection: TSQLite3Connection;
@@ -440,7 +441,7 @@ begin
   if FDatabase.FFormat=gffPgn then
     FGameInsertQuery.SQL.Text:=
       'insert into games(game_hash_lo,game_hash_hi,white,black,event,result,starting_fen,moves_text,annotations_text,full_pdn,ply_count,hash_version,date,eco,white_elo,black_elo) '+
-      'values(:game_hash_lo,:game_hash_hi,:white,:black,:event,:result,:starting_fen,:moves_text,:annotations_text,:full_pdn,:ply_count,7,:date,:eco,:white_elo,:black_elo)';
+      'values(:game_hash_lo,:game_hash_hi,:white,:black,:event,:result,:starting_fen,:moves_text,:annotations_text,:full_pdn,:ply_count,'+IntToStr(FDatabase.FSchemaVersion)+',:date,:eco,:white_elo,:black_elo)';
   FHashQuery := FDatabase.Query;
   FHashQuery.SQL.Text :=
     'select id from games where game_hash_lo = :game_hash_lo and game_hash_hi = :game_hash_hi limit 1';
@@ -573,9 +574,10 @@ function TDatabasePdnImporter.GameHash: THash128;
 var
   LHashText: string;
 begin
-  if FDatabase.FFormat=gffPgn then
-    LHashText:='zgui-db-v7-chess-complete-game-token-v1'#10+FFullPdn
-  else LHashText := 'gwdgui-db-v6-complete-game' + #10 + FFullPdn;
+  if FDatabase.FFormat=gffPgn then begin
+    if FDatabase.FSchemaVersion=7 then LHashText:='zgui-db-v7-chess-complete-game-token-v1'#10+FFullPdn
+    else LHashText:='zgui-db-v8-chess-canonical-legal-pgn-token-v2'#10+FFullPdn;
+  end else LHashText := 'gwdgui-db-v6-complete-game' + #10 + FFullPdn;
   Result := Fnv1a128Value(LHashText);
 end;
 
@@ -829,7 +831,7 @@ begin
 end;
 procedure TDatabasePdnImporter.ImportPgnGame(const Text,ErrorText:string;
   BytesRead,TotalBytes:Int64;var Cancel:Boolean);
-var G:TChessPgnDatabaseGame;W:TStringList;Hash:THash128;I:Integer;Duplicate:Boolean;
+var G:TChessPgnDatabaseGame;W:TStringList;Hash:THash128;I:Integer;Duplicate:Boolean;Policy:TPgnStoragePolicy;
 begin
  Inc(FRecordNumber);FRecordEnd:=BytesRead;FSourceBytes:=TotalBytes;
  FFullPdn:=Text;
@@ -837,7 +839,8 @@ begin
  G:=nil;W:=TStringList.Create;
  try
   try
-  try G:=ReadChessPgnDatabaseGame(Text,FDatabase.FVariant,W);
+  if FDatabase.FSchemaVersion=7 then Policy:=pspLegacyV1 else Policy:=pspCanonicalV2;
+  try G:=ReadChessPgnDatabaseGame(Text,FDatabase.FVariant,W,Policy);
   except on E:EPgnSyntaxError do begin Inc(FErrors);LogError(E.Message);ReportProgress(BytesRead,TotalBytes,Cancel);Exit;end;end;
   for I:=0 to W.Count-1 do LogLine('warning'+#9+LogField(W[I])+PgnRecordContext);
   FWhite:=GameFileTagValue(G.Tags,'White','?');FBlack:=GameFileTagValue(G.Tags,'Black','?');
@@ -1080,9 +1083,12 @@ begin
     Q.SQL.Text := 'pragma user_version';
     Q.Open;
     SchemaVersion := Q.Fields[0].AsInteger;
-    if ((FFormat=gffPdn) and (SchemaVersion>6)) or (SchemaVersion>7) then
+    if ((FFormat=gffPdn) and (SchemaVersion>6)) or (SchemaVersion>8) then
       raise EInvalidOperation.Create('This database was created by a newer GWDGUI version');
     Q.Close;
+    if FFormat=gffPgn then begin
+      if SchemaVersion=0 then FSchemaVersion:=8 else FSchemaVersion:=SchemaVersion;
+    end;
     Q.SQL.Text :=
       'create table if not exists games (' +
       'id integer primary key autoincrement,' +
@@ -1106,9 +1112,9 @@ begin
         ExecuteSql('alter table games add column date text');ExecuteSql('alter table games add column eco text');
         ExecuteSql('alter table games add column white_elo integer');ExecuteSql('alter table games add column black_elo integer');
         ExecuteSql('create table database_metadata (name text primary key,value text not null)');
-        ExecuteSql('insert into database_metadata values(''game_variant'',''chess''),(''notation_format'',''pgn''),(''position_key_format'',''chess-position-key-v1-fnv128''),(''game_identity_format'',''complete-lossless-pgn-token-v1'')');
+        ExecuteSql('insert into database_metadata values(''game_variant'',''chess''),(''notation_format'',''pgn''),(''position_key_format'',''chess-position-key-v1-fnv128''),(''game_identity_format'',''canonical-legal-pgn-token-v2'')');
       end;
-      ExecuteSql('pragma user_version=7');
+      ExecuteSql('pragma user_version='+IntToStr(FSchemaVersion));
     end;
     Q.SQL.Text :=
       'create table if not exists positions (' +
@@ -1173,7 +1179,7 @@ begin
   C.DatabaseName:=AFileName;C.Transaction:=T;
   Q.DataBase:=C;Q.Transaction:=T;C.Connected:=True;T.StartTransaction;
   Q.SQL.Text:='pragma user_version';Q.Open;Version:=Q.Fields[0].AsInteger;Q.Close;
-  if ((FFormat=gffPdn) and (Version>6)) or ((FFormat=gffPgn) and (Version<>7)) then
+  if ((FFormat=gffPdn) and (Version>6)) or ((FFormat=gffPgn) and not (Version in [7,8])) then
     raise EInvalidOperation.Create('Unsupported database variant or schema version');
   RequireColumns('games',['game_hash_lo','game_hash_hi','white','black','event','result',
    'starting_fen','moves_text','annotations_text','ply_count']);
@@ -1184,7 +1190,12 @@ begin
     RequireColumns('database_metadata',['name','value']);
     RequireMetadata('game_variant','chess');RequireMetadata('notation_format','pgn');
     RequireMetadata('position_key_format','chess-position-key-v1-fnv128');
-    RequireMetadata('game_identity_format','complete-lossless-pgn-token-v1');
+    if Version=7 then RequireMetadata('game_identity_format','complete-lossless-pgn-token-v1')
+    else RequireMetadata('game_identity_format','canonical-legal-pgn-token-v2');
+    Q.SQL.Text:='select 1 from games where coalesce(hash_version,0)<>:version limit 1';
+    Q.ParamByName('version').AsInteger:=Version;Q.Open;
+    if not Q.EOF then raise EInvalidOperation.Create('Chess database contains a mismatched game identity version');
+    Q.Close;
   end;
  finally
   Q.Free;if T.Active then T.Rollback;C.Close;T.Free;C.Free;

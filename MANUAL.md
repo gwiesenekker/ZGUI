@@ -29,6 +29,21 @@ and may be printed before that variation on saving. Orthodox chess PGN is suppor
 optional **e.p.** suffix is accepted after en passant. Legacy CP1252 files are
 converted to UTF-8 with a warning; saved PGN uses UTF-8 without a BOM.
 
+The chess reader accepts a spelling only when it identifies one legal move.
+It tolerates redundant source file/rank/square disambiguation (`Ngf3`, `N1f3`,
+`Ng1f3`), missing or incorrect `+`/`#`, promotion without `=`, long algebraic
+or UCI coordinates (`e2-e4`, `e2e4`), a missing capture `x`, and lower-case
+`n`, `r`, `q` or `k`. Lower-case `b` always means the b-file, never a bishop;
+use upper-case `B` for bishops. Castling may use zeroes (`0-0`). Ambiguous or
+illegal moves, a spurious capture `x` on a non-capture and an invalid promotion
+piece remain errors. A different legal promotion piece means a different move;
+the reader never substitutes one for another.
+
+File/Open and database import report **Non-standard SAN normalised** at most once
+per game, including spellings in variations. Normal GUI saving writes canonical
+SAN with correct check/mate suffixes, so opening and saving cleans up those
+spellings without changing the played moves.
+
 Standard `[%eval ...]`, `[%clk ...]` and `[%emt ...]` annotations are read and
 written as typed evaluation/clock data; unknown commands stay in the comments.
 The standard evaluation command includes depth when known and reloads as the
@@ -805,8 +820,9 @@ its clock.
 
 ZGUI uses SQLite databases for collections of chess PGN or draughts PDN games
 and position search. The window layout, filters and import controls are shared.
-Chess uses schema 7, with explicit variant and key-format metadata. Chess and
-draughts databases are separate: opening the other format is rejected. A chess
+New chess databases use schema 8, with explicit variant, key-format and game-identity
+metadata. Existing schema-7 chess databases remain readable and writable without
+automatic migration. Chess and draughts databases are separate: opening the other format is rejected. A chess
 database must be created through **Create database**, rather than by opening an
 empty file.
 
@@ -829,8 +845,19 @@ warnings for skipped malformed variations.
 
 Duplicate detection compares complete canonical game content, including comments
 and variations. Changed comments or branches remain separate records. Chess
-identity preserves complete PGN tokens, including tag values, comments, NAGs and
-variations; whitespace and formatting outside those tokens are normalized.
+schema-8 identity is the complete game with canonical legal SAN moves, including
+correct check/mate suffixes. Original tag values, comments, NAGs and variations
+are retained; source move spellings and whitespace outside those tokens are
+normalized. Stored text uses conventional move numbers and parentheses.
+
+Schema 7 retains its original token text, spacing, hash version and metadata,
+including source move spellings such as `0-0`. Equivalent source spellings may
+therefore remain separate games in schema 7. Its stored token layout is internal
+data, not the GUI export format. Each database uses one identity policy; versions
+are never mixed within a file. Older executables that support only schema 7
+refuse schema 8. Position search and continuation statistics use the same keys,
+tables and queries in both schemas.
+
 Date (or UTCDate), ECO, WhiteElo and BlackElo also have typed database columns.
 Unknown or malformed values become NULL in those columns while the original
 PGN tags remain intact; the existing filters are unchanged.

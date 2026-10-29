@@ -13,12 +13,12 @@ begin
 end;
 var Db:TGameDatabase;Progress:TProgress;I,D,E:Integer;Tick:QWord;
 begin
- if ParamCount<2 then raise Exception.Create('Usage: benchmark input.pgn database.db [limit] [existing]');
+ if ParamCount<2 then raise Exception.Create('Usage: benchmark input.pgn database.db [limit] [existing] [log]');
  Progress:=TProgress.Create;Progress.Limit:=StrToIntDef(ParamStr(3),0);Db:=TGameDatabase.Create(gffPgn);
  try
   if ParamStr(4)='existing' then Db.OpenDatabase(ParamStr(2)) else Db.CreateDatabase(ParamStr(2));
   Tick:=GetTickCount64;Progress.Started:=Tick;
-  Db.ImportFile(ParamStr(1),I,D,E,@Progress.Report);
+  Db.ImportFile(ParamStr(1),I,D,E,@Progress.Report,ParamStr(5));
   Tick:=GetTickCount64-Tick;if Tick=0 then Tick:=1;
   WriteLn('games,duplicates,errors,ms,games_per_second');
   WriteLn(I,',',D,',',E,',',Tick,',',FormatFloat('0.00',(I+D)*1000.0/Tick));
