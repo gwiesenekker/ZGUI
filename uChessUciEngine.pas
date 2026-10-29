@@ -136,6 +136,7 @@ begin
     if SameText(P.Name,'Ponder') or SameText(P.Name,'UCI_Chess960') then Value:='false';
     if SameText(P.Name,'MultiPV') then Value:='1';
     if SameText(P.Name,'UCI_AnalyseMode') then Value:='true';
+    if SameText(P.Name,'OwnBook') and (P.ParamType='check') then Value:='false';
     FOptions[I].Value:=Value;
     if P.ParamType='button' then Continue;
     ValidateUciValue(P,Value); if P.ParamType='check' then Value:=LowerCase(Value);
@@ -331,6 +332,12 @@ begin
   for I:=0 to High(FOptions) do begin
     if SameText(FOptions[I].Name,'UCI_AnalyseMode') then begin
       if FGameMode then Value:='false' else Value:='true';
+    end else if SameText(FOptions[I].Name,'OwnBook') and (FOptions[I].ParamType='check') then begin
+      // A book reply may have no score/PV (e.g. Arasan). Analysis must search;
+      // actual games retain the saved book preference or advertised default.
+      Value:='false';
+      if FGameMode then Value:=LowerCase(EngineParamValue(FParams,
+        FOptions[I].Name,FOptions[I].DefaultValue));
     end else if SameText(FOptions[I].Name,'Ponder') and (FOptions[I].ParamType='check') then begin
       Value:='false';
       if FGameMode and not FForcePonderOff and SameText(EngineParamValue(FParams,'Ponder','false'),'true') then Value:='true';

@@ -4,6 +4,22 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Arasan annotator opening-book replies — 2026-10-29
+
+- Reproduce the missing PV with Arasan 26.1 and its saved OwnBook=true setting:
+  from the starting position it returns a book bestmove with no scored PV.
+- In the existing UCI adapter, temporarily disable an advertised OwnBook check
+  option for annotation and one-shot analysis/Auto Play. Restore the saved value
+  or advertised default when switching to clocked game mode. Do not alter saved
+  preferences, GUI layout or shared engine/analysis infrastructure.
+- Add a book-only UCI peer regression covering annotation, game-mode restoration
+  for saved true/false and an unsaved default, return to one-shot analysis, mixed
+  option-name case and unchanged option-file contents. Document the runtime policy.
+- Validation: real Arasan passes 83 adapter checks and 110 GUI checks. Application
+  build, full headless regression, all nine GUI suites and both tournament suites
+  pass. The database font-geometry assertion needed an isolated retry (127 checks
+  passed); no database code changes are included in this fix.
+
 ### Chess Auto Play — 2026-10-29
 
 Commit: `08fce14`.

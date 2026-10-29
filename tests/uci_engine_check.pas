@@ -7,9 +7,9 @@ var Checks: Integer=0;
 procedure Check(OK: Boolean; const Text: string);
 begin Inc(Checks); if not OK then raise Exception.Create(Text); end;
 procedure Fake;
-var Line,Mode,Move,PV: string; P: TChessPosition; Parts: TStringList; I,At: Integer; Active: Boolean;
+var Line,Mode,Move,PV: string; P: TChessPosition; Parts: TStringList; I,At: Integer; Active,BookOn: Boolean;
 begin
-  Mode:=ParamStr(2); P:=TChessPosition.Create; Parts:=TStringList.Create; Active:=False; Move:='e2e4';
+  Mode:=ParamStr(2); P:=TChessPosition.Create; Parts:=TStringList.Create; Active:=False;BookOn:=True; Move:='e2e4';
   try
     while not EOF(Input) do begin
       ReadLn(Line);
@@ -21,8 +21,12 @@ begin
         WriteLn('option name MultiPV type spin default 2 min 1 max 5');
         WriteLn('option name Style Choice type combo default Normal var Normal var Very Aggressive');
         WriteLn('option name File Path type string default <empty>');
-        WriteLn('option name Clear Hash type button'); WriteLn('uciok');
-      end else if Line='isready' then WriteLn('readyok')
+        WriteLn('option name Clear Hash type button');
+        if Mode='book' then WriteLn('option name oWnBoOk type check default true');
+        WriteLn('uciok');
+      end else if Line='setoption name oWnBoOk value false' then BookOn:=False
+      else if Line='setoption name oWnBoOk value true' then BookOn:=True
+      else if Line='isready' then WriteLn('readyok')
       else if Copy(Line,1,9)='position ' then begin
         Parts.Clear; ExtractStrings([' '],[],PChar(Line),Parts); At:=Parts.IndexOf('moves');
         if Parts[1]='startpos' then P.LoadFromFEN(ChessStartingFEN)
@@ -31,6 +35,9 @@ begin
         if P.LegalMoveCount>0 then Move:=P.LegalMove(0) else Move:='0000';
       end else if Copy(Line,1,3)='go ' then begin
         Active:=True;
+        if (Mode='book') and BookOn then begin
+          WriteLn('info string book move');WriteLn('bestmove '+Move);Active:=False;Flush(Output);Continue;
+        end;
         if Mode='longline' then WriteLn(StringOfChar('x',70000));
         if Mode='mate' then WriteLn('info depth 5 score mate 3 pv '+Move)
         else begin
@@ -162,10 +169,45 @@ begin
     finally E.Free; end;
   finally DeleteFile(FileName); end;
 end;
+procedure BookPolicyTests;
+var E:TUciEngine;Params:TEngineParamArray;Clock:TEngineGameClockState;
+  Saved:TStringList;FileName,Before,PV,Score,Depth,TimeText,Value:string;I,J:Integer;
+begin
+  FileName:=EngineParamsFileName(ExpandFileName(ParamStr(0)));Saved:=TStringList.Create;
+  try
+    for I:=0 to 2 do begin
+      Params:=nil;
+      // Also check restoration of an advertised default when no value is saved.
+      if I<2 then begin
+        Value:='true';if I=1 then Value:='false';
+        AddOrUpdateParam(Params,'OwnBook','check',Value,False);
+      end;
+      SaveEngineParamsToJson(FileName,'uci',Params);Saved.LoadFromFile(FileName);Before:=Saved.Text;
+      E:=NewEngine('book');
+      try
+        Check(E.LaunchAndInit,'Book peer handshake');
+        E.SetGamePosition(ChessStartingFEN,nil);E.SetClockInfo(1,0.1,0);E.StartAnalyzing;
+        for J:=1 to 10 do begin E.PollOutput;Sleep(10);end;
+        E.ReadSearchInfo(PV,Score,Depth,TimeText);
+        Check((PV<>'') and (Score='0.35'),'Annotation disables the engine book');
+        E.StopSearch;E.BeginGame(ChessStartingFEN,gsWhite,1,0);
+        Clock:=Default(TEngineGameClockState);Clock.SideToMove:=gsWhite;
+        Clock.Remaining[gsWhite]:=60;Clock.Remaining[gsBlack]:=60;
+        E.SetGamePosition(ChessStartingFEN,nil);E.SetGameClockState(Clock);
+        Check(E.StartThinking<>'','Game returns a legal move with saved book policy');
+        Check((E.PrincipalVariation='')=(I<>1),'Game restores saved OwnBook or its advertised default');
+        E.SetGamePosition(ChessStartingFEN,nil);E.SetClockInfo(1,0.1,0);
+        Check(E.StartThinking<>'','One-shot analysis returns a move after game mode');
+        Check(E.PrincipalVariation<>'','One-shot analysis disables book again');
+        Saved.LoadFromFile(FileName);Check(Saved.Text=Before,'Runtime book policy does not overwrite saved options');
+      finally E.Free;end;
+    end;
+  finally Saved.Free;DeleteFile(FileName);end;
+end;
 var E: TUciEngine; D: TExternalEngineDefinition; PV,Score,Depth,T: string; I: Integer;
 begin
   if ParamStr(1)='--fake-uci' then begin Fake; Halt; end;
-  RegistryTests; Tests;
+  RegistryTests; Tests;BookPolicyTests;
   if ParamStr(1)<>'' then begin
     D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=ExpandFileName(ParamStr(1));
     E:=TUciEngine.Create(D);

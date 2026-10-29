@@ -500,6 +500,12 @@ time in seconds. Its default is `1`. This value is used for timed annotator
 requests and Auto Play searches. A missing, invalid, or non-positive value is
 treated as one second.
 
+During UCI annotation and Auto Play, an engine's advertised `OwnBook` check
+option is temporarily disabled so it searches and reports a scored PV. Some
+engines, such as Arasan, otherwise return an opening-book move without analysis.
+Clocked games restore the saved book setting (or the engine's advertised default);
+the saved option file is unchanged.
+
 ### 5.3 Engine and annotator PVs
 
 The engine PV belongs to the engine playing the game. The annotator PV belongs
