@@ -106,6 +106,7 @@ type
     function ReceiveMessage(const AMessage: string): string; virtual;
     procedure RequestStop; virtual;
     procedure SetGameClockState(const Clock: TEngineGameClockState); virtual;
+    procedure SetGamePonderAllowed(Allowed: Boolean); virtual;
     // Notification only: a subclass may queue optional background work.
     procedure GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
       const NextOwnClock: TEngineGameClockState); virtual;
@@ -560,6 +561,10 @@ end;
 
 procedure TGameEngine.GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
   const NextOwnClock: TEngineGameClockState);
+begin
+end;
+
+procedure TGameEngine.SetGamePonderAllowed(Allowed: Boolean);
 begin
 end;
 

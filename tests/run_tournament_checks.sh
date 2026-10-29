@@ -11,3 +11,11 @@ if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
 fi
 cd "$OUT_DIR"
 XDG_CONFIG_HOME="$OUT_DIR/recovery" "$OUT_DIR/tournament_preservation_check" "$@"
+
+echo "==> chess_tournament_check (GTK2, existing tournament dialog and runners)"
+if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/chess" \
+  "$ROOT_DIR/tests/chess_tournament_check.lpi" > "$OUT_DIR/chess-build.log" 2>&1; then
+  cat "$OUT_DIR/chess-build.log"
+  exit 1
+fi
+XDG_CONFIG_HOME="$OUT_DIR/recovery" "$OUT_DIR/chess/chess_tournament_check"

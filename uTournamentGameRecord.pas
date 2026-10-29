@@ -1,7 +1,7 @@
 unit uTournamentGameRecord;
 {$mode objfpc}{$H+}
 interface
-uses FPJSON;
+uses FPJSON,uGameTreePdn;
 type
   TTournamentGameRecord = class
   private
@@ -10,6 +10,7 @@ type
     FPdn: string;
     FCaptureError: string;
     FPlayedResult: string;
+    FStartDate: string;
     FManualResult: string;
     FHistory: TJSONArray;
     function CurrentJson: TJSONObject;
@@ -26,6 +27,9 @@ type
     function EffectiveResult: string;
     function RenderPdn(const ATournamentId, AEvent, ARound, AGameNo,
       AWhite, ABlack, AFen: string): string;
+    function RenderGame(AFormat:TGameFileFormat;const ATournamentId,AEvent,ARound,AGameNo,
+      AWhite,ABlack,AFen:string):string;
+    property StartDate:string read FStartDate write FStartDate;
     property WhiteEngineKey: string read FWhiteEngineKey write FWhiteEngineKey;
     property BlackEngineKey: string read FBlackEngineKey write FBlackEngineKey;
     property CaptureError: string read FCaptureError;
@@ -34,7 +38,7 @@ type
     property PlayedResult: string read FPlayedResult;
   end;
 implementation
-uses Classes, SysUtils, StrUtils, uDraughtsPdn, uPdnText, uTournamentStorage;
+uses Classes, SysUtils, StrUtils, uDraughtsPdn, uPdnText, uTournamentStorage, uChessTournamentNotation;
 
 constructor TTournamentGameRecord.Create;
 begin
@@ -56,6 +60,7 @@ begin
   Result.Add('white_engine_key', FWhiteEngineKey);
   Result.Add('black_engine_key', FBlackEngineKey);
   Result.Add('pdn', FPdn);
+  if FStartDate<>'' then Result.Add('start_date',FStartDate);
   if FCaptureError <> '' then Result.Add('capture_error', FCaptureError);
   Result.Add('played_result', FPlayedResult);
   Result.Add('manual_result', FManualResult);
@@ -90,7 +95,7 @@ begin
   FWhiteEngineKey := Data.Get('white_engine_key', FWhiteEngineKey);
   FBlackEngineKey := Data.Get('black_engine_key', FBlackEngineKey);
   FAttempt := Data.Get('attempt', 1);
-  FPdn := Data.Get('pdn', '');
+  FPdn := Data.Get('pdn', '');FStartDate:=Data.Get('start_date','');
   FCaptureError := Data.Get('capture_error', '');
   FPlayedResult := Data.Get('played_result', '');
   FManualResult := Data.Get('manual_result', '');
@@ -127,7 +132,7 @@ begin
   if HasRecord then
     FHistory.Add(CurrentJson);
   Inc(FAttempt);
-  FCaptureError := '';
+  FCaptureError := '';FStartDate:='';
   FPdn := '';
   FPlayedResult := '';
   FManualResult := '';
@@ -147,6 +152,14 @@ begin
     Result := '*';
 end;
 
+function TTournamentGameRecord.RenderGame(AFormat:TGameFileFormat;const ATournamentId,AEvent,ARound,AGameNo,
+  AWhite,ABlack,AFen:string):string;
+begin
+ if AFormat=gffPdn then Exit(RenderPdn(ATournamentId,AEvent,ARound,AGameNo,AWhite,ABlack,AFen));
+ Result:='';if not HasRecord then Exit;
+ Result:=RenderChessTournamentGame(FPdn,FPlayedResult,EffectiveResult,FManualResult,FCaptureError,
+  FStartDate,ATournamentId,AEvent,ARound,AGameNo,IntToStr(FAttempt),AWhite,ABlack,AFen);
+end;
 function TTournamentGameRecord.RenderPdn(const ATournamentId, AEvent, ARound,
   AGameNo, AWhite, ABlack, AFen: string): string;
 var

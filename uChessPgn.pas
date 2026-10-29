@@ -16,6 +16,7 @@ type
 // into the target actor. No IO or grammar/rules validation is deferred to UI.
 procedure ImportChessPgn(const Text: string; Actor: TGameTreeActor; Warnings: TStrings);
 function PgnUtf8(const Bytes: string; out Converted: Boolean): string;
+function PgnTournamentFileMatchesId(const FileName,Id:string):Boolean;
 implementation
 uses SHA1, StrUtils, uChessPosition, uGameTree, uGameTreeBuilder, uGameFileMetadata,
   uGameTreeNodeData, uChessPgnAnnotations, uGameOrchestrator;
@@ -231,7 +232,8 @@ begin
 end;
 type
   TPgnEntry = class(TGameFileEntry)
-    ValidatedDigest: string;
+    ValidatedDigest,TournamentId: string;
+    IdentityHeaderValid: Boolean;
     FileName: string; Offset,Size: Int64; Variant: TGameVariant;
     function Text: string;
     procedure Validate; override;
@@ -281,7 +283,7 @@ var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
     Tag:=False; ColumnOne:=True; Body:=False; HadTag:=False;
   end;
   procedure Finish;
-  var Entry: TPgnEntry; L: TChessPgnLexer; T: TPgnToken; Name: string; Converted: Boolean;
+  var Entry: TPgnEntry; L: TChessPgnLexer; T: TPgnToken; Name: string; Converted: Boolean; Seen:TStringList;
   begin
     if not (Body or HadTag) then begin Start:=Posn; Reset; Exit; end;
     Entry:=TPgnEntry.Create; Entry.FileName:=FileName; Entry.Offset:=Start; Entry.Size:=Posn-Start;
@@ -289,19 +291,25 @@ var F: TFileStream; Buffer: array[0..65535] of Byte; Count,I,Depth: Integer;
     // Only the bounded header prefix is decoded/lexed for listing. Move bytes
     // remain in the file and are read for the selected entry alone.
     L:=TChessPgnLexer.Create(PgnWhitespace(PgnUtf8(HeaderBytes,Converted)));
+    Seen:=TStringList.Create;
     try
       try
         T:=L.NextToken;
         while T.Kind=ptComment do T:=L.NextToken;
         while T.Kind=ptTagOpen do begin
-          T:=L.NextToken; Name:=T.Text; T:=L.NextToken;
-          if T.Kind<>ptString then Break;
+          T:=L.NextToken; if T.Kind<>ptSymbol then raise EPgnSyntaxError.Create('Invalid PGN header name');
+          Name:=T.Text;
+          if Seen.IndexOf(Name)>=0 then raise EPgnSyntaxError.Create('Duplicate PGN header');Seen.Add(Name);
+          T:=L.NextToken;
+          if T.Kind<>ptString then raise EPgnSyntaxError.Create('Invalid PGN header value');
           if Name='White' then Entry.WhiteName:=T.Text else if Name='Black' then Entry.BlackName:=T.Text
-          else if Name='Event' then Entry.EventName:=T.Text else if Name='Result' then Entry.ResultText:=T.Text;
-          T:=L.NextToken; if T.Kind<>ptTagClose then Break; T:=L.NextToken;
+          else if Name='Event' then Entry.EventName:=T.Text else if Name='Result' then Entry.ResultText:=T.Text
+          else if Name='TournamentId' then Entry.TournamentId:=T.Text;
+          T:=L.NextToken; if T.Kind<>ptTagClose then raise EPgnSyntaxError.Create('Unclosed PGN header'); T:=L.NextToken;
         end;
+        Entry.IdentityHeaderValid:=Body and (Length(HeaderBytes)<1024*1024) and (Seen.Count>0);
       except on E:EPgnSyntaxError do Entry.WarningsText:=E.Message; end;
-    finally L.Free; end;
+    finally Seen.Free;L.Free; end;
     Entries.Add(Entry); Start:=Posn; Reset;
   end;
   function StartsTagLine: Boolean;
@@ -359,5 +367,21 @@ begin
     until Count=0;
     Finish;
   finally F.Free; end;
+end;
+function PgnTournamentFileMatchesId(const FileName,Id:string):Boolean;
+var Reader:TChessPgnReader;I:Integer;Entry:TPgnEntry;
+begin
+ Result:=False;if Id='' then Exit;
+ Reader:=TChessPgnReader.Create(nil);
+ try
+  try
+   Reader.OpenFile(FileName);if Reader.Entries.Count=0 then Exit;
+   for I:=0 to Reader.Entries.Count-1 do begin
+    Entry:=TPgnEntry(Reader.Entries[I]);
+    if not Entry.IdentityHeaderValid or (Entry.TournamentId<>Id) then Exit;
+   end;
+   Result:=True;
+  except Result:=False;end;
+ finally Reader.Free;end;
 end;
 end.

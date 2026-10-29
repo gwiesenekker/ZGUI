@@ -8,6 +8,7 @@ type
   TGuiGameFeatures=set of TGuiGameFeature;
   TGameBoardClass=class of TGameBoardControl;
   TGameGuiProfile=record
+    TournamentForcePonderOff: Boolean;
     DefaultClock: TTimeControl;
     Features: TGuiGameFeatures;
     EngineKinds: set of TExternalEngineKind;
@@ -27,14 +28,16 @@ uses uChessPosition, uChessBoardControl, uDraughtsPosition, uDraughtsBoardContro
 var SelectedVariant: TGameVariant=nil; SelectedProfile: TGameGuiProfile;
 function ChessGuiProfile: TGameGuiProfile;
 begin
+  Result.TournamentForcePonderOff:=True;
   Result.DefaultClock:=DefaultTimeControl; Result.DefaultClock.MovesPerPeriod:=0;
   Result.DefaultClock.MinutesPerPeriod:=5; Result.DefaultClock.IncrementSeconds:=3;
-  Result.Features:=[gfPdn,gfEngines,gfNewGame]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
+  Result.Features:=[gfPdn,gfEngines,gfNewGame,gfTournament]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
   Result.SourceClickSingleMove:=False; Result.FileFormat:=gffPgn;
   Result.FormatName:='PGN'; Result.FileFilter:='PGN files (*.pgn)|*.pgn|All files (*)|*'; Result.FileExtension:='pgn';
 end;
 function DraughtsGuiProfile: TGameGuiProfile;
 begin
+  Result.TournamentForcePonderOff:=False;
   Result.DefaultClock:=DefaultTimeControl;
   Result.Features:=[Low(TGuiGameFeature)..High(TGuiGameFeature)]; Result.EngineKinds:=[eekHub,eekDxp]; Result.BoardClass:=TDraughtsBoardControl;
   Result.SourceClickSingleMove:=True; Result.FileFormat:=gffPdn;

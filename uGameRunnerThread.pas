@@ -584,6 +584,7 @@ var
 
     LEngine := CreateGameEngine(ADefinition);
     try
+      LEngine.SetGamePonderAllowed(not FSetup.ForcePonderOff);
       LEngine.StopToken := FStopToken;
       AddGameLogLines(LEngine.StateLog);
       LEngine.OnLog := @RuntimeLog;

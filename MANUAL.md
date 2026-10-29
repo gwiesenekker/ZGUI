@@ -119,10 +119,47 @@ to the engine's clock; actual-turn time, including stopping a missed search, is.
 Pondering is most useful against a human or engines on separate machines. Two
 engines pondering on one computer compete for CPU resources; leave it off for
 ordinary engine comparisons unless resources are deliberately separated.
-When chess tournaments are connected, they will need their own ponder-off
-default before enabling pondering there.
+At very fast time controls, the engine's advertised **Move Overhead** option
+can leave a margin for communication and scheduling.
 
-Auto Play, setup, tournaments and databases are not yet connected.
+Chess engine tournaments now use the existing **Tournament...** dialog. Select
+registered UCI engines, a starting FEN, time control, pairing type and concurrent
+game count, then use **Create pairing** and **Play**. The default is 5+3 sudden
+death. Single and double round-robin and the existing Swiss pairing heuristic
+are available. Every game uses the one supplied FEN; opening files and paired
+opening variety are a separate future feature.
+
+Chess standings show one point for a win and half a point for a draw. The
+existing tie-break order is points, wins, Sonneborn-Berger, then name. A Swiss
+BYE awards one point and counts as a win in that tie-break; it starts no engine
+and creates no played PGN. This retains the existing tournament conventions,
+which are not a claim of compliance with FIDE Swiss regulations. Finish or
+resolve the current Swiss round before creating the next one.
+
+Tournament games force Ponder off at runtime, even when an engine has it saved
+as true. Saved options and ordinary games keep their own choice. UCI options
+are currently shared by all registrations using the same executable; different
+IDs do not give them different Threads, Hash or strength settings. Start warns
+about shared executable paths. Use separate executable paths when comparing
+different configurations; per-registration options are a separate future change.
+
+Concurrency respects existing engine reservations: five participants permit at
+most two games at once. Rows waiting for a busy engine say so. Concurrent active
+searches still share CPU capacity, and both players' processes retain their Hash
+memory. Choose Threads, Hash and concurrency to fit the machine; ZGUI does not
+allocate cores automatically or claim that such games are isolated measurements.
+
+Completed games, manual results and attempt history use the existing recovery
+workflow. Chess saves a versioned JSON tournament and a companion **PGN** with
+the game's start date, actual moves, comments and variations. Externally changed
+PGNs are preserved. Loading restores records without starting processes; use
+**Play** to continue pending rows. A stopped or failed row remains unfinished
+with an explicit reason. Use a manual result or **Reschedule selected game**;
+errors are not silently retried or awarded as forfeits. A flag fall remains a
+normal rules-based result. Draughts tournament files remain separate and cannot
+be loaded into the chess tournament dialog.
+
+Auto Play, setup and databases are not yet connected.
 Their controls remain visible in their original locations but are disabled,
 with automatic database search also guarded.
 

@@ -976,7 +976,7 @@ var Dialog, Reloaded, Missing: TTournamentDialog; Engines: TExternalEngineList;
       if OmitA and (Name = 'A') then Continue;
       Engine := TExternalEngineDefinition.Create;
       Engine.Kind := eekHub; Engine.HubId := Name;
-      Engine.ExePath := '/tmp/gwd-test-engine-' + Name;
+      Engine.ExePath := ExpandFileName(ParamStr(0));
       Engines.Add(Engine);
     end;
     SaveExternalEngines(Config, Engines);
@@ -1177,7 +1177,7 @@ begin
   Engines := TExternalEngineList.Create; Dialog := nil; Reloaded := nil;
   try
     Fast := TExternalEngineDefinition.Create; Fast.Kind := eekHub;
-    Fast.HubId := 'Same engine'; Fast.ExePath := '/tmp/gwd-test-same-engine'; Fast.Arguments := '--level fast';
+    Fast.HubId := 'Same engine'; Fast.ExePath := ExpandFileName(ParamStr(0)); Fast.Arguments := '--level fast';
     Slow := TExternalEngineDefinition.Create; Slow.Assign(Fast); Slow.Arguments := '--level slow';
     Engines.Add(Fast); Engines.Add(Slow);
     Check(EngineIdentityKey(Fast) <> EngineIdentityKey(Slow), 'arguments distinguish tournament engine identities');

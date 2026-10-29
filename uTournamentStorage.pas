@@ -1,14 +1,14 @@
 unit uTournamentStorage;
 {$mode objfpc}{$H+}
 interface
-uses FPJSON;
-function ReadTournamentDocument(const AFileName: string): TJSONObject;
+uses FPJSON,uGameTreePdn;
+function ReadTournamentDocument(const AFileName: string; AFormat:TGameFileFormat=gffPdn): TJSONObject;
 function TournamentDocumentText(AData: TJSONData): string;
 function TournamentPdnTag(const AName, AValue: string): string;
-function UnusedTournamentPdnPath(const ACandidate: string): string;
-function TournamentPdnMatchesId(const AFileName, AId: string): Boolean;
+function UnusedTournamentPdnPath(const ACandidate: string; AFormat:TGameFileFormat=gffPdn): string;
+function TournamentPdnMatchesId(const AFileName, AId: string; AFormat:TGameFileFormat=gffPdn): Boolean;
 implementation
-uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uDraughtsPdn;
+uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uDraughtsPdn, uChessPgn, Math;
 
 function TournamentDocumentText(AData: TJSONData): string;
 var
@@ -75,11 +75,12 @@ begin
   end;
 end;
 
-function TournamentPdnMatchesId(const AFileName, AId: string): Boolean;
+function TournamentPdnMatchesId(const AFileName, AId: string; AFormat:TGameFileFormat): Boolean;
 var Check: TTournamentPdnIdentityCheck;
 begin
   Result := False;
   if (AId = '') or not FileExists(AFileName) then Exit;
+  if AFormat=gffPgn then Exit(PgnTournamentFileMatchesId(AFileName,AId));
   Check := TTournamentPdnIdentityCheck.Create;
   try
     Check.Id := AId;
@@ -92,7 +93,7 @@ begin
   finally Check.Free; end;
 end;
 
-function UnusedTournamentPdnPath(const ACandidate: string): string;
+function UnusedTournamentPdnPath(const ACandidate: string; AFormat:TGameFileFormat): string;
 var
   Id: TGUID;
   BaseName: string;
@@ -103,7 +104,8 @@ begin
   begin
     if CreateGUID(Id) <> 0 then
       raise EInOutError.Create('Could not create a tournament PDN name');
-    Result := BaseName + '.' + GUIDToString(Id) + '.pdn';
+    if AFormat=gffPgn then Result := BaseName + '.' + GUIDToString(Id) + '.pgn'
+    else Result := BaseName + '.' + GUIDToString(Id) + '.pdn';
   end;
 end;
 
@@ -139,19 +141,30 @@ begin
   Value := AObject.Find(AName);
   if Value = nil then
     Exit;
-  if (Value.AsFloat < AMinimum) or (Value.AsFloat > High(Integer)) or
+  if IsNan(Value.AsFloat) or IsInfinite(Value.AsFloat) or
+    (Value.AsFloat < AMinimum) or (Value.AsFloat > High(Integer)) or
     (Value.AsFloat <> Trunc(Value.AsFloat)) then
     raise EConvertError.Create('Invalid tournament integer: ' + AName);
 end;
 
-procedure ValidateRecord(Data: TJSONObject; AHistoryAllowed: Boolean);
+procedure ValidateRecord(Data: TJSONObject; AHistoryAllowed: Boolean; AFormat:TGameFileFormat);
 var
   Items: TJSONArray;
   I: Integer;
   Value: string;
+  Y,M,D:Integer;
+  DateValue:TDateTime;
 begin
   CheckInteger(Data, 'attempt', 1);
   CheckField(Data, 'pdn', [jtString]);
+  CheckField(Data, 'start_date', [jtString]);
+  Value:=Data.Get('start_date','');
+  if (AFormat=gffPgn) and (Value<>'') then
+    if (Length(Value)<>10) or (Value[5]<>'.') or (Value[8]<>'.') or
+      not TryStrToInt(Copy(Value,1,4),Y) or not TryStrToInt(Copy(Value,6,2),M) or
+      not TryStrToInt(Copy(Value,9,2),D) or (Y<1) or (Y>9999) or (M<1) or (M>12) or
+      (D<1) or (D>31) or not TryEncodeDate(Y,M,D,DateValue) then
+      raise EConvertError.Create('Invalid tournament game start date');
   CheckField(Data, 'capture_error', [jtString]);
   CheckField(Data, 'white_engine_key', [jtString]);
   CheckField(Data, 'black_engine_key', [jtString]);
@@ -159,11 +172,11 @@ begin
   CheckField(Data, 'manual_result', [jtString]);
   Value := Data.Get('played_result', '');
   if (Value <> '') and (Value <> '*') and
-    not TournamentResultIsKnown(ParseTournamentResult(Value)) then
+    not TournamentResultIsKnown(ParseTournamentResult(Value,AFormat)) then
     raise EConvertError.Create('Invalid played tournament result');
   Value := Data.Get('manual_result', '');
   if (Value <> '') and (Value <> '*') and
-    not TournamentResultIsKnown(ParseTournamentResult(Value)) then
+    not TournamentResultIsKnown(ParseTournamentResult(Value,AFormat)) then
     raise EConvertError.Create('Invalid manual tournament result');
   CheckField(Data, 'history', [jtArray]);
   Items := TJSONArray(Data.Find('history'));
@@ -175,12 +188,12 @@ begin
     begin
       if Items[I].JSONType <> jtObject then
         raise EConvertError.Create('Invalid tournament attempt history');
-      ValidateRecord(TJSONObject(Items[I]), False);
+      ValidateRecord(TJSONObject(Items[I]), False,AFormat);
     end;
   end;
 end;
 
-procedure ValidateDocument(Data: TJSONObject);
+procedure ValidateDocument(Data: TJSONObject; AFormat:TGameFileFormat);
 var
   Value: TJSONData;
   Games, Engines: TJSONArray;
@@ -191,8 +204,19 @@ var
   PairingKey: string;
 begin
   CheckInteger(Data, 'storage_version', 1);
-  if Data.Get('storage_version', 1) > 2 then
+  if Data.Get('storage_version', 1) > 3 then
     raise EConvertError.Create('Unsupported tournament storage version');
+  if Data.Get('storage_version',1)=3 then begin
+    CheckField(Data,'game_variant',[jtString]);CheckField(Data,'notation_format',[jtString]);
+    CheckField(Data,'force_ponder_off',[jtBoolean]);
+    if (AFormat<>gffPgn) or (Data.Get('game_variant','')<>'chess') or
+      (Data.Get('notation_format','')<>'pgn') or not Data.Get('force_ponder_off',False) then
+      raise EConvertError.Create('Unsupported tournament variant, format or ponder policy');
+  end else begin
+    if AFormat<>gffPdn then raise EConvertError.Create('This is a draughts tournament; chess cannot load it');
+    if (Data.Find('game_variant')<>nil) or (Data.Find('notation_format')<>nil) or
+      (Data.Find('force_ponder_off')<>nil) then raise EConvertError.Create('Unexpected tournament format metadata');
+  end;
   if (Data.Find('tournament_id') <> nil) and
     (Data.Find('tournament_id').JSONType = jtString) and
     (Trim(Data.Find('tournament_id').AsString) = '') then
@@ -202,6 +226,9 @@ begin
   CheckField(Data, 'starting_fen', [jtString]);
   CheckField(Data, 'tournament_id', [jtString]);
   CheckField(Data, 'pdn_file_name', [jtString]);
+  if (AFormat=gffPgn) and (Data.Get('pdn_file_name','')<>'') and
+    not SameText(ExtractFileExt(Data.Get('pdn_file_name','')),'.pgn') then
+    raise EConvertError.Create('Chess tournament companion must use .pgn');
   CheckField(Data, 'pdn_owned', [jtBoolean]);
   CheckField(Data, 'pdn_published_hash', [jtString]);
   CheckInteger(Data, 'moves_per_period', 0);
@@ -209,11 +236,12 @@ begin
   CheckField(Data, 'minutes_per_period', [jtNumber]);
   CheckField(Data, 'increment_seconds', [jtNumber]);
   Value := Data.Find('minutes_per_period');
-  if (Value <> nil) and (Value.AsFloat < 0) then
-    raise EConvertError.Create('Negative tournament time control');
+  if (Value <> nil) and (IsNan(Value.AsFloat) or IsInfinite(Value.AsFloat) or
+    (Value.AsFloat<0) or ((AFormat=gffPgn) and (Value.AsFloat=0))) then
+    raise EConvertError.Create('Invalid tournament time control');
   Value := Data.Find('increment_seconds');
-  if (Value <> nil) and (Value.AsFloat < 0) then
-    raise EConvertError.Create('Negative tournament increment');
+  if (Value <> nil) and (IsNan(Value.AsFloat) or IsInfinite(Value.AsFloat) or (Value.AsFloat<0)) then
+    raise EConvertError.Create('Invalid tournament increment');
   CheckField(Data, 'increment_mode', [jtString]);
   PairingType := Data.Get('increment_mode', 'from-start');
   if (PairingType <> 'from-start') and (PairingType <> 'after-move-limit') then
@@ -249,7 +277,7 @@ begin
     CheckField(Game, 'black_engine_key', [jtString]);
     CheckField(Game, 'record', [jtObject]);
     if Game.Find('record') <> nil then
-      ValidateRecord(TJSONObject(Game.Find('record')), True)
+      ValidateRecord(TJSONObject(Game.Find('record')), True,AFormat)
     else if Data.Get('storage_version', 1) >= 2 then
       raise EConvertError.Create('Tournament game record is missing');
     CheckInteger(Game, 'game', 1);
@@ -260,7 +288,7 @@ begin
     CheckField(Game, 'reason', [jtString]);
     ResultText := Game.Get('result', '*');
     if (ResultText <> '') and (ResultText <> '*') and
-      not TournamentResultIsKnown(ParseTournamentResult(ResultText)) then
+      not TournamentResultIsKnown(ParseTournamentResult(ResultText,AFormat)) then
       raise EConvertError.Create('Invalid tournament game result');
   end;
   Seen := TStringList.Create;
@@ -280,7 +308,7 @@ begin
   end;
 end;
 
-function ReadTournamentDocument(const AFileName: string): TJSONObject;
+function ReadTournamentDocument(const AFileName: string; AFormat:TGameFileFormat): TJSONObject;
 var
   Lines: TStringList;
   Data: TJSONData;
@@ -293,7 +321,7 @@ begin
     Data := GetJSON(Lines.Text);
     if (Data = nil) or (Data.JSONType <> jtObject) then
       raise EConvertError.Create('Tournament document must be a JSON object');
-    ValidateDocument(TJSONObject(Data));
+    ValidateDocument(TJSONObject(Data),AFormat);
     Result := TJSONObject(Data);
     Data := nil;
   finally

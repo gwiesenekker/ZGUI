@@ -6,7 +6,8 @@ interface
 
 uses
   CheckLst, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
-  Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord;
+  Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord,
+  uGameGuiProfile,uGamePosition,uGameOrchestrator;
 
 type
   TTournamentRunningGame = class
@@ -24,6 +25,8 @@ type
 
   TTournamentDialog = class(TForm)
   private
+    FVariant:TGameVariant;
+    FProfile:TGameGuiProfile;
     FAcceptedTournamentSignature: string;
     FBlackEngines: TStringList;
     FClosing: Boolean;
@@ -60,6 +63,9 @@ type
     FTimer: TTimer;
     FTournamentNameEdit: TEdit;
     FWhiteEngines: TStringList;
+    function ReadSettings:TTimeControl;
+    function ConfirmSharedExecutables:Boolean;
+    function GameFileExtension:string;
     procedure AddLabelledEdit(AParent: TWinControl; const ACaption: string;
       AEdit: TEdit; var ATop: Integer);
     procedure AdjustPairingGridColumnWidths;
@@ -139,7 +145,7 @@ type
 implementation
 
 uses
-  Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils, uGameOrchestrator,
+  Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
   uAtomicFile, uGameTreePdn, uDraughtsPdn, LazLoggerBase;
@@ -161,14 +167,14 @@ end;
 function TournamentReasonIsTransient(const AReason: string): Boolean;
 begin
   Result := SameText(Trim(AReason), 'Running') or
-    SameText(Trim(AReason), 'Stopping');
+    SameText(Trim(AReason), 'Stopping') or SameText(Trim(AReason),'Waiting for a free engine');
 end;
 
 const
   TournamentLaunchStaggerMs = 1000;
 
 procedure ApplyTournamentGameResultToRow(AGrid: TStringGrid; ARow: Integer;
-  AGame: TRunningGame);
+  AGame: TRunningGame; AFormat:TGameFileFormat);
 var
   ResultText: string;
 begin
@@ -182,7 +188,7 @@ begin
     AGrid.Cells[TournamentColReason, ARow] := AGame.LastErrorText
   else if ResultText = '*' then
     AGrid.Cells[TournamentColReason, ARow] := 'Unknown result'
-  else if ResultText = '1-1' then
+  else if ParseTournamentResult(ResultText,AFormat)=trDraw then
     AGrid.Cells[TournamentColReason, ARow] := 'Draw'
   else
     AGrid.Cells[TournamentColReason, ARow] := 'Game finished';
@@ -231,6 +237,7 @@ var
   Id: TGUID;
 begin
   inherited Create(AOwner);
+  FVariant:=DefaultGameVariant;FProfile:=GameGuiProfileFor(FVariant);
   if CreateGUID(Id) <> 0 then
     raise EInOutError.Create('Could not create a tournament identity');
   FTournamentId := GUIDToString(Id);
@@ -264,12 +271,12 @@ begin
 
   FStartingFENEdit := TEdit.Create(Self);
   FStartingFENEdit.Name := 'TournamentStartingFEN';
-  FStartingFENEdit.Text := 'W:W31-50:B1-20';
+  FStartingFENEdit.Text := FVariant.DefaultStartingFEN;
   FStartingFENEdit.OnChange := @InvalidateTournamentResults;
   AddLabelledEdit(ButtonPanel, 'Starting FEN', FStartingFENEdit, TopPos);
 
   FMovesEdit := TEdit.Create(Self);
-  FMovesEdit.Text := '75';
+  FMovesEdit.Name:='TournamentMoves';FMovesEdit.Text := IntToStr(FProfile.DefaultClock.MovesPerPeriod);
   FMovesEdit.OnChange := @InvalidateTournamentResults;
   FMovesEdit.SetBounds(0, 132, 86, 24);
   FMovesEdit.Parent := ButtonPanel;
@@ -279,7 +286,7 @@ begin
   LabelControl.Caption := 'Moves';
 
   FMinutesEdit := TEdit.Create(Self);
-  FMinutesEdit.Text := '5';
+  FMinutesEdit.Name:='TournamentMinutes';FMinutesEdit.Text := FloatToStr(FProfile.DefaultClock.MinutesPerPeriod);
   FMinutesEdit.OnChange := @InvalidateTournamentResults;
   FMinutesEdit.SetBounds(96, 132, 86, 24);
   FMinutesEdit.Parent := ButtonPanel;
@@ -289,7 +296,7 @@ begin
   LabelControl.Caption := 'Time';
 
   FIncrementEdit := TEdit.Create(Self);
-  FIncrementEdit.Text := '0';
+  FIncrementEdit.Name:='TournamentIncrement';FIncrementEdit.Text := FloatToStr(FProfile.DefaultClock.IncrementSeconds);
   FIncrementEdit.OnChange := @InvalidateTournamentResults;
   FIncrementEdit.SetBounds(192, 132, 86, 24);
   FIncrementEdit.Parent := ButtonPanel;
@@ -308,7 +315,7 @@ begin
   FIncrementModeCombo.OnChange := @InvalidateTournamentResults;
 
   FConcurrentGamesEdit := TEdit.Create(Self);
-  FConcurrentGamesEdit.Text := '1';
+  FConcurrentGamesEdit.Name:='TournamentConcurrentGames';FConcurrentGamesEdit.Text := '1';
   FConcurrentGamesEdit.SetBounds(640, 98, 120, 24);
   FConcurrentGamesEdit.Parent := ButtonPanel;
   LabelControl := TLabel.Create(Self);
@@ -456,15 +463,15 @@ begin
   PopupItem.OnClick := @SetSelectedResultClick;
   PairingPopup.Items.Add(PopupItem);
   PopupItem := TMenuItem.Create(Self);
-  PopupItem.Caption := '2-0';
+  PopupItem.Caption := TournamentResultText(trWhiteWin,FProfile.FileFormat);
   PopupItem.OnClick := @SetSelectedResultClick;
   PairingPopup.Items.Add(PopupItem);
   PopupItem := TMenuItem.Create(Self);
-  PopupItem.Caption := '1-1';
+  PopupItem.Caption := TournamentResultText(trDraw,FProfile.FileFormat);
   PopupItem.OnClick := @SetSelectedResultClick;
   PairingPopup.Items.Add(PopupItem);
   PopupItem := TMenuItem.Create(Self);
-  PopupItem.Caption := '0-2';
+  PopupItem.Caption := TournamentResultText(trBlackWin,FProfile.FileFormat);
   PopupItem.OnClick := @SetSelectedResultClick;
   PairingPopup.Items.Add(PopupItem);
   PopupItem := TMenuItem.Create(Self);
@@ -575,6 +582,58 @@ begin
     TTournamentRunningGame(FRunningGames[0]).Free;
     FRunningGames.Delete(0);
   end;
+end;
+
+function TTournamentDialog.GameFileExtension:string;
+begin Result:='.'+FProfile.FileExtension;end;
+
+function TTournamentDialog.ReadSettings:TTimeControl;
+var Setup:TGameSetup;
+begin
+  Result:=FProfile.DefaultClock;
+  if not TryStrToInt(Trim(FMovesEdit.Text),Result.MovesPerPeriod) then
+    raise EConvertError.Create('Moves must be a nonnegative integer');
+  if not TryStrToFloat(Trim(FMinutesEdit.Text),Result.MinutesPerPeriod) then
+    raise EConvertError.Create('Time must be a positive finite number');
+  if not TryStrToFloat(Trim(FIncrementEdit.Text),Result.IncrementSeconds) then
+    raise EConvertError.Create('Increment must be a nonnegative finite number');
+  if FIncrementModeCombo.ItemIndex=1 then Result.IncrementMode:=cimAfterMoveLimit
+  else Result.IncrementMode:=cimFromStart;
+  Setup:=Default(TGameSetup);Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
+  Setup.TimeControl:=Result;Setup.StartingFEN:=Trim(FStartingFENEdit.Text);
+  if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
+  ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
+end;
+
+function TTournamentDialog.ConfirmSharedExecutables:Boolean;
+var Seen,Keys:TStringList;Row:Integer;
+ function Participant(D:TExternalEngineDefinition):Boolean;
+ var Path,Key:string;
+ begin
+  Result:=True;if D=nil then Exit;
+  Key:=EngineIdentityKey(D);if Keys.IndexOf(Key)>=0 then Exit;
+  Keys.Add(Key);Path:=ExpandFileName(D.ExePath);
+  if Seen.IndexOf(Path)>=0 then Exit(False);
+  Seen.Add(Path);
+ end;
+begin
+  Result:=True;if FProfile.FileFormat<>gffPgn then Exit;
+  Seen:=TStringList.Create;Keys:=TStringList.Create;
+  try
+    Seen.CaseSensitive:={$IFDEF MSWINDOWS}False{$ELSE}True{$ENDIF};
+    // The current pairing rows are authoritative, even if the checklist was
+    // edited in preparation for a later round.
+    for Row:=1 to FGrid.RowCount-1 do
+      if TournamentGridHasPairingAtRow(FGrid,Row) then
+        if not Participant(EngineForRow(Row,True)) or
+          not Participant(EngineForRow(Row,False)) then begin
+          Result:=ShowGuiConfirmationDialog(Self,'Tournament',
+            'Two participants use the same executable and share one UCI options file.'+LineEnding+
+            'They cannot use different saved settings. Use separate executable paths for that comparison.'+LineEnding+
+            'Continue with the shared settings?', 'Continue','',mrCancel)=mrYes;
+          Exit;
+        end;
+  finally Keys.Free;Seen.Free;end;
 end;
 
 procedure TTournamentDialog.AddLabelledEdit(AParent: TWinControl;
@@ -690,8 +749,8 @@ begin
     end;
   until (NewFileName = '') or
     (not FileExists(NewFileName) and not DirectoryExists(NewFileName) and
-     not FileExists(ChangeFileExt(NewFileName, '.pdn')) and
-     not DirectoryExists(ChangeFileExt(NewFileName, '.pdn')));
+     not FileExists(ChangeFileExt(NewFileName, GameFileExtension)) and
+     not DirectoryExists(ChangeFileExt(NewFileName, GameFileExtension)));
   FTournamentId := NewId;
   FFileName := NewFileName;
   FPdnFileName := '';
@@ -716,9 +775,9 @@ begin
       SafeFileNameText(FTournamentNameEdit.Text) + '.' + FTournamentId + '.json';
   end;
   if FPdnFileName = '' then
-    FPdnFileName := ChangeFileExt(ExpandFileName(FFileName), '.pdn');
+    FPdnFileName := ChangeFileExt(ExpandFileName(FFileName), GameFileExtension);
   if not FPdnFileOwned then
-    FPdnFileName := UnusedTournamentPdnPath(FPdnFileName);
+    FPdnFileName := UnusedTournamentPdnPath(FPdnFileName,FProfile.FileFormat);
 end;
 
 function TTournamentDialog.PdnFileName: string;
@@ -732,6 +791,7 @@ begin
   if FLoadingTournament then Exit;
   FStorageError := '';
   try
+    ReadSettings;MaxConcurrentGames;
     EnsureStoragePaths;
     try
       WritePdnProjection;
@@ -762,8 +822,11 @@ begin
 end;
 
 function TTournamentDialog.CaptureGamePdn(AGame: TObject): string;
+var Options:TGameTreePdnRenderOptions;
 begin
-  Result := GameTreeToPdnText(TRunningGame(AGame).GameTree);
+  Options:=DefaultGameTreePdnRenderOptions;Options.FileFormat:=FProfile.FileFormat;
+  Options.LosslessPgn:=FProfile.FileFormat=gffPgn;
+  Result := GameTreeToPdnTextEx(TRunningGame(AGame).GameTree,Options);
 end;
 
 procedure TTournamentDialog.CaptureTournamentGame(
@@ -771,6 +834,7 @@ procedure TTournamentDialog.CaptureTournamentGame(
 begin
   if (ARunningGame = nil) or not (AGame is TRunningGame) then Exit;
   try
+    if FProfile.FileFormat=gffPgn then GameRecord(ARunningGame.Row).StartDate:=FormatDateTime('yyyy.mm.dd',TRunningGame(AGame).StartedAt);
     GameRecord(ARunningGame.Row).RecordPlayedGame(CaptureGamePdn(AGame),
       TRunningGame(AGame).ResultText);
     ARunningGame.PendingCapture := False;
@@ -801,7 +865,7 @@ begin
     for Row := 1 to FGrid.RowCount - 1 do
       if TournamentGridHasPairingAtRow(FGrid, Row) and
         not SameText(FGrid.Cells[TournamentColReason, Row], 'Bye') then
-        Output.WriteString(GameRecord(Row).RenderPdn(FTournamentId,
+        Output.WriteString(GameRecord(Row).RenderGame(FProfile.FileFormat,FTournamentId,
           FTournamentNameEdit.Text, FGrid.Cells[TournamentColRound, Row],
           FGrid.Cells[TournamentColGame, Row], FGrid.Cells[TournamentColWhite, Row],
           FGrid.Cells[TournamentColBlack, Row], FStartingFENEdit.Text) + LineEnding);
@@ -827,23 +891,23 @@ begin
           // Older snapshots had no fingerprint. Exact projection equality plus
           // the tournament identity safely establishes the first fingerprint.
           OwnedContent := (ActualHash = SHA1Print(SHA1String(PublishedText))) and
-            TournamentPdnMatchesId(FPdnFileName, FTournamentId);
+            TournamentPdnMatchesId(FPdnFileName, FTournamentId,FProfile.FileFormat);
         end
         else
           OwnedContent := (ActualHash = FPdnPublishedHash) and
             ((FVerifiedPdnFingerprint = Fingerprint) or
-             TournamentPdnMatchesId(FPdnFileName, FTournamentId));
+             TournamentPdnMatchesId(FPdnFileName, FTournamentId,FProfile.FileFormat));
       end;
       if not OwnedContent then
       begin
         if FPdnPublishedHash = '' then
-          FStorageNotice := 'Preserved unverified prior PDN: ' + ExtractFileName(FPdnFileName)
+          FStorageNotice := 'Preserved unverified prior '+FProfile.FormatName+': ' + ExtractFileName(FPdnFileName)
         else
-          FStorageNotice := 'Preserved changed PDN: ' + ExtractFileName(FPdnFileName);
+          FStorageNotice := 'Preserved changed '+FProfile.FormatName+': ' + ExtractFileName(FPdnFileName);
         FLegacyPdnFileName := FPdnFileName;
         FPdnFileOwned := False;
         FPdnPublishedHash := '';
-        FPdnFileName := UnusedTournamentPdnPath(FPdnFileName);
+        FPdnFileName := UnusedTournamentPdnPath(FPdnFileName,FProfile.FileFormat);
       end;
     end;
     WriteTextFileAtomically(FPdnFileName, PublishedText, FPdnFileOwned);
@@ -863,6 +927,7 @@ begin
   LoadExternalEngines(EnginesJsonFileName, FEngines);
   for I := 0 to FEngines.Count - 1 do
   begin
+    if not (FEngines[I].Kind in FProfile.EngineKinds) then Continue;
     FEngineCheckList.Items.AddObject(DisplayNameForEngine(FEngines[I]),
       FEngines[I]);
     FEngineCheckList.Checked[I] := True;
@@ -967,6 +1032,8 @@ begin
     Exit;
   if PendingInvalidatingChange then
     Exit;
+  try ReadSettings;MaxConcurrentGames;
+  except on E:Exception do begin ShowGuiOkDialog(Self,'Tournament',E.Message);Exit;end;end;
   Engines := TStringList.Create;
   WhiteEngines := TStringList.Create;
   BlackEngines := TStringList.Create;
@@ -982,7 +1049,7 @@ begin
     CollectPairingRows(WhiteEngines, BlackEngines, Results);
     CollectRoundRows(Rounds);
     if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) and
-      not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results) then
+      not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results,FProfile.FileFormat) then
     begin
       ShowGuiOkDialog(Self, 'Tournament',
         'Finish the current Swiss round first.');
@@ -992,7 +1059,7 @@ begin
     PairingRound := BuildTournamentPairingRound(
       TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex),
       TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex), Engines,
-      WhiteEngines, BlackEngines, Results, Rounds);
+      WhiteEngines, BlackEngines, Results, Rounds,FProfile.FileFormat);
     if PairingRound.HasRepeat and
       (ShowGuiConfirmationDialog(Self, 'Tournament',
       'The proposed Swiss round includes repeated opponents.' +
@@ -1005,7 +1072,7 @@ begin
       ClearTournamentGameRefs;
       ClearTournamentPairingGrid(FGrid);
     end;
-    ApplyTournamentPairingRoundToGrid(FGrid, PairingRound);
+    ApplyTournamentPairingRoundToGrid(FGrid, PairingRound,FProfile.FileFormat);
     FAcceptedTournamentSignature := TournamentSignature;
     if FInvalidationPanel <> nil then
       FInvalidationPanel.Visible := False;
@@ -1102,9 +1169,10 @@ begin
         Continue;
       if IsRowRunning(I + 1) then
         Continue;
-      if Trim(FGrid.Cells[TournamentColReason, I + 1]) <> '' then
+      if (Trim(FGrid.Cells[TournamentColReason, I + 1]) <> '') and
+        not TournamentReasonIsTransient(FGrid.Cells[TournamentColReason,I+1]) then
         Continue;
-      if not TournamentResultIsKnown(ParseTournamentResult(Results[I])) then
+      if not TournamentResultIsKnown(ParseTournamentResult(Results[I],FProfile.FileFormat)) then
         Exit(I + 1);
     end;
   finally
@@ -1172,7 +1240,7 @@ begin
     (not IsRowRunning(ARow)) then
     FGrid.Cells[TournamentColReason, ARow] := '';
   if TournamentResultIsKnown(ParseTournamentResult(
-    FGrid.Cells[TournamentColResult, ARow])) then
+    FGrid.Cells[TournamentColResult, ARow],FProfile.FileFormat)) then
     Exit;
   if Trim(FGrid.Cells[TournamentColReason, ARow]) <> '' then
     Exit;
@@ -1182,7 +1250,7 @@ begin
   WhiteKey := EngineIdentityKey(WhiteEngine);
   BlackKey := EngineIdentityKey(BlackEngine);
   if (WhiteKey = '') or (BlackKey = '') then
-  begin FGrid.Cells[TournamentColReason, ARow] := 'Missing engine'; Exit; end;
+  begin StartFailure(ARow,'Missing engine'); Exit; end;
   if EngineExecutableProblem(WhiteEngine)<>'' then
   begin StartFailure(ARow,EngineExecutableProblem(WhiteEngine)); Exit; end;
   if EngineExecutableProblem(BlackEngine)<>'' then
@@ -1195,7 +1263,7 @@ begin
       AddEngineReservationKeys(BlackEngine, CandidateKeys);
       for I := 0 to CandidateKeys.Count - 1 do
         if ABusyEngineKeys.IndexOf(CandidateKeys[I]) >= 0 then
-          Exit;
+        begin FGrid.Cells[TournamentColReason,ARow]:='Waiting for a free engine'; Exit; end;
     finally
       CandidateKeys.Free;
     end;
@@ -1259,7 +1327,7 @@ begin
     Exit;
 
   if (AResultText <> '*') and
-    not TournamentResultIsKnown(ParseTournamentResult(AResultText)) then
+    not TournamentResultIsKnown(ParseTournamentResult(AResultText,FProfile.FileFormat)) then
     raise EConvertError.Create('Invalid manual tournament result');
   GameRecord(FGrid.Row).OverrideResult(AResultText);
   FGrid.Cells[TournamentColResult, FGrid.Row] := GameRecord(FGrid.Row).EffectiveResult;
@@ -1346,6 +1414,7 @@ var
   Running: TTournamentRunningGame;
   Game: TRunningGame;
 begin
+  ReadSettings;MaxConcurrentGames;
   for I := 0 to FRunningGames.Count - 1 do
   begin
     Running := TTournamentRunningGame(FRunningGames[I]);
@@ -1368,7 +1437,7 @@ begin
       (ExtractFilePath(ExpandFileName(OldPdn)) = RecoveryDirectory)) then
     begin
       FPdnFileName := UnusedTournamentPdnPath(ChangeFileExt(
-        ExpandFileName(AFileName), '.pdn'));
+        ExpandFileName(AFileName), GameFileExtension),FProfile.FileFormat);
       FPdnFileOwned := False;
     end;
     FFileName := ExpandFileName(AFileName);
@@ -1409,15 +1478,20 @@ var
   Games: TJSONArray;
   I: Integer;
   NextPdnFileName: string;
+  Clock:TTimeControl;
 begin
+  Clock:=ReadSettings;
   NextPdnFileName := FPdnFileName;
   if NextPdnFileName = '' then
-    NextPdnFileName := ChangeFileExt(ExpandFileName(AFileName), '.pdn');
+    NextPdnFileName := ChangeFileExt(ExpandFileName(AFileName), GameFileExtension);
   if not FPdnFileOwned then
-    NextPdnFileName := UnusedTournamentPdnPath(NextPdnFileName);
+    NextPdnFileName := UnusedTournamentPdnPath(NextPdnFileName,FProfile.FileFormat);
   Data := TJSONObject.Create;
   try
-    Data.Add('storage_version', 2);
+    if FProfile.FileFormat=gffPgn then begin
+      Data.Add('storage_version',3);Data.Add('game_variant','chess');
+      Data.Add('notation_format','pgn');Data.Add('force_ponder_off',FProfile.TournamentForcePonderOff);
+    end else Data.Add('storage_version', 2);
     Data.Add('legacy_pdn_file_name', FLegacyPdnFileName);
     Data.Add('tournament_id', FTournamentId);
     Data.Add('pdn_file_name', ExtractRelativePath(ExpandFileName(AFileName),
@@ -1425,10 +1499,11 @@ begin
     Data.Add('pdn_owned', FPdnFileOwned);
     Data.Add('pdn_published_hash', FPdnPublishedHash);
     Data.Add('tournament_name', FTournamentNameEdit.Text);
-    Data.Add('starting_fen', FStartingFENEdit.Text);
-    Data.Add('moves_per_period', StrToIntDef(Trim(FMovesEdit.Text), 75));
-    Data.Add('minutes_per_period', StrToFloatDef(Trim(FMinutesEdit.Text), 5));
-    Data.Add('increment_seconds', StrToFloatDef(Trim(FIncrementEdit.Text), 0));
+    if Trim(FStartingFENEdit.Text)='' then Data.Add('starting_fen',FVariant.DefaultStartingFEN)
+    else Data.Add('starting_fen', Trim(FStartingFENEdit.Text));
+    Data.Add('moves_per_period', Clock.MovesPerPeriod);
+    Data.Add('minutes_per_period', Clock.MinutesPerPeriod);
+    Data.Add('increment_seconds', Clock.IncrementSeconds);
     Data.Add('concurrent_games', MaxConcurrentGames);
     if FIncrementModeCombo.ItemIndex = 1 then
       Data.Add('increment_mode', 'after-move-limit')
@@ -1491,19 +1566,30 @@ var
   Row: Integer;
   PairingType: string;
   Id: TGUID;
+  Setup:TGameSetup;
 begin
   if IsRunning then
     Exit;
-  Data := ReadTournamentDocument(AFileName);
+  Data := ReadTournamentDocument(AFileName,FProfile.FileFormat);
+  try
+    Setup:=Default(TGameSetup);Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
+    Setup.StartingFEN:=Data.Get('starting_fen',FVariant.DefaultStartingFEN);
+    Setup.TimeControl:=FProfile.DefaultClock;
+    Setup.TimeControl.MovesPerPeriod:=Data.Get('moves_per_period',Setup.TimeControl.MovesPerPeriod);
+    Setup.TimeControl.MinutesPerPeriod:=Data.Get('minutes_per_period',Setup.TimeControl.MinutesPerPeriod);
+    Setup.TimeControl.IncrementSeconds:=Data.Get('increment_seconds',Setup.TimeControl.IncrementSeconds);
+    if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
+    ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
+  except Data.Free;raise;end;
   FLoadingTournament := True;
   try
     FTournamentNameEdit.Text := TJSONObject(Data).Get('tournament_name',
       'Tournament');
     FStartingFENEdit.Text := TJSONObject(Data).Get('starting_fen',
-      'W:W31-50:B1-20');
-    FMovesEdit.Text := IntToStr(TJSONObject(Data).Get('moves_per_period', 75));
-    FMinutesEdit.Text := FloatToStr(TJSONObject(Data).Get('minutes_per_period', 5.0));
-    FIncrementEdit.Text := FloatToStr(TJSONObject(Data).Get('increment_seconds', 0.0));
+      FVariant.DefaultStartingFEN);
+    FMovesEdit.Text := IntToStr(TJSONObject(Data).Get('moves_per_period', FProfile.DefaultClock.MovesPerPeriod));
+    FMinutesEdit.Text := FloatToStr(TJSONObject(Data).Get('minutes_per_period', FProfile.DefaultClock.MinutesPerPeriod));
+    FIncrementEdit.Text := FloatToStr(TJSONObject(Data).Get('increment_seconds', FProfile.DefaultClock.IncrementSeconds));
     FConcurrentGamesEdit.Text := IntToStr(TJSONObject(Data).Get('concurrent_games', 1));
     if SameText(TJSONObject(Data).Get('increment_mode', 'from-start'),
       'after-move-limit') then
@@ -1575,7 +1661,7 @@ begin
     FPdnPublishedHash := Data.Get('pdn_published_hash', '');
     FVerifiedPdnFingerprint := '';
     FStorageNotice := '';
-    FPdnFileName := Data.Get('pdn_file_name', ChangeFileExt(ExpandFileName(AFileName), '.pdn'));
+    FPdnFileName := Data.Get('pdn_file_name', ChangeFileExt(ExpandFileName(AFileName), GameFileExtension));
     if (FPdnFileName <> '') and not FilenameIsAbsolute(FPdnFileName) then
       FPdnFileName := ExpandFileName(ExtractFilePath(ExpandFileName(AFileName)) + FPdnFileName);
     FLegacyPdnFileName := Data.Get('legacy_pdn_file_name', '');
@@ -1585,7 +1671,7 @@ begin
     begin
       // Rebuild from authoritative JSON at the new location. A pre-existing
       // sibling PDN has not been claimed by this snapshot and must be preserved.
-      FPdnFileName := ChangeFileExt(ExpandFileName(AFileName), '.pdn');
+      FPdnFileName := ChangeFileExt(ExpandFileName(AFileName), GameFileExtension);
       FPdnFileOwned := False;
     end;
     if (Data.Get('storage_version', 0) >= 2) and
@@ -1596,7 +1682,7 @@ begin
     begin
       // Never overwrite an older, unlinked archive while migrating standings.
       FLegacyPdnFileName := FPdnFileName;
-      FPdnFileName := ChangeFileExt(FPdnFileName, '') + '.' + FTournamentId + '.pdn';
+      FPdnFileName := ChangeFileExt(FPdnFileName, '') + '.' + FTournamentId + GameFileExtension;
     end;
     FStorageError := '';
     FFileName := ExpandFileName(AFileName);
@@ -1650,6 +1736,8 @@ end;
 
 procedure TTournamentDialog.ApplyInvalidatingChange(Sender: TObject);
 begin
+  try ReadSettings;MaxConcurrentGames;
+  except on E:Exception do begin ShowGuiOkDialog(Self,'Tournament',E.Message);Exit;end;end;
   if not StartNewTournamentStorage then Exit;
   if FInvalidationPanel <> nil then
     FInvalidationPanel.Visible := False;
@@ -1708,38 +1796,26 @@ function TTournamentDialog.GameSetupForRow(ARow: Integer;
   out ASetup: TGameSetup): Boolean;
 begin
   Result := False;
-  ASetup.StartingFEN := '';
-  ASetup.WhitePlayer := pkRegistered;
-  ASetup.BlackPlayer := pkRegistered;
-  ASetup.WhiteEngine := nil;
-  ASetup.BlackEngine := nil;
-  ASetup.TimeControl := DefaultTimeControl;
-  if not TournamentGridHasPairingAtRow(FGrid, ARow) then
-    Exit;
-  ASetup.WhiteEngine := EngineForRow(ARow, True);
-  ASetup.BlackEngine := EngineForRow(ARow, False);
-  if (ASetup.WhiteEngine = nil) or (ASetup.BlackEngine = nil) then
-  begin FGrid.Cells[TournamentColReason, ARow] := 'Missing engine'; Exit; end;
-  ASetup.StartingFEN := Trim(FStartingFENEdit.Text);
-  if ASetup.StartingFEN = '' then
-    ASetup.StartingFEN := 'W:W31-50:B1-20';
-  ASetup.WhitePlayer := pkRegistered;
-  ASetup.BlackPlayer := pkRegistered;
-  ASetup.TimeControl.MovesPerPeriod := StrToIntDef(Trim(FMovesEdit.Text), 75);
-  ASetup.TimeControl.MinutesPerPeriod := StrToFloatDef(Trim(FMinutesEdit.Text), 5);
-  ASetup.TimeControl.IncrementSeconds := StrToFloatDef(Trim(FIncrementEdit.Text), 0);
-  if FIncrementModeCombo.ItemIndex = 1 then
-    ASetup.TimeControl.IncrementMode := cimAfterMoveLimit
-  else
-    ASetup.TimeControl.IncrementMode := cimFromStart;
+  ASetup:=Default(TGameSetup);
+  ASetup.WhitePlayer:=pkRegistered;ASetup.BlackPlayer:=pkRegistered;
+  if not TournamentGridHasPairingAtRow(FGrid,ARow) then Exit;
+  ASetup.WhiteEngine:=EngineForRow(ARow,True);ASetup.BlackEngine:=EngineForRow(ARow,False);
+  if (ASetup.WhiteEngine=nil) or (ASetup.BlackEngine=nil) then
+  begin FGrid.Cells[TournamentColReason,ARow]:='Missing engine';Exit;end;
+  ASetup.StartingFEN:=Trim(FStartingFENEdit.Text);
+  if ASetup.StartingFEN='' then ASetup.StartingFEN:=FVariant.DefaultStartingFEN;
+  try
+    ASetup.TimeControl:=ReadSettings;
+    ASetup.ForcePonderOff:=FProfile.TournamentForcePonderOff;
+    ValidateGameSetup(ASetup,FVariant,FProfile.EngineKinds);
+  except on E:Exception do begin StartFailure(ARow,E.Message);Exit;end;end;
   Result := True;
 end;
 
 function TTournamentDialog.MaxConcurrentGames: Integer;
 begin
-  Result := StrToIntDef(Trim(FConcurrentGamesEdit.Text), 1);
-  if Result < 1 then
-    Result := 1;
+  if not TryStrToInt(Trim(FConcurrentGamesEdit.Text),Result) or (Result<1) then
+    raise EConvertError.Create('Concurrent games must be a positive integer');
 end;
 
 procedure TTournamentDialog.HighlightRow(ARow: Integer);
@@ -1765,6 +1841,9 @@ begin
   if PendingInvalidatingChange then
     Exit;
 
+  try ReadSettings;MaxConcurrentGames;
+  except on E:Exception do begin ShowGuiOkDialog(Self,'Tournament',E.Message);Exit;end;end;
+  if not ConfirmSharedExecutables then Exit;
   AutoSaveTournament;
   if FStorageError <> '' then
     Exit;
@@ -1772,7 +1851,7 @@ begin
   FRunning := True;
   FLastGameStartTick := 0;
   StartPendingGames;
-  FTimer.Enabled := FRunning;
+  FTimer.Enabled := FRunning or (ActiveRunningGameCount>0);
   UpdateButtons;
 end;
 
@@ -1793,7 +1872,7 @@ begin
       if Game.Lifecycle = rglFinished then
       begin
         CaptureTournamentGame(RunningGame, Game);
-        ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
+        ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game,FProfile.FileFormat);
         RunningGame.Active := False;
       end
       else
@@ -1858,7 +1937,7 @@ begin
         (TRunningGame(AGame).State in [gosGameOver, gosError]) then
       begin
         ApplyTournamentGameResultToRow(FGrid, RunningGame.Row,
-          TRunningGame(AGame));
+          TRunningGame(AGame),FProfile.FileFormat);
         if GameRecord(RunningGame.Row).ManualResult <> '' then
         begin
           FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
@@ -1910,6 +1989,7 @@ begin
   RunningGame.Active := True;
   RunningGame.Row := ARow;
   RunningGame.GameId := TRunningGame(AGame).Id;
+  if FProfile.FileFormat=gffPgn then GameRecord(ARow).StartDate:=FormatDateTime('yyyy.mm.dd',TRunningGame(AGame).StartedAt);
   FRunningGames.Add(RunningGame);
   FGrid.Cells[TournamentColReason, ARow] := 'Running';
   UpdateButtons;
@@ -1941,7 +2021,12 @@ begin
 
   ClearStaleRunningReasons;
   StartedAny := False;
-  MaxGames := MaxConcurrentGames;
+  try
+    MaxGames := MaxConcurrentGames;
+  except on E:Exception do begin
+    // An edit while games run pauses scheduling; it must not escape every tick.
+    FStorageError:=E.Message;FRunning:=False;UpdateButtons;Exit;
+  end;end;
   if (FLastGameStartTick > 0) and
     (GetTickCount64 - FLastGameStartTick < TournamentLaunchStaggerMs) then
     Exit;
@@ -1961,6 +2046,7 @@ begin
 
     for Row := 1 to FGrid.RowCount - 1 do
     begin
+      if not FRunning then Break;
       if ActiveRunningGameCount >= MaxGames then
         Break;
       if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) and
@@ -2029,7 +2115,7 @@ begin
     CaptureTournamentGame(RunningGame, Game);
     if Game.State in [gosGameOver, gosError] then
     begin
-      ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game);
+      ApplyTournamentGameResultToRow(FGrid, RunningGame.Row, Game,FProfile.FileFormat);
       if GameRecord(RunningGame.Row).ManualResult <> '' then
       begin
         FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
@@ -2122,7 +2208,7 @@ begin
   try
     CollectSelectedEngines(Engines);
     CollectPairingRows(WhiteEngines, BlackEngines, Results);
-    BuildTournamentCrossTable(Engines, WhiteEngines, BlackEngines, Results, Table);
+    BuildTournamentCrossTable(Engines, WhiteEngines, BlackEngines, Results, Table,FProfile.FileFormat);
 
     FCrossTableGrid.ColCount := Max(4, Length(Table.EngineNames) + 4);
     FCrossTableGrid.RowCount := Max(2, Length(Table.EngineNames) + 1);
@@ -2155,11 +2241,11 @@ begin
           FCrossTableGrid.Cells[J + 1, I + 1] :=
             Table.Matrix[Table.Order[I], Table.Order[J]];
         FCrossTableGrid.Cells[Col, I + 1] :=
-          IntToStr(Table.Points[Table.Order[I]]);
+          FormatTournamentSB(Table.Points[Table.Order[I]],FProfile.FileFormat);
         FCrossTableGrid.Cells[Col + 1, I + 1] :=
           IntToStr(Table.Wins[Table.Order[I]]);
         FCrossTableGrid.Cells[Col + 2, I + 1] :=
-          FormatTournamentSB(Table.SB[Table.Order[I]]);
+          FormatTournamentSB(Table.SB[Table.Order[I]],FProfile.FileFormat);
       end;
 
     FCrossTableGrid.ColWidths[0] := 260;

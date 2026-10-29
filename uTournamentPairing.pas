@@ -5,7 +5,7 @@ unit uTournamentPairing;
 interface
 
 uses
-  Classes;
+  Classes, uGameTreePdn;
 
 type
   TTournamentPairing = record
@@ -24,15 +24,15 @@ type
 
 function BuildTournamentPairingRound(AIsSwiss, ADoubleRoundRobin: Boolean;
   AEngines, AWhiteEngines, ABlackEngines, AResults,
-  ARounds: TStrings): TTournamentPairingRound;
+  ARounds: TStrings; AFormat:TGameFileFormat=gffPdn): TTournamentPairingRound;
 function TournamentAllResultsKnown(AWhiteEngines, ABlackEngines,
-  AResults: TStrings): Boolean;
+  AResults: TStrings; AFormat:TGameFileFormat=gffPdn): Boolean;
 function TournamentNextRoundNumber(ARounds: TStrings): Integer;
 procedure GenerateRoundRobinPairings(AEngines: TStrings;
   ADoubleRoundRobin: Boolean; out APairings: TTournamentPairingArray);
 procedure GenerateSwissPairings(AEngines, AWhiteEngines, ABlackEngines,
   AResults, ARounds: TStrings; out APairings: TTournamentPairingArray;
-  out AHasRepeat: Boolean);
+  out AHasRepeat: Boolean; AFormat:TGameFileFormat=gffPdn);
 
 implementation
 
@@ -52,14 +52,14 @@ begin
 end;
 
 function TournamentAllResultsKnown(AWhiteEngines, ABlackEngines,
-  AResults: TStrings): Boolean;
+  AResults: TStrings; AFormat:TGameFileFormat): Boolean;
 var
   I: Integer;
 begin
   Result := True;
   for I := 0 to AResults.Count - 1 do
     if ((AWhiteEngines[I] <> '') or (ABlackEngines[I] <> '')) and
-      (not TournamentResultIsKnown(ParseTournamentResult(AResults[I]))) then
+      (not TournamentResultIsKnown(ParseTournamentResult(AResults[I],AFormat))) then
       Exit(False);
 end;
 
@@ -126,7 +126,7 @@ end;
 
 procedure GenerateSwissPairings(AEngines, AWhiteEngines, ABlackEngines,
   AResults, ARounds: TStrings; out APairings: TTournamentPairingArray;
-  out AHasRepeat: Boolean);
+  out AHasRepeat: Boolean; AFormat:TGameFileFormat);
 var
   ByeIndex: Integer;
   ColorBalance: array of Integer;
@@ -315,9 +315,9 @@ begin
   for I := 0 to AResults.Count - 1 do
   begin
     AddScore(AWhiteEngines[I],
-      TournamentResultPointsForWhite(ParseTournamentResult(AResults[I])));
+      TournamentResultPointsForWhite(ParseTournamentResult(AResults[I],AFormat)));
     AddScore(ABlackEngines[I],
-      TournamentResultPointsForBlack(ParseTournamentResult(AResults[I])));
+      TournamentResultPointsForBlack(ParseTournamentResult(AResults[I],AFormat)));
     if not SameText(ABlackEngines[I], 'BYE') then
     begin
       AddColor(AWhiteEngines[I], 1);
@@ -382,7 +382,7 @@ end;
 
 function BuildTournamentPairingRound(AIsSwiss, ADoubleRoundRobin: Boolean;
   AEngines, AWhiteEngines, ABlackEngines, AResults,
-  ARounds: TStrings): TTournamentPairingRound;
+  ARounds: TStrings; AFormat:TGameFileFormat): TTournamentPairingRound;
 var I: Integer;
 begin
   Result.HasRepeat := False;
@@ -392,7 +392,7 @@ begin
   begin
     Result.RoundNumber := TournamentNextRoundNumber(ARounds);
     GenerateSwissPairings(AEngines, AWhiteEngines, ABlackEngines, AResults,
-      ARounds, Result.Pairings, Result.HasRepeat);
+      ARounds, Result.Pairings, Result.HasRepeat,AFormat);
     for I := 0 to High(Result.Pairings) do Result.Pairings[I].RoundNumber := Result.RoundNumber;
   end
   else

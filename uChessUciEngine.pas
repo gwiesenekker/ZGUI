@@ -13,7 +13,7 @@ type
     FCancel: LongInt;
     FSearching,FFaulted,FExpectUci,FExpectReady: Boolean;
     FStartedTick: QWord;
-    FGameMode,FHasClock: Boolean;
+    FGameMode,FHasClock,FForcePonderOff,FStoppingPonder: Boolean;
     FClock,FPonderClock: TEngineGameClockState;
     FPonderActive,FHasPending: Boolean;
     FPendingRoot,FSearchRoot,FSearchMoves,FNextReply: string;
@@ -56,6 +56,7 @@ type
     procedure PressButton(const Name: string);
     procedure BeginGame(const Fen: string; Side: TGameSide; Minutes: Double; Moves: Integer; Increment: Double=0); override;
     procedure SetGameClockState(const Clock: TEngineGameClockState); override;
+    procedure SetGamePonderAllowed(Allowed: Boolean); override;
     procedure GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
       const NextOwnClock: TEngineGameClockState); override;
     procedure NewGame(const Fen: string); override;
@@ -221,7 +222,10 @@ begin
         finally Trial.Free; end;
       end;
     finally Moves.Free; end;
-    if FPonderActive and not FFaulted then Log('early ponder bestmove retained');
+    if FPonderActive and not FFaulted then begin
+      if FStoppingPonder then Log('ponder miss acknowledged')
+      else Log('early ponder bestmove retained');
+    end;
     if not FFaulted then ChangeState(esReady,'UCI search completed');
     FWorker.AddReceivedLine(Line); Exit;
   end;
@@ -277,7 +281,7 @@ begin
 end;
 procedure TUciEngine.ClearPonder;
 begin
-  FPonderActive:=False; FNextReply:=''; FHasPending:=False; FPendingMoves.Clear;
+  FPonderActive:=False; FStoppingPonder:=False; FNextReply:=''; FHasPending:=False; FPendingMoves.Clear;
 end;
 procedure TUciEngine.Idle;
 begin
@@ -293,7 +297,7 @@ end;
 procedure TUciEngine.Accepted(const Root: string; Moves: TStrings; const Clock: TEngineGameClockState);
 var I: Integer; Enabled: Boolean; Trial: TChessPosition; Reply,Line: string;
 begin
-  if WorkerStopping or FFaulted or not FGameMode or (FNextReply='') then Exit;
+  if WorkerStopping or FFaulted or FForcePonderOff or not FGameMode or (FNextReply='') then Exit;
   Enabled:=False;
   for I:=0 to High(FOptions) do if SameText(FOptions[I].Name,'Ponder') and
     (FOptions[I].ParamType='check') and SameText(FOptions[I].Value,'true') then Enabled:=True;
@@ -329,7 +333,7 @@ begin
       if FGameMode then Value:='false' else Value:='true';
     end else if SameText(FOptions[I].Name,'Ponder') and (FOptions[I].ParamType='check') then begin
       Value:='false';
-      if FGameMode and SameText(EngineParamValue(FParams,'Ponder','false'),'true') then Value:='true';
+      if FGameMode and not FForcePonderOff and SameText(EngineParamValue(FParams,'Ponder','false'),'true') then Value:='true';
     end else Continue;
     if FOptions[I].Value=Value then Continue;
     FWorker.SendLine('setoption name '+FOptions[I].Name+' value '+Value);
@@ -374,6 +378,7 @@ var Line: string; TimeoutMs: Integer;
 begin
   RequireReady;
   if FSearching then begin
+    FStoppingPonder:=FPonderActive;
     TimeoutMs:=FStopMs;
     if WaitLimitMs>=0 then TimeoutMs:=Max(1,Min(TimeoutMs,WaitLimitMs));
     FWorker.SendLine('stop'); ChangeState(esStopping,'waiting for bestmove');
@@ -546,6 +551,11 @@ end;
 procedure TUciEngine.SetGameClockState(const Clock: TEngineGameClockState);
 var C: TUciCommand;
 begin C:=TUciCommand.Create(ucClock); C.Clock:=Clock; FWorker.QueueProcedureCommand(C); end;
+procedure TUciEngine.SetGamePonderAllowed(Allowed: Boolean);
+begin
+  if State<>esWaiting then raise EInvalidOperation.Create('Game policy must be set before initialization');
+  FForcePonderOff:=not Allowed;
+end;
 procedure TUciEngine.GameMoveAccepted(const RootFEN: string; ActualMoves: TStrings;
   const NextOwnClock: TEngineGameClockState);
 var C: TUciCommand;

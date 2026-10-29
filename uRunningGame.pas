@@ -49,6 +49,7 @@ type
   TRunningGame = class
   private
     FId: Integer;
+    FStartedAt: TDateTime;
     FBlackEngineKey: string;
     FBlackPlayerKind: TPlayerKind;
     FGameTreeActor: TGameTreeActor;
@@ -117,6 +118,7 @@ type
     procedure SnapshotLogInput(out AInput: TRunningSnapshotLogInput);
     procedure UpdateListCaption(const ACaption: string);
     property Id: Integer read FId;
+    property StartedAt: TDateTime read FStartedAt;
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
     property GameTree: TGameTree read FGameTree;
     property Lifecycle: TRunningGameLifecycle read FLifecycle;
@@ -164,6 +166,7 @@ constructor TRunningGame.Create(AId: Integer; const ATitle: string;
 begin
   inherited Create;
   FId := AId;
+  FStartedAt:=Now;
   FTitle := ATitle;
   FRunner := ARunner;
   FWhitePlayerKind := AWhitePlayerKind;

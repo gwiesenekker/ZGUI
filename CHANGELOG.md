@@ -4,7 +4,41 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed chess engine tournaments — 2026-10-29
+
+- Implement Claude's approved tournament integration using the existing dialog,
+  pairings, scheduler, game runner, clocks, reservations, standings and recovery
+  paths. Enable the existing tournament action for chess, with UCI participants,
+  chess FEN/clock defaults and validated settings; preserve the GUI layout.
+- T2: parse results by file format. Chess displays 1/0.5/0 and scaled SB values,
+  including quarter points, while preserving internal scoring, pairing and
+  tie-break arithmetic and the exact legacy draughts result set.
+- D5: force tournament pondering off at runtime through the approved setup flag
+  and engine hook, without changing saved options or ordinary games. D8: log
+  ponder-miss acknowledgements distinctly from actual early ponder completions.
+- Publish PGN through the existing capture and ownership/recovery pipeline.
+  Preserve comments, variations, manual-result provenance and attempt history.
+  P12: retain Seven Tag Roster order and the game's start date. Store explicit
+  chess/PGN metadata in version 3; retain existing JSON keys and reject
+  cross-variant loads before changing the dialog. Legacy draughts stays version 2.
+- D6: warn about tournament participants sharing an executable/options file.
+  Document that limitation, CPU/hash contention, the single opening FEN, inherited
+  Swiss BYE/tie-break conventions and unfinished `*` results after engine errors.
+  Per-registration options and opening-file support remain separate work.
+- Validate numeric/FEN settings before pairing, saving and starting; pause new
+  scheduling on an invalid concurrency edit while active games finish. Busy
+  participants show a temporary waiting reason in the existing row column.
+- Validation: application build, full headless regression, all seven existing
+  GTK GUI suites and legacy tournament preservation checks pass. New checks cover
+  chess results/pairings/records/storage (42 checks), concurrent games, Swiss advancement,
+  Stop/crash handling, manual results, rescheduling, runtime ponder-off and PGN
+  preservation, including a Stockfish 19/Arasan 26.1 double round robin (123 GUI
+  checks). Independent python-chess checks verify PGN roster/date, result,
+  comments, variations and clock annotations.
+
 ### Tournament start failure review (T1) — 2026-10-29
+
+Commit: `ce8a78d`.
 
 - Apply Claude review 909d6ce's standalone fix before chess tournament changes.
   Check executable availability and contain throwing or rejected start callbacks

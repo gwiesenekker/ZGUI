@@ -10,6 +10,7 @@ type
   TPlayerKind = (pkHuman, pkRegistered);
 
   TGameSetup = record
+    ForcePonderOff: Boolean;
     StartingFEN: string;
     WhitePlayer: TPlayerKind;
     BlackPlayer: TPlayerKind;

@@ -5,7 +5,7 @@ unit uTournamentGridModel;
 interface
 
 uses
-  Classes, CheckLst, Grids, uTournamentModel, uTournamentPairing;
+  Classes, CheckLst, Grids, uTournamentModel, uTournamentPairing, uGameTreePdn;
 
 const
   TournamentColGame = 0;
@@ -24,14 +24,14 @@ procedure CollectTournamentRoundRows(AGrid: TStringGrid; ARounds: TStrings);
 procedure CollectSelectedTournamentEngineNames(ACheckList: TCheckListBox;
   AEngines: TStrings);
 procedure ApplyTournamentPairingRoundToGrid(AGrid: TStringGrid;
-  const APairingRound: TTournamentPairingRound);
+  const APairingRound: TTournamentPairingRound; AFormat:TGameFileFormat=gffPdn);
 function TournamentGridHasPairingAtRow(AGrid: TStringGrid; ARow: Integer): Boolean;
 function TournamentPairingGridIsEmpty(AGrid: TStringGrid): Boolean;
 
 implementation
 
 uses
-  StrUtils, SysUtils;
+  StrUtils, SysUtils, uTournamentResults;
 
 function AddTournamentPairingRow(AGrid: TStringGrid; const AWhite,
   ABlack: string; ARound: Integer): Integer;
@@ -101,7 +101,7 @@ begin
 end;
 
 procedure ApplyTournamentPairingRoundToGrid(AGrid: TStringGrid;
-  const APairingRound: TTournamentPairingRound);
+  const APairingRound: TTournamentPairingRound; AFormat:TGameFileFormat);
 var
   I: Integer;
   Row, Round: Integer;
@@ -114,7 +114,7 @@ begin
       APairingRound.Pairings[I].Black, Round);
     if SameText(APairingRound.Pairings[I].Black, 'BYE') then
     begin
-      AGrid.Cells[TournamentColResult, Row] := '2-0';
+      AGrid.Cells[TournamentColResult, Row] := TournamentResultText(trWhiteWin,AFormat);
       AGrid.Cells[TournamentColReason, Row] := 'Bye';
     end;
   end;

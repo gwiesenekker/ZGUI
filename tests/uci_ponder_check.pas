@@ -13,7 +13,7 @@ type
    const NextOwnClock:TEngineGameClockState);override;
  end;
  TWireObserver=class
-  Hits,Misses:LongInt;
+  Hits,Misses,Early,Acknowledged:LongInt;
   procedure Observe(Sender:TObject;const Text:string);
  end;
  TCancelThread=class(TThread)
@@ -32,6 +32,8 @@ procedure TWireObserver.Observe(Sender:TObject;const Text:string);
 begin
  if Pos('send; message=ponderhit',Text)>0 then InterlockedIncrement(Hits);
  if Pos('ponder miss;',Text)>0 then InterlockedIncrement(Misses);
+ if Pos('early ponder bestmove retained',Text)>0 then InterlockedIncrement(Early);
+ if Pos('ponder miss acknowledged',Text)>0 then InterlockedIncrement(Acknowledged);
 end;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
@@ -112,13 +114,13 @@ begin
  Check(Pos('# ponder output drained',Wire)>0,'Idle worker drains ponder output without runner polling');
 end;
 procedure Scenario(const Mode:string;Hit,Enable:Boolean; Side:TGameSide=gsWhite;
- Period:Boolean=False);
+ Period:Boolean=False;ForceOff:Boolean=False);
 var D:TExternalEngineDefinition;E:TUciEngine;G:TGameOrchestrator;TC:TTimeControl;
- Params:TEngineParamArray;Reply,Before,Root:string; T:QWord;Used:Double;Failed:Boolean;
+ Params:TEngineParamArray;Reply,Before,Root:string; T:QWord;Used:Double;Failed:Boolean;Observer:TWireObserver;
 begin
- D:=Def(Mode);E:=TUciEngine.Create(D);G:=TGameOrchestrator.Create(V);
+ D:=Def(Mode);E:=TUciEngine.Create(D);G:=TGameOrchestrator.Create(V);Observer:=TWireObserver.Create;
  try
-  G.Engine[Side]:=E;Params:=nil;
+  G.Engine[Side]:=E;E.OnLog:=@Observer.Observe;E.SetGamePonderAllowed(not ForceOff);Params:=nil;
   if Enable then AddOrUpdateParam(Params,'pOnDeR','check','TrUe',False);
   AddOrUpdateParam(Params,'gui-stop-timeout-ms','string','150',False);E.ConfigureOptions(Params);
   if Mode='slowstop' then begin
@@ -132,7 +134,7 @@ begin
   G.NewGame(Root);T:=GetTickCount64;Reply:=G.PlayNextMove;
   Check(GetTickCount64-T<1500,'Acceptance notification does not wait for ponder result');
   Check(G.MoveHistory.Count=1,'Only accepted move in history');
-  if not Enable or (Mode='badreply') or (Mode='nooption') then begin
+  if ForceOff or not Enable or (Mode='badreply') or (Mode='nooption') then begin
    E.PollOutput;Check(Pos('go ponder ',Wire)=0,'No pondering without explicit opt-in/legal candidate');Exit;
   end;
   if Mode='crash' then Sleep(150) else WaitPonder;
@@ -163,10 +165,12 @@ begin
    Check(Count(Wire,'go wtime ')=2,'Miss starts one actual search');
    if Mode='early' then Check(Count(Wire,'stop')=0,'M4 completed miss does not wait for stop')
    else Check(Count(Wire,'stop')=1,'Live miss fences old search');
+   if Mode='early' then Check((Observer.Early>0) and (Observer.Acknowledged=0),'D8 early completion is logged only before stop')
+   else Check((Observer.Early=0) and (Observer.Acknowledged=1),'D8 stop acknowledgement is not an early result');
    if Mode='slowstop' then Check((GetTickCount64-T>=300) and
     (G.UsedSeconds[Side]-Used>=0.3),'Miss fence time charged once to real turn');
   end;
- finally G.Free;D.Free;end;
+ finally G.Free;D.Free;Observer.Free;end;
 end;
 procedure NotificationBoundary;
 var G:TGameOrchestrator;E:TAcceptedProbe;TC:TTimeControl;Token:TCancellationToken;Bad:Boolean;
@@ -286,6 +290,7 @@ begin
  if ParamStr(1)='--peer' then begin Peer;Halt;end;
  Trace:=GetTempFileName(GetTempDir(False),'zponder');V:=TChessVariant.Create;
  try
+  Scenario('hold',True,True,gsWhite,False,True);
   Scenario('hold',True,True);Scenario('hold',True,True,gsBlack);
   Scenario('hold',True,True,gsWhite,True);Scenario('hold',False,True);
   Scenario('early',True,True);Scenario('early',False,True);

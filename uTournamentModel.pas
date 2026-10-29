@@ -5,7 +5,7 @@ unit uTournamentModel;
 interface
 
 uses
-  Classes;
+  Classes, uGameTreePdn;
 
 type
   TTournamentTextArray = array of string;
@@ -23,9 +23,9 @@ type
   end;
 
 function CompactTournamentEngineHeader(const AName: string): string;
-function FormatTournamentSB(AValue: Double): string;
+function FormatTournamentSB(AValue: Double; AFormat:TGameFileFormat=gffPdn): string;
 procedure BuildTournamentCrossTable(ASelectedEngines, AWhiteEngines,
-  ABlackEngines, AResults: TStrings; out ATable: TTournamentCrossTable);
+  ABlackEngines, AResults: TStrings; out ATable: TTournamentCrossTable; AFormat:TGameFileFormat=gffPdn);
 
 implementation
 
@@ -134,16 +134,19 @@ begin
     Result := Result + '#' + NumberText;
 end;
 
-function FormatTournamentSB(AValue: Double): string;
+function FormatTournamentSB(AValue: Double; AFormat:TGameFileFormat): string;
 begin
+  if AFormat=gffPgn then AValue:=AValue/2;
   if Abs(AValue - Round(AValue)) < 0.0001 then
     Result := IntToStr(Round(AValue))
+  else if AFormat=gffPgn then
+    Result:=FormatFloat('0.##',AValue)
   else
     Result := FormatFloat('0.0', AValue);
 end;
 
 procedure BuildTournamentCrossTable(ASelectedEngines, AWhiteEngines,
-  ABlackEngines, AResults: TStrings; out ATable: TTournamentCrossTable);
+  ABlackEngines, AResults: TStrings; out ATable: TTournamentCrossTable; AFormat:TGameFileFormat);
 var
   BlackIndex: Integer;
   I: Integer;
@@ -174,7 +177,7 @@ begin
 
   for I := 0 to AResults.Count - 1 do
   begin
-    GameResult := ParseTournamentResult(AResults[I]);
+    GameResult := ParseTournamentResult(AResults[I],AFormat);
     if not TournamentResultIsKnown(GameResult) then
       Continue;
     AddPoints(ATable, AWhiteEngines[I], TournamentResultPointsForWhite(GameResult));
@@ -187,7 +190,7 @@ begin
 
   for I := 0 to AResults.Count - 1 do
   begin
-    GameResult := ParseTournamentResult(AResults[I]);
+    GameResult := ParseTournamentResult(AResults[I],AFormat);
     if not TournamentResultIsKnown(GameResult) then
       Continue;
     WhiteIndex := EngineIndex(ATable, AWhiteEngines[I]);
@@ -197,21 +200,21 @@ begin
     if GameResult = trWhiteWin then
     begin
       ATable.SB[WhiteIndex] += ATable.Points[BlackIndex];
-      AddMarker(ATable, WhiteIndex, BlackIndex, '2W');
-      AddMarker(ATable, BlackIndex, WhiteIndex, '0B');
+      AddMarker(ATable, WhiteIndex, BlackIndex, FormatTournamentSB(2,AFormat)+'W');
+      AddMarker(ATable, BlackIndex, WhiteIndex, FormatTournamentSB(0,AFormat)+'B');
     end
     else if GameResult = trDraw then
     begin
       ATable.SB[WhiteIndex] += ATable.Points[BlackIndex] / 2;
       ATable.SB[BlackIndex] += ATable.Points[WhiteIndex] / 2;
-      AddMarker(ATable, WhiteIndex, BlackIndex, '1W');
-      AddMarker(ATable, BlackIndex, WhiteIndex, '1B');
+      AddMarker(ATable, WhiteIndex, BlackIndex, FormatTournamentSB(1,AFormat)+'W');
+      AddMarker(ATable, BlackIndex, WhiteIndex, FormatTournamentSB(1,AFormat)+'B');
     end
     else if GameResult = trBlackWin then
     begin
       ATable.SB[BlackIndex] += ATable.Points[WhiteIndex];
-      AddMarker(ATable, WhiteIndex, BlackIndex, '0W');
-      AddMarker(ATable, BlackIndex, WhiteIndex, '2B');
+      AddMarker(ATable, WhiteIndex, BlackIndex, FormatTournamentSB(0,AFormat)+'W');
+      AddMarker(ATable, BlackIndex, WhiteIndex, FormatTournamentSB(2,AFormat)+'B');
     end;
   end;
 
