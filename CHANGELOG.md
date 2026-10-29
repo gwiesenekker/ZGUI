@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Arasan annotator opening-book replies — 2026-10-29
 
+Commit: `3930073`.
+
 - Reproduce the missing PV with Arasan 26.1 and its saved OwnBook=true setting:
   from the starting position it returns a book bestmove with no scored PV.
 - In the existing UCI adapter, temporarily disable an advertised OwnBook check
