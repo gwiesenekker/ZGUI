@@ -4,7 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Chess FEN diagnostics (R1) — 2026-10-29
+
+- Explain rejected chess FENs at the existing validator's call sites: placement,
+  king counts, side, castling, en passant, counters and piece limits. Retain the
+  EConvertError exception, validation rules and transactional position updates.
+  Existing callers display the reason without GUI or shared-core changes.
+- Add 39 diagnostic cases, including both colours and failed-load preservation
+  of the current position and legal-move cache; focused rules checks pass (460).
+- Validation: application builds, full headless regression passes, and the
+  existing GTK setup/preferences suite passes all 207 checks.
+
 ### Reviewed database crash recovery (C5) — 2026-10-29
+
+Commit: `cf76b39`.
 
 - Allow SQLite to recover a hot rollback journal during database preflight,
   as approved in review. Schema inspection still executes queries only, before

@@ -63,6 +63,66 @@ begin
   finally V.Free; P.Free; end;
 end;
 
+procedure CheckFENDiagnostics;
+var P:TChessPosition; Before,Move,MessageText:string; Rejected:Boolean;
+  procedure Bad(const Text,Reason:string);
+  begin
+    Before:=P.ToFEN;
+    Check(P.TryParseMove('e4',Move),'Prime legal move cache before FEN rejection');
+    Rejected:=False;MessageText:='';
+    try P.LoadFromFEN(Text);except on E:EConvertError do
+      begin Rejected:=True;MessageText:=E.Message;end;end;
+    Check(Rejected,'Reject FEN: '+Text);
+    Check(Pos('Invalid chess FEN: ',MessageText)=1,'FEN diagnostic prefix');
+    Check(Pos(Reason,MessageText)>0,'Expected '+Reason+'; got '+MessageText);
+    Check(P.ToFEN=Before,'Diagnostic failure preserves position');
+    Check(P.TryParseMove('e4',Move) and (Move='e2e4'),'Diagnostic failure preserves cached moves');
+  end;
+begin
+  P:=TChessPosition.Create;
+  try
+    Bad('8/8/8/8/8/8/8/8 w - - 0','six fields');
+    Bad('7/8/8/8/8/8/8/8 w - - 0 1','rank 8 must contain eight');
+    Bad('8/8/8/8/8/8/8/8/8 w - - 0 1','eight ranks');
+    Bad('8/8/8/8/8/8/8 w - - 0 1','eight ranks');
+    Bad('8P/8/8/8/8/8/8/8 w - - 0 1','rank 8 contains more');
+    Bad('88/8/8/8/8/8/8/8 w - - 0 1','rank 8 contains more');
+    Bad('44/8/8/8/8/8/8/8 w - - 0 1','consecutive');
+    Bad('X7/8/8/8/8/8/8/8 w - - 0 1','unknown piece');
+    Bad('4k3/8/8/8/8/8/8/4K2 w - - 0 1','rank 1 must contain eight');
+    Bad('8/8/8/8/8/8/8/4K3 w - - 0 1','Black must have exactly one king');
+    Bad('4k3/8/8/8/8/8/8/8 w - - 0 1','White must have exactly one king');
+    Bad('4k3/8/8/8/8/8/8/3KK3 w - - 0 1','White must have exactly one king');
+    Bad('3kk3/8/8/8/8/8/8/4K3 w - - 0 1','Black must have exactly one king');
+    Bad('4k2P/8/8/8/8/8/8/4K3 w - - 0 1','pawn on back rank at h8');
+    Bad('4k3/8/8/8/8/8/8/p3K3 w - - 0 1','pawn on back rank at a1');
+    Bad('4k3/8/8/8/8/8/8/4K3 x - - 0 1','side to move');
+    Bad('4k3/8/8/8/8/8/8/4K3 w A - 0 1','unknown castling right');
+    Bad('4k3/8/8/8/8/8/8/4K3 w KK - 0 1','duplicate castling right K');
+    Bad('4k3/8/8/8/8/8/8/4K3 w K - 0 1','king on e1 and rook on h1');
+    Bad('4k3/8/8/8/8/8/8/4K3 w Q - 0 1','king on e1 and rook on a1');
+    Bad('4k3/8/8/8/8/8/8/4K3 w k - 0 1','king on e8 and rook on h8');
+    Bad('4k3/8/8/8/8/8/8/4K3 w q - 0 1','king on e8 and rook on a8');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - - -1 1','halfmove counter must contain decimal');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - - 0 +1','fullmove number must contain decimal');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - - 2147483648 1','halfmove counter must be between');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - - 0 2147483648','fullmove number must be between');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - - 0 0','fullmove number must be between');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - z6 0 1','target must be a square');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - e3 0 1','target must be on rank 6');
+    Bad('4k3/8/4N3/4p3/8/8/8/4K3 w - e6 0 1','target e6 must be empty');
+    Bad('4k3/8/8/8/8/8/8/4K3 w - e6 0 1','opposing pawn on e5');
+    Bad('4k3/4n3/8/4p3/8/8/8/4K3 w - e6 0 1','starting square e7 must be empty');
+    Bad('4k3/8/8/4p3/8/8/8/4K3 w - e6 1 1','zero halfmove counter');
+    Bad('rnbqkbnr/pppppppp/8/8/8/Q7/PPPPPPPP/RNBQKBNR w KQkq - 0 1','White has more than 16');
+    Bad('4k3/8/8/8/8/PP6/PPPPPPP1/4K3 w - - 0 1','White has more than eight pawns');
+    Bad('rnbqkbnr/pppppppp/q7/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1','Black has more than 16');
+    Bad('4k3/ppppppp1/pp6/8/8/8/8/4K3 w - - 0 1','Black has more than eight pawns');
+    Bad('4k3/8/8/8/8/8/8/K3R3 w - - 0 1','Black (the side not to move) is in check');
+    Bad('k3r3/8/8/8/8/8/8/4K3 b - - 0 1','White (the side not to move) is in check');
+  finally P.Free;end;
+end;
+
 procedure CheckSpecialMoves;
 var P,Q: TChessPosition; Before,Canonical,Key: string; Moves: TStringList;
 begin
@@ -282,6 +342,7 @@ end;
 
 begin
   CheckFEN;
+  CheckFENDiagnostics;
   CheckSpecialMoves;
   CheckSAN;
   CheckRules;

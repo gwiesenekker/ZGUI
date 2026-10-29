@@ -382,9 +382,9 @@ begin
   Result += RightsText(S.Castling)+' ';
 end;
 
-procedure FenError;
+procedure FenError(const Reason: string);
 begin
-  raise EConvertError.Create('Invalid chess FEN');
+  raise EConvertError.Create('Invalid chess FEN: '+Reason);
 end;
 
 function Fields(const Text: string): TStringArray;
@@ -394,42 +394,57 @@ end;
 
 function ParseFEN(const Text: string): TChessState;
 var Parts: TStringArray; I,X,Y,P,Sign,WK,BK,BitValue,EP,OwnCount,OwnPawns: Integer;
-    C: Char; Side: TGameSide;
+    C: Char; Side: TGameSide; SideName: string;
+  procedure RequireCastle(Bit:Integer; King, Rook:Integer; PieceSign:Integer;
+    const RightName:string);
+  begin
+    if (Result.Castling and Bit<>0) and
+      ((Result.Board[King]<>6*PieceSign) or (Result.Board[Rook]<>4*PieceSign)) then
+      FenError('castling right '+RightName+' requires the king on '+SquareText(King)+
+        ' and rook on '+SquareText(Rook));
+  end;
 begin
   FillChar(Result,SizeOf(Result),0); Result.EnPassant := -1;
   Parts := Fields(Text);
-  if Length(Parts) <> 6 then FenError;
+  if Length(Parts) <> 6 then FenError('expected six fields');
   X := 0; Y := 7; WK := 0; BK := 0;
   for I := 1 to Length(Parts[0]) do
   begin
     C := Parts[0][I];
     if C = '/' then
     begin
-      if (X <> 8) or (Y = 0) then FenError;
+      if X <> 8 then FenError('rank '+IntToStr(Y+1)+' must contain eight squares');
+      if Y = 0 then FenError('piece placement must contain eight ranks');
       Dec(Y); X := 0;
     end
     else if C in ['1'..'8'] then
     begin
-      Inc(X,Ord(C)-Ord('0')); if X > 8 then FenError;
-      if (I > 1) and (Parts[0][I-1] in ['1'..'8']) then FenError;
+      Inc(X,Ord(C)-Ord('0'));
+      if X > 8 then FenError('rank '+IntToStr(Y+1)+' contains more than eight squares');
+      if (I > 1) and (Parts[0][I-1] in ['1'..'8']) then
+        FenError('consecutive empty-square digits in rank '+IntToStr(Y+1));
     end
     else
     begin
       P := Pos(UpCase(C),PieceLetters);
-      if (P = 0) or (X >= 8) then FenError;
+      if P = 0 then FenError('unknown piece-placement character "'+C+'"');
+      if X >= 8 then FenError('rank '+IntToStr(Y+1)+' contains more than eight squares');
       if C in ['A'..'Z'] then Sign := 1 else Sign := -1;
-      if (P = 1) and (Y in [0,7]) then FenError;
+      if (P = 1) and (Y in [0,7]) then FenError('pawn on back rank at '+SquareText(Y*8+X));
       Result.Board[Y*8+X] := P*Sign;
       if P = 6 then if Sign = 1 then Inc(WK) else Inc(BK);
       Inc(X);
     end;
   end;
-  if (X <> 8) or (Y <> 0) or (WK <> 1) or (BK <> 1) then FenError;
+  if Y <> 0 then FenError('piece placement must contain eight ranks');
+  if X <> 8 then FenError('rank 1 must contain eight squares');
+  if WK <> 1 then FenError('White must have exactly one king');
+  if BK <> 1 then FenError('Black must have exactly one king');
   if Parts[1] = 'w' then Result.Turn := gsWhite
-  else if Parts[1] = 'b' then Result.Turn := gsBlack else FenError;
+  else if Parts[1] = 'b' then Result.Turn := gsBlack
+  else FenError('side to move must be w or b');
   if Parts[2] <> '-' then
   begin
-    if Parts[2] = '' then FenError;
     for I := 1 to Length(Parts[2]) do
     begin
       BitValue := 0;
@@ -437,30 +452,35 @@ begin
         'K': BitValue := 1; 'Q': BitValue := 2;
         'k': BitValue := 4; 'q': BitValue := 8;
       end;
-      if (BitValue = 0) or (Result.Castling and BitValue <> 0) then FenError;
+      if BitValue = 0 then FenError('unknown castling right "'+Parts[2][I]+'"');
+      if Result.Castling and BitValue <> 0 then FenError('duplicate castling right '+Parts[2][I]);
       Result.Castling := Result.Castling or BitValue;
     end;
   end;
-  if ((Result.Castling and 3 <> 0) and (Result.Board[4] <> 6)) or
-    ((Result.Castling and 12 <> 0) and (Result.Board[60] <> -6)) or
-    ((Result.Castling and 1 <> 0) and (Result.Board[7] <> 4)) or
-    ((Result.Castling and 2 <> 0) and (Result.Board[0] <> 4)) or
-    ((Result.Castling and 4 <> 0) and (Result.Board[63] <> -4)) or
-    ((Result.Castling and 8 <> 0) and (Result.Board[56] <> -4)) then FenError;
+  RequireCastle(1,4,7,1,'K');RequireCastle(2,4,0,1,'Q');
+  RequireCastle(4,60,63,-1,'k');RequireCastle(8,60,56,-1,'q');
   for I := 4 to 5 do
   begin
-    if Parts[I] = '' then FenError;
-    for C in Parts[I] do if not (C in ['0'..'9']) then FenError;
+    if I=4 then SideName:='halfmove counter' else SideName:='fullmove number';
+    for C in Parts[I] do if not (C in ['0'..'9']) then
+      FenError(SideName+' must contain decimal digits only');
   end;
-  if not TryStrToInt(Parts[4],Result.Halfmove) or (Result.Halfmove < 0) or
-    not TryStrToInt(Parts[5],Result.Fullmove) or (Result.Fullmove < 1) then FenError;
+  if not TryStrToInt(Parts[4],Result.Halfmove) or (Result.Halfmove < 0) then
+    FenError('halfmove counter must be between 0 and 2147483647');
+  if not TryStrToInt(Parts[5],Result.Fullmove) or (Result.Fullmove < 1) then
+    FenError('fullmove number must be between 1 and 2147483647');
   if Parts[3] <> '-' then
   begin
     EP := ParseSquare(Parts[3]); Sign := SignFor(Result.Turn);
-    if (EP < 0) then FenError;
-    if ((Sign = 1) and (EP div 8 <> 5)) or ((Sign = -1) and (EP div 8 <> 2)) then FenError;
-    if (Result.Board[EP] <> 0) or (Result.Board[EP-8*Sign] <> -Sign) or
-      (Result.Board[EP+8*Sign] <> 0) or (Result.Halfmove <> 0) then FenError;
+    if EP < 0 then FenError('en passant target must be a square or -');
+    if ((Sign = 1) and (EP div 8 <> 5)) or ((Sign = -1) and (EP div 8 <> 2)) then
+      FenError('en passant target must be on rank 6 for White to move or rank 3 for Black');
+    if Result.Board[EP] <> 0 then FenError('en passant target '+Parts[3]+' must be empty');
+    if Result.Board[EP-8*Sign] <> -Sign then
+      FenError('en passant requires an opposing pawn on '+SquareText(EP-8*Sign));
+    if Result.Board[EP+8*Sign] <> 0 then
+      FenError('en passant pawn starting square '+SquareText(EP+8*Sign)+' must be empty');
+    if Result.Halfmove <> 0 then FenError('en passant requires a zero halfmove counter');
     Result.EnPassant := EP;
   end;
   for Side := Low(TGameSide) to High(TGameSide) do
@@ -469,11 +489,17 @@ begin
     for I := 0 to 63 do
       if Result.Board[I]*SignFor(Side) > 0 then
       begin Inc(OwnCount); if Abs(Result.Board[I]) = 1 then Inc(OwnPawns); end;
-    if (OwnCount > 16) or (OwnPawns > 8) then FenError;
+    if Side=gsWhite then SideName:='White' else SideName:='Black';
+    if OwnCount > 16 then FenError(SideName+' has more than 16 pieces');
+    if OwnPawns > 8 then FenError(SideName+' has more than eight pawns');
   end;
   // The player who just moved cannot have left their own king in check.
   // This also rejects adjacent kings. Full historical reachability is not proven.
-  if Checked(Result,OppositeGameSide(Result.Turn)) then FenError;
+  if Checked(Result,OppositeGameSide(Result.Turn)) then
+  begin
+    if Result.Turn=gsWhite then SideName:='Black' else SideName:='White';
+    FenError(SideName+' (the side not to move) is in check');
+  end;
 end;
 
 constructor TChessPosition.Create;
