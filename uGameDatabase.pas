@@ -985,7 +985,9 @@ begin
  try if Stream.Size=0 then Exit;finally Stream.Free;end;
  C:=TSQLite3Connection.Create(nil);T:=TSQLTransaction.Create(nil);Q:=TSQLQuery.Create(nil);
  try
-  C.OpenFlags:=[sofReadOnly];C.DatabaseName:=AFileName;C.Transaction:=T;
+  // Allow SQLite to recover a hot rollback journal before inspecting the schema.
+  // This connection performs no DDL and rolls its inspection transaction back.
+  C.DatabaseName:=AFileName;C.Transaction:=T;
   Q.DataBase:=C;Q.Transaction:=T;C.Connected:=True;T.StartTransaction;
   Q.SQL.Text:='pragma user_version';Q.Open;Version:=Q.Fields[0].AsInteger;Q.Close;
   if Version>6 then raise EInvalidOperation.Create('Unsupported database schema version');

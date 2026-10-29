@@ -4,7 +4,22 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed database crash recovery (C5) — 2026-10-29
+
+- Allow SQLite to recover a hot rollback journal during database preflight,
+  as approved in review. Schema inspection still executes queries only, before
+  closing the current database or running migrations, and rolls back afterward.
+- Add an interrupted-writer child-process regression: verify a hot journal is
+  present, reopen successfully, and confirm all uncommitted game rows disappear.
+  Retain the foreign-file byte-preservation/current-database checks.
+- Validation: application builds and the full headless regression suite passes
+  on an isolated copy excluding the pending chess parsing optimization. The
+  new recovery test fails with the previous read-only flag and passes with this
+  fix. Database recovery, worker, import-performance and source-audit checks pass.
+
 ### Chess opening database test collection — 2026-10-29
+
+Commit: `5eeb693`.
 
 - Download the CC0 Lichess opening catalogue at commit
   `e76b8b4ec5c8aeeba41dac6caf4a60b938f652db` into `testdata/openings`.
@@ -16,7 +31,9 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Database preflight protection (C4) — 2026-10-29
 
-- Inspect existing databases through a read-only connection before closing the
+Commit: `7fb1e72` (also the swatch-caption fix below).
+
+- Inspect existing databases through a separate connection before closing the
   current database or running migrations. Reject foreign schemas without
   modifying their bytes; retain supported draughts upgrades and explicit creation.
 - Add a focused foreign-file/current-connection preservation check.
