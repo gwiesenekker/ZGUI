@@ -10,7 +10,13 @@ uses
 type
   TScoreScale = (ssLinear, ssLogarithmic);
 
+  TScoreHistoryColor = (shcEngineNonnegative, shcEngineNegative,
+    shcAnnotatorNonnegative, shcAnnotatorNegative, shcEngineMissing,
+    shcAnnotatorMissing, shcBothMissing, shcSelectedPly);
+  TScoreHistoryColors = array[TScoreHistoryColor] of TColor;
+
   TGuiPreferences = record
+    ScoreHistoryColors: TScoreHistoryColors;
     NotationStyles: TNotationStyles;
     NotationFontName: string;
     NotationFontSize: Integer;
@@ -26,6 +32,7 @@ type
     EvaluationScale: TScoreScale;
   end;
 
+function DefaultScoreHistoryColors: TScoreHistoryColors;
 function PreferencesJsonFileName: string;
 function DefaultGuiPreferences: TGuiPreferences;
 procedure LoadGuiPreferences(var APrefs: TGuiPreferences);
@@ -36,6 +43,23 @@ implementation
 uses
   Classes, FPJSON, JSONParser, SysUtils;
 
+const ScoreColorKeys: array[TScoreHistoryColor] of string = (
+  'score_history_engine_nonnegative', 'score_history_engine_negative',
+  'score_history_annotator_nonnegative', 'score_history_annotator_negative',
+  'score_history_engine_missing', 'score_history_annotator_missing',
+  'score_history_both_missing', 'score_history_selected_ply');
+function DefaultScoreHistoryColors: TScoreHistoryColors;
+begin
+  Result[shcEngineNonnegative]:=RGBToColor(54,150,79);
+  Result[shcEngineNegative]:=RGBToColor(190,64,64);
+  Result[shcAnnotatorNonnegative]:=RGBToColor(140,210,155);
+  Result[shcAnnotatorNegative]:=RGBToColor(230,145,145);
+  Result[shcEngineMissing]:=RGBToColor(28,74,132);
+  Result[shcAnnotatorMissing]:=RGBToColor(102,169,220);
+  Result[shcBothMissing]:=RGBToColor(145,165,188);
+  Result[shcSelectedPly]:=clGray;
+end;
+
 function PreferencesJsonFileName: string;
 begin
   Result := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
@@ -44,6 +68,7 @@ end;
 
 function DefaultGuiPreferences: TGuiPreferences;
 begin
+  Result.ScoreHistoryColors:=DefaultScoreHistoryColors;
   Result.NotationStyles := DefaultNotationStyles;
   Result.NotationFontName := DefaultNotationFontName;
   Result.NotationFontSize := DefaultNotationFontSize;
@@ -114,6 +139,7 @@ var
   Data: TJSONData;
   FileName: string;
   Lines: TStringList;
+  C: TScoreHistoryColor;
   S: TNotationStyle; Key: string; Defaults: TNotationStyles;
   Value: TJSONData; FontSize: Integer;
 begin
@@ -153,6 +179,8 @@ begin
         LoadBoolean(TJSONObject(Data), Key+'_bold', APrefs.NotationStyles[S].Bold);
         LoadBoolean(TJSONObject(Data), Key+'_italic', APrefs.NotationStyles[S].Italic);
       end;
+      for C:=Low(C) to High(C) do
+        LoadColor(TJSONObject(Data),ScoreColorKeys[C],APrefs.ScoreHistoryColors[C]);
       LoadColor(TJSONObject(Data), 'main_board_light', APrefs.MainBoardLightColor);
       LoadColor(TJSONObject(Data), 'main_board_dark', APrefs.MainBoardDarkColor);
       LoadColor(TJSONObject(Data), 'analysis_board_light',
@@ -180,6 +208,7 @@ procedure SaveGuiPreferences(const APrefs: TGuiPreferences);
 var
   Data: TJSONObject;
   Lines: TStringList;
+  C: TScoreHistoryColor;
   S: TNotationStyle; Key: string;
 begin
   Data := TJSONObject.Create;
@@ -194,6 +223,8 @@ begin
     end;
     Data.Add('notation_font_name', APrefs.NotationFontName);
     Data.Add('notation_font_size', APrefs.NotationFontSize);
+    for C:=Low(C) to High(C) do
+      Data.Add(ScoreColorKeys[C],ColorToJsonText(APrefs.ScoreHistoryColors[C]));
     Data.Add('main_board_light', ColorToJsonText(APrefs.MainBoardLightColor));
     Data.Add('main_board_dark', ColorToJsonText(APrefs.MainBoardDarkColor));
     Data.Add('analysis_board_light',

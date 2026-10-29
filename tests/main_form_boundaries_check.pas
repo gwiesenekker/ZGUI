@@ -211,7 +211,7 @@ begin
 end;
 
 procedure CheckReplacementPrompt;
-var Form: TMainForm; Position: TPositionSetupForm; I: Integer;
+var Form: TMainForm; Position: TPositionSetupForm; I: Integer; Accepted:Boolean;
   BeforeText: string; Id: Int64; Setup: TGameSetup; Running: TRunningGame;
 begin
   Form := TMainForm.Create(nil);
@@ -225,11 +225,11 @@ begin
     Check(Position <> nil, 'actual setup action creates the position editor');
     Position.Hide;
     GuiTestConfirmationResult := mrCancel;
-    Position.OnAccepted(Position, DefaultStartingFEN);
+    Position.OnAccepted(Position, DefaultStartingFEN,Accepted);
     Check((Form.ActiveGameTree.GameTreeId = Id) and
       (GameTreeToPdnText(Form.ActiveGameTree) = BeforeText), 'cancel preserves unsaved standalone game');
     GuiTestConfirmationResult := mrNo;
-    Position.OnAccepted(Position, DefaultStartingFEN);
+    Position.OnAccepted(Position, DefaultStartingFEN,Accepted);
     Check(Form.ActiveGameTree.StartingFEN = DefaultStartingFEN, 'declining save permits replacement');
     Form.LoadStandaloneFen('W:WK32:B27,28');
     Id := Form.ActiveGameTree.GameTreeId; BeforeText := GameTreeToPdnText(Form.ActiveGameTree);

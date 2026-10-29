@@ -4,6 +4,65 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed chess setup and score-history preferences — 2026-10-29
+
+- Implement the approved position setup adapters in the existing dialog and
+  enable chess setup. Keep its outer layout and draughts palette, and fit twelve
+  chess pieces into the existing palette region. Reuse board geometry, artwork,
+  preferences, FEN validation and standalone acceptance/replacement paths.
+- Keep incomplete chess drafts outside the playable-position interface. U14:
+  retain castling rights still supported by home-square kings/rooks; never add
+  rights through placement. Clear en passant on placement or side changes and
+  reset the halfmove counter on placement while retaining the fullmove number.
+- U15: keep the setup window, draft and text when replacement is cancelled or
+  saving fails. U16: consume typed FEN on explicit Paste FEN/Apply only; prompt
+  once, defaulting to Cancel, before board edits discard pending typed text.
+  Keep the inherited draughts FEN behavior and database setup callback behavior.
+- Add the approved Score history Preferences tab using the existing colour
+  chooser, swatches, Save, Close and global Defaults. Persist eight colour roles
+  with legacy-compatible defaults; update embedded and popout graphs immediately
+  outside the score-signature cache. Score interpretation and data are unchanged.
+- Apply the reviewed PV Escape key-preview fix while preserving Auto Play's
+  stop-first priority. T4: restore Clear pairing confirmation for chess results
+  by passing the profile format to the existing parser.
+- Update the manual for setup metadata, cancellation, orientation, FEN edits,
+  colour preferences and PV Escape. Detailed chess FEN diagnostic messages (R1)
+  remain a separate approval item; the authoritative validator is unchanged.
+- Validation: application builds; full headless regression, all eight GTK GUI
+  suites and both tournament suites pass (101 chess tournament checks). The 199
+  focused setup/preferences checks cover
+  incomplete drafts, minimum/scaled palettes, cancellation/failed saves,
+  persistence and unchanged-score colour delivery, plus PV Escape through LCL
+  application/form key dispatch. Baseline comparisons verify pixel-identical
+  draughts setup at default/minimum sizes, default line/bar graphs and chess
+  boards (eight bitmap fixtures).
+
+### Score-history colour preferences design review — 2026-10-29
+
+- Prepare the requested Preferences tab for Claude's review: reuse existing
+  colour pickers and Save/Cancel/Defaults for score sources, missing-score marks
+  and the selected-ply marker. Preserve default colours and deliver changes to
+  both score-history views without changing score data or parsing.
+- Proposal only; shared preferences/rendering changes await review as required
+  by AGENTS.md.
+
+### Score-history colour key — 2026-10-29
+
+- Add the playing-engine and annotator colour key to the manual, including
+  missing-score marks, paired bar order and the selected-ply indicator.
+
+### Chess position setup design review — 2026-10-29
+
+- Prepare a proposal against `a410a3d` for Claude: reuse the existing position
+  setup form and acceptance path, preserve its outer layout, and fit a chess
+  palette into the existing region. Propose dialog-local draft adapters,
+  strict FEN validation, explicit metadata/text-editing policies and a narrow
+  shared rendering seam for incomplete chess setups.
+- Record the reported PV Escape problem separately for review: main-form key
+  preview appears to consume Escape before the focused PV memo can unlock
+  updates. Propose a focused routing fix and native key-dispatch regression.
+- Documentation only; no application behavior or GUI changes in this step.
+
 ### Reviewed chess engine tournaments — 2026-10-29
 
 Commit: `433b035`.

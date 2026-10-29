@@ -159,7 +159,7 @@ errors are not silently retried or awarded as forfeits. A flag fall remains a
 normal rules-based result. Draughts tournament files remain separate and cannot
 be loaded into the chess tournament dialog.
 
-Auto Play, setup and databases are not yet connected.
+Auto Play and databases are not yet connected.
 Their controls remain visible in their original locations but are disabled,
 with automatic database search also guarded.
 
@@ -550,6 +550,29 @@ The graph can contain both the playing engine's score and the annotator score.
 For each played ply, the annotator score attached to that node is used; when it
 is absent, the preceding node's annotator score can supply that point.
 
+The default score-history colours identify the source and sign of each score:
+
+| Colour | Meaning |
+|---|---|
+| Dark green | Playing-engine score of zero or above |
+| Dark red | Negative playing-engine score |
+| Light green | Annotator score of zero or above |
+| Light red/pink | Negative annotator score |
+| Dark blue | Missing playing-engine score in bar mode |
+| Light blue | Missing annotator score in bar mode |
+
+In bar mode, the playing-engine bar is on the left and the annotator bar on the
+right for each ply. In line-graph mode, a blue-grey mark indicates that neither
+score is available. Missing-score marks do not mean an evaluation of zero.
+The grey vertical line marks the currently selected ply.
+
+Choose **File > Preferences > Score history** to change the eight colours,
+including missing-score marks and the selected-move line. These settings apply
+to both the main graph and its popout, and can help distinguish scores when the
+default red/green colours are difficult to tell apart. **Save** applies and saves
+the choices; **Close** discards unsaved changes. **Defaults** restores all
+preferences in the dialog, not just this tab; use Save to keep them.
+
 The evaluation bar uses only the selected ply's score, preferring its annotator
 score and then its playing-engine score. It does not substitute an earlier ply's
 score when the selected ply has none. White occupies the lower part of the bar and Black the upper
@@ -562,6 +585,11 @@ open the larger score-history window.
 The graph's maximum score and **Linear** or **Logarithmic** scale are configured
 under **File > Preferences**. These are display settings; they do not change the
 score received from an engine.
+
+When a PV text view is focused, **Escape** exits its browsing mode and resumes
+live PV updates. If Auto Play is active, the first Escape stops Auto Play;
+a subsequent Escape exits PV browsing. Separate popout board windows retain
+their existing key handling.
 
 ## 7. Running a tournament
 
@@ -746,6 +774,33 @@ remove it. Choose the side to move. **Start** restores the normal starting
 position, **Clear** empties the board, and the FEN action parses the text entered
 in the FEN box. **Apply** sends the resulting position back to the main window;
 **Cancel** leaves the current position unchanged.
+
+For chess, the same window has twelve pieces in two columns (White and Black).
+The setup board always faces White, even if the main board is flipped. Incomplete
+boards are allowed while editing, but **Apply** requires a valid chess FEN. No
+playable position or running game changes until replacement is accepted.
+
+The FEN box is also the editor for castling rights, en passant and move counters.
+**Paste FEN** reads this box, rather than the clipboard. Chess Apply also reads
+pending text edits; draughts retains its existing behavior of requiring Paste FEN
+first. Invalid text stays available for correction. If board editing would
+replace pending typed text, a confirmation defaults to Cancel. After cancelling,
+use Paste FEN or Apply to read the text, edit the text to reconsider, or use
+Start/Clear to replace it; further square clicks do not repeat the prompt.
+
+Placing/removing a chess piece clears en passant and resets the halfmove counter,
+while retaining the fullmove number. Castling rights are removed only when the
+required king or rook is missing from its home square; edits never add rights.
+Changing side clears en passant and preserves the other fields. Start restores
+all starting fields; Clear sets no rights and counters 0/1. Enter any other
+rights, en passant or counters explicitly in FEN. Validation checks the existing
+chess rules and FEN structure, without proving full historical reachability.
+
+Cancelling replacement or failing to save the current game leaves the setup
+window open with its draft and text intact. Cancel/closing the setup window
+leaves the main game unchanged. An accepted setup replaces the standalone board
+through the existing save/discard workflow; it does not edit a running game or
+its clock.
 
 ## 9. Game database
 

@@ -279,8 +279,8 @@ var Main: TMainForm; B: TGameBoardControl; Legal: TMemo; Memo: TGameNotationView
     Key: Word; Before: string; Actor: TGameTreeActor; C: TGameTreeCommand;
     Score: TScoreHistoryControl; Value: Double;
 const Promotions: array[0..3] of string=('a7a8q','a7a8r','a7a8b','a7a8n');
-  Unsupported: array[0..3] of string = (
-    'Setup position...','&Database','Search position in database',
+  Unsupported: array[0..2] of string = (
+    '&Database','Search position in database',
     'Open MCTS annotator');
 begin
   Main:=TMainForm.Create(nil); Expected:=TChessPosition.Create; Choice:=TChoice.Create;
@@ -352,7 +352,7 @@ begin
       Check(not Menu(Main,Unsupported[I]).Enabled,'Unsupported action disabled: '+Unsupported[I]);
     Check(Menu(Main,'&Open PGN...').Enabled and Menu(Main,'&Save PGN...').Enabled,'PGN file actions enabled');
     Clipboard.AsText:='sentinel'; Menu(Main,'Setup position...').OnClick(nil);
-    Check(Clipboard.AsText='sentinel','Pending setup remains guarded');
+    Check(Clipboard.AsText='sentinel','Opening setup does not change clipboard');
     Menu(Main,'Copy FEN position to clipboard').Click;
     Check(Clipboard.AsText=B.Position.ToFEN,'Existing copy FEN exports displayed position');
     GuiTestConfirmationResult:=mrNo;

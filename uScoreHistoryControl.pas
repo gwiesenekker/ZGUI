@@ -13,6 +13,7 @@ type
 
   TScoreHistoryControl = class(TCustomControl)
   private
+    FScoreColors: TScoreHistoryColors;
     FAnnotationsText: string;
     FCurrentPly: Integer;
     FDisplayMode: TScoreHistoryDisplayMode;
@@ -23,6 +24,7 @@ type
     FShowEvaluationBar: Boolean;
     FStartingSide: TGameSide;
     FStartingMoveNumber: Integer;
+    procedure SetScoreColors(const AColors: TScoreHistoryColors);
     function BarPenWidth(APlotWidth, ACount: Integer): Integer;
     function ChartBounds(out APlotLeft, APlotRight: Integer): Boolean;
     function LayoutBounds(out ABarRect, AChartRect: TRect;
@@ -64,6 +66,7 @@ type
     procedure MouseMove(Shift: TShiftState; X, Y: Integer); override;
     procedure Paint; override;
   public
+    property ScoreColors: TScoreHistoryColors read FScoreColors write SetScoreColors;
     function TryCurrentEvaluation(out AScore: Double): Boolean;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -144,6 +147,7 @@ begin
   inherited Create(AOwner);
   ControlStyle := ControlStyle + [csOpaque];
   DoubleBuffered := True;
+  FScoreColors:=DefaultScoreHistoryColors;
   Color := clWindow;
   Hint := 'Score history';
   ShowHint := True;
@@ -162,6 +166,15 @@ destructor TScoreHistoryControl.Destroy;
 begin
   ClearScoreHint;
   inherited Destroy;
+end;
+
+procedure TScoreHistoryControl.SetScoreColors(const AColors:TScoreHistoryColors);
+var C:TScoreHistoryColor; ColorsChanged:Boolean;
+begin
+  ColorsChanged:=False;
+  for C:=Low(C) to High(C) do if FScoreColors[C]<>AColors[C] then ColorsChanged:=True;
+  if not ColorsChanged then Exit;
+  FScoreColors:=AColors;Invalidate;
 end;
 
 function TScoreHistoryControl.BarPenWidth(APlotWidth, ACount: Integer): Integer;
@@ -513,9 +526,9 @@ begin
       begin
         EngineY := ScoreY(Score, MidY, HalfHeight);
         if Score >= 0.0 then
-          EngineColor := RGBToColor(54, 150, 79)
+          EngineColor := FScoreColors[shcEngineNonnegative]
         else
-          EngineColor := RGBToColor(190, 64, 64);
+          EngineColor := FScoreColors[shcEngineNegative];
       end
       else if HasAnnotatorScore then
         EngineY := ScoreY(AnnotatorScore, MidY, HalfHeight)
@@ -526,9 +539,9 @@ begin
       begin
         Y := ScoreY(AnnotatorScore, MidY, HalfHeight);
         if AnnotatorScore >= 0.0 then
-          LColor := RGBToColor(140, 210, 155)
+          LColor := FScoreColors[shcAnnotatorNonnegative]
         else
-          LColor := RGBToColor(230, 145, 145);
+          LColor := FScoreColors[shcAnnotatorNegative];
       end
       else if HasEngineScore then
         Y := EngineY
@@ -564,7 +577,7 @@ begin
         end;
         if not DrawnDenseScore then
           DrawDenseMissingScoreMark(X, MidY, HalfHeight,
-            RGBToColor(145, 165, 188));
+            FScoreColors[shcBothMissing]);
       end
       else
       begin
@@ -572,13 +585,13 @@ begin
           DrawScoreRect(LeftX, MidY, EngineY, BarWidth, EngineColor)
         else
           DrawMissingScoreRect(LeftX, MidY, HalfHeight, BarWidth,
-            RGBToColor(28, 74, 132));
+            FScoreColors[shcEngineMissing]);
 
         if HasAnnotatorScore then
           DrawScoreRect(LeftX + BarWidth, MidY, Y, BarWidth, LColor)
         else
           DrawMissingScoreRect(LeftX + BarWidth, MidY, HalfHeight, BarWidth,
-            RGBToColor(102, 169, 220));
+            FScoreColors[shcAnnotatorMissing]);
       end;
     end;
 
@@ -586,7 +599,7 @@ begin
     begin
       X := PlotLeft + Round(((FCurrentPly - 1) / (Count - 1)) *
         (PlotRight - PlotLeft));
-      Canvas.Pen.Color := clGray;
+      Canvas.Pen.Color := FScoreColors[shcSelectedPly];
       Canvas.Line(X, ChartRect.Top, X, ChartRect.Bottom);
     end;
   finally

@@ -52,6 +52,8 @@ type
     function SideMarkerGap: Integer;
     function SideMarkerSize: Integer;
   protected
+    function HasDisplayPosition:Boolean; virtual;
+    function DisplaySideToMove:TGameSide; virtual;
     procedure PreparePosition; virtual;
     function BoardDimension: Integer; virtual; abstract;
     function SquareForCell(ARow, ACol: Integer): Integer; virtual; abstract;
@@ -158,6 +160,11 @@ begin
   FPosition.Free;
   inherited Destroy;
 end;
+
+function TGameBoardControl.HasDisplayPosition:Boolean;
+begin Result:=FPosition<>nil;end;
+function TGameBoardControl.DisplaySideToMove:TGameSide;
+begin Result:=FPosition.SideToMove;end;
 
 procedure TGameBoardControl.PreparePosition;
 begin
@@ -432,7 +439,7 @@ begin
       LSquare := SquareForCell(LLogicalRow, LLogicalCol);
       if (LSquare > 0) and FShowCoordinates then
         DrawCoordinates(LSquare, LRow, LCol, LCellRect);
-      if (FPosition <> nil) and (LSquare > 0) then
+      if HasDisplayPosition and (LSquare > 0) then
         DrawPiece(LSquare, LCellRect);
 
       if LSquare > 0 then
@@ -452,13 +459,13 @@ begin
       end;
     end;
 
-  if FShowSideToMoveMarker and (FPosition <> nil) then
+  if FShowSideToMoveMarker and HasDisplayPosition then
   begin
     LMarkerSize := SideMarkerSize;
     LMarkerRect.Left := LBoardRect.Right + SideMarkerGap;
     LMarkerRect.Right := LMarkerRect.Left + LMarkerSize;
-    LMarkerAtBottom := ((FPosition.SideToMove = gsWhite) and (not FBoardFlipped)) or
-      ((FPosition.SideToMove = gsBlack) and FBoardFlipped);
+    LMarkerAtBottom := ((DisplaySideToMove = gsWhite) and (not FBoardFlipped)) or
+      ((DisplaySideToMove = gsBlack) and FBoardFlipped);
     if LMarkerAtBottom then
     begin
       LMarkerRect.Top := LBoardRect.Bottom - LMarkerSize;
@@ -470,7 +477,7 @@ begin
       LMarkerRect.Bottom := LBoardRect.Top + LMarkerSize;
     end;
 
-    if FPosition.SideToMove = gsWhite then
+    if DisplaySideToMove = gsWhite then
     begin
       Canvas.Brush.Color := RGBToColor(245, 241, 229);
       Canvas.Pen.Color := RGBToColor(70, 70, 70);

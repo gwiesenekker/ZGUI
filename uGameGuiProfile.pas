@@ -2,7 +2,7 @@ unit uGameGuiProfile;
 {$mode objfpc}{$H+}
 { Composition policy belongs to the GUI, never to the game rules contract. }
 interface
-uses Classes, uGamePosition, uGameBoardControl, uGameTreePdn, uGameFileReader, uEngineRegistry, uGameOrchestrator;
+uses Classes, uGamePosition, uGameBoardControl, uGameTreePdn, uGameFileReader, uEngineRegistry, uGameOrchestrator, uPositionSetupAdapter;
 type
   TGuiGameFeature=(gfPdn,gfPositionSetup,gfDatabase,gfTournament,gfEngines,gfNewGame,gfAutoPlay,gfMcts);
   TGuiGameFeatures=set of TGuiGameFeature;
@@ -13,6 +13,7 @@ type
     Features: TGuiGameFeatures;
     EngineKinds: set of TExternalEngineKind;
     BoardClass: TGameBoardClass;
+    SetupAdapterClass:TPositionSetupAdapterClass;
     SourceClickSingleMove: Boolean;
     FileFormat: TGameFileFormat;
     FormatName,FileFilter,FileExtension: string;
@@ -24,19 +25,21 @@ function GameGuiProfileFor(Variant: TGameVariant): TGameGuiProfile;
 function CreateProfileReader(const Profile: TGameGuiProfile; Variant: TGameVariant): TGameFileReader;
 implementation
 uses uChessPosition, uChessBoardControl, uDraughtsPosition, uDraughtsBoardControl,
-  uChessPgn, uPdnFileReader;
+  uChessPgn, uPdnFileReader,uChessPositionSetupAdapter,uDraughtsPositionSetupAdapter;
 var SelectedVariant: TGameVariant=nil; SelectedProfile: TGameGuiProfile;
 function ChessGuiProfile: TGameGuiProfile;
 begin
+  Result.SetupAdapterClass:=TChessPositionSetupAdapter;
   Result.TournamentForcePonderOff:=True;
   Result.DefaultClock:=DefaultTimeControl; Result.DefaultClock.MovesPerPeriod:=0;
   Result.DefaultClock.MinutesPerPeriod:=5; Result.DefaultClock.IncrementSeconds:=3;
-  Result.Features:=[gfPdn,gfEngines,gfNewGame,gfTournament]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
+  Result.Features:=[gfPdn,gfEngines,gfNewGame,gfTournament,gfPositionSetup]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
   Result.SourceClickSingleMove:=False; Result.FileFormat:=gffPgn;
   Result.FormatName:='PGN'; Result.FileFilter:='PGN files (*.pgn)|*.pgn|All files (*)|*'; Result.FileExtension:='pgn';
 end;
 function DraughtsGuiProfile: TGameGuiProfile;
 begin
+  Result.SetupAdapterClass:=TDraughtsPositionSetupAdapter;
   Result.TournamentForcePonderOff:=False;
   Result.DefaultClock:=DefaultTimeControl;
   Result.Features:=[Low(TGuiGameFeature)..High(TGuiGameFeature)]; Result.EngineKinds:=[eekHub,eekDxp]; Result.BoardClass:=TDraughtsBoardControl;

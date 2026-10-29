@@ -14,6 +14,7 @@ type
     FScoreHistoryControl: TScoreHistoryControl;
   public
     constructor Create(AOwner: TComponent); override;
+    procedure ApplyScoreColors(const Colors:TScoreHistoryColors);
     procedure UpdateScores(const AAnnotationsText: string; APlyCount,
       ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
       AStartingSide: TGameSide; AStartingMoveNumber: Integer = 1);
@@ -38,6 +39,9 @@ begin
   FScoreHistoryControl.DisplayMode := shdmBars;
   FScoreHistoryControl.ShowEvaluationBar := True;
 end;
+
+procedure TScoreHistoryForm.ApplyScoreColors(const Colors:TScoreHistoryColors);
+begin FScoreHistoryControl.ScoreColors:=Colors;end;
 
 procedure TScoreHistoryForm.UpdateScores(const AAnnotationsText: string;
   APlyCount, ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;

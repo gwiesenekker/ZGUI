@@ -418,7 +418,7 @@ type
     procedure ScoreHistoryPopoutClick(Sender: TObject);
     procedure ScoreHistoryFormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure SearchPositionInDatabaseClick(Sender: TObject);
-    procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
+    procedure SetupPositionAccepted(Sender: TObject; const AFEN: string; var AAccepted:Boolean);
     procedure SetupPositionClick(Sender: TObject);
     procedure ShowGameTreeClick(Sender: TObject);
     procedure GameTreeLayoutClick(Sender: TObject);
@@ -838,6 +838,7 @@ begin
   FAnalyzerPvInfoLabel.Layout := tlCenter;
 
   FAnalyzerPvMemo := TMemo.Create(Self);
+  FAnalyzerPvMemo.Name:='AnnotatorPvMemo';
   FAnalyzerPvMemo.Top := FAnalyzerPvInfoLabel.Height;
   FAnalyzerPvMemo.Parent := LAnalyzerTextPanel;
   FAnalyzerPvMemo.Align := alTop;
@@ -1393,6 +1394,8 @@ begin
     FSetupForm.ApplyPreferences(FPreferences);
   if FDatabaseForm <> nil then
     FDatabaseForm.ApplyPreferences(FPreferences);
+  if FScoreHistoryControl<>nil then FScoreHistoryControl.ScoreColors:=FPreferences.ScoreHistoryColors;
+  if FScoreHistoryForm<>nil then FScoreHistoryForm.ApplyScoreColors(FPreferences.ScoreHistoryColors);
   UpdateScoreHistory(ActiveGameTree);
 end;
 
@@ -2843,13 +2846,15 @@ begin
     Clipboard.AsText := LFen;
 end;
 
-procedure TMainForm.SetupPositionAccepted(Sender: TObject; const AFEN: string);
+procedure TMainForm.SetupPositionAccepted(Sender: TObject; const AFEN: string; var AAccepted:Boolean);
 begin
+  AAccepted:=False;
   if not GameSupports(gfPositionSetup) then Exit;
   if not ConfirmReplaceStandaloneGame then
     Exit;
   try
     LoadStandaloneFen(AFEN);
+    AAccepted:=True;
   except
     on E: Exception do
       ShowGuiOkDialog(Self, 'Setup position', 'Invalid FEN: ' + E.Message);
@@ -2869,7 +2874,8 @@ begin
   end;
   if not TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
     LFen := StartingFenForTree(ActiveGameTree);
-  FPositionSetupForm.StartSetup(LFen);
+  try FPositionSetupForm.StartSetup(LFen);
+  except on E:Exception do begin ShowGuiOkDialog(Self,'Setup position','Invalid FEN: '+E.Message);Exit;end;end;
   ShowFormCenteredOnOwner(FPositionSetupForm, Self);
 end;
 
@@ -4787,8 +4793,11 @@ begin
       if Trim(FDisplayedPosition.PreviewMoves) <> '' then
         HighlightGameMoveTextSelection(True, ActiveGameTree);
     end
-    else
+    else begin
+      // Let the focused PV browser handle Escape after form key preview.
+      if (ActiveControl=FPvMemo) or (ActiveControl=FAnalyzerPvMemo) then Exit;
       ExitGameBrowseMode;
+    end;
     Key := 0;
   end
   else if ((Key = Ord('F')) or (Key = Ord('f'))) and (Shift = []) then
@@ -5043,6 +5052,7 @@ begin
     FScoreHistoryForm := TScoreHistoryForm.Create(Self);
     FScoreHistoryForm.OnClose := @ScoreHistoryFormClose;
   end;
+  FScoreHistoryForm.ApplyScoreColors(FPreferences.ScoreHistoryColors);
   FScoreHistoryForm.UpdateScores(FScoreHistoryControl.AnnotationsText,
     FScoreHistoryControl.PlyCount, FScoreHistoryControl.CurrentPly,
     FScoreHistoryControl.MaxScore, FScoreHistoryControl.Scale,

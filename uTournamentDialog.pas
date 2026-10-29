@@ -1134,7 +1134,7 @@ begin
     if SameText(Trim(FGrid.Cells[TournamentColReason, Row]), 'Bye') then
       Continue;
     if TournamentResultIsKnown(ParseTournamentResult(
-      FGrid.Cells[TournamentColResult, Row])) then
+      FGrid.Cells[TournamentColResult, Row],FProfile.FileFormat)) then
       Exit(True);
   end;
 end;

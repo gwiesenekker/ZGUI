@@ -63,3 +63,9 @@ echo "==> uci_gui_check (GTK2, existing editor and annotator)"
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
   "$ROOT_DIR/tests/uci_gui_check.lpi" > "$OUT_DIR/uci-build.log" 2>&1
 "$OUT_DIR/uci_gui_check"
+
+
+echo "==> setup_preferences_check (GTK2, chess setup and score colours)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
+  "$ROOT_DIR/tests/setup_preferences_check.lpi" > "$OUT_DIR/setup-preferences-build.log" 2>&1
+"$OUT_DIR/setup_preferences_check"

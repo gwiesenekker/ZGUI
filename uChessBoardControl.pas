@@ -15,6 +15,7 @@ type
   public
     procedure SetPosition(APosition: TGamePosition); override;
   end;
+procedure PaintChessPiece(Canvas:TCanvas;Piece:Integer;const ACell:TRect);
 implementation
 function TChessBoardControl.BoardDimension: Integer;
 begin Result := 8; end;
@@ -46,7 +47,10 @@ begin
   Canvas.Brush.Style := bsSolid;
 end;
 procedure TChessBoardControl.DrawPiece(ASquare: Integer; const ACell: TRect);
-var Piece,Size_: Integer; Fill,Edge: TColor;
+begin PaintChessPiece(Canvas,TChessPosition(RenderPosition).PieceAt(ASquare),ACell);end;
+
+procedure PaintChessPiece(Canvas:TCanvas;Piece:Integer;const ACell:TRect);
+var Size_: Integer; Fill,Edge: TColor;
   function Pt(X,Y: Integer): TPoint;
   begin Result := Point(ACell.Left+X*Size_ div 100,ACell.Top+Y*Size_ div 100); end;
   procedure Ellipse(X1,Y1,X2,Y2: Integer);
@@ -66,7 +70,6 @@ var Piece,Size_: Integer; Fill,Edge: TColor;
   var A,B: TPoint;
   begin A:=Pt(X1,Y1); B:=Pt(X2,Y2); Canvas.Line(A.X,A.Y,B.X,B.Y); end;
 begin
-  Piece := TChessPosition(RenderPosition).PieceAt(ASquare);
   if Piece=0 then Exit;
   Size_ := ACell.Right-ACell.Left;
   if Piece>0 then begin Fill:=RGBToColor(245,241,229); Edge:=RGBToColor(45,45,45); end

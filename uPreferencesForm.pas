@@ -8,6 +8,7 @@ uses
   Classes, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics, StdCtrls,
   uPreferences, uNotationStyles;
 
+const ScoreColorBase = 9 + Ord(High(TNotationStyle));
 type
   TPreferencesAcceptedEvent = procedure(Sender: TObject;
     const APreferences: TGuiPreferences) of object;
@@ -21,7 +22,7 @@ type
     FEvaluationScaleGroup: TRadioGroup;
     FOnAccepted: TPreferencesAcceptedEvent;
     FPreferences: TGuiPreferences;
-    FSwatches: array[0..8+Ord(High(TNotationStyle))] of TPanel;
+    FSwatches: array[0..ScoreColorBase+Ord(High(TScoreHistoryColor))] of TPanel;
     FNotationBold, FNotationItalic: array[TNotationStyle] of TCheckBox;
     FNotationSamples: array[TNotationStyle] of TLabel;
     procedure ChooseNotationFontClick(Sender: TObject);
@@ -39,6 +40,7 @@ type
     procedure SetColorByIndex(AIndex: Integer; AColor: TColor);
     procedure UpdateSwatches;
   protected
+    function SelectColor(var AColor:TColor):Boolean; virtual;
     function SelectNotationFont(AFont: TFont): Boolean; virtual;
   public
     constructor Create(AOwner: TComponent); override;
@@ -52,6 +54,19 @@ implementation
 uses
   SysUtils;
 
+function ScoreColorCaption(C:TScoreHistoryColor):string;
+const Names:array[TScoreHistoryColor] of string=(
+ 'Engine: zero or positive','Engine: negative','Annotator: zero or positive',
+ 'Annotator: negative','Engine: no score','Annotator: no score',
+ 'Neither score available','Selected move');
+begin Result:=Names[C];end;
+
+function TPreferencesForm.SelectColor(var AColor:TColor):Boolean;
+begin
+  FColorDialog.Color:=AColor;Result:=FColorDialog.Execute;
+  if Result then AColor:=FColorDialog.Color;
+end;
+
 constructor TPreferencesForm.Create(AOwner: TComponent);
 var
   LApplyButton: TButton;
@@ -63,6 +78,7 @@ var
   LTab: TTabSheet;
   LFontButton: TButton;
   S: TNotationStyle;
+  C: TScoreHistoryColor;
 begin
   inherited Create(AOwner);
   Caption := 'Preferences';
@@ -163,6 +179,17 @@ begin
   LFontButton.SetBounds(352, 58, 110, 30); LFontButton.Caption := 'Font...';
   LFontButton.Name := 'NotationFontChoose'; LFontButton.OnClick := @ChooseNotationFontClick;
   for S := Low(S) to High(S) do AddNotationRow(LGroup, S, 30+Ord(S)*46);
+
+  LTab:=TTabSheet.Create(Self);LTab.PageControl:=LPageControl;
+  LTab.Caption:='Score history';LTab.Name:='ScoreHistoryTab';
+  for C:=Low(C) to High(C) do begin
+    if Ord(C) mod 4=0 then begin
+      LGroup:=TGroupBox.Create(Self);LGroup.Parent:=LTab;LGroup.Align:=alTop;
+      LGroup.Height:=184;LGroup.BorderSpacing.Around:=8;
+      if C=Low(C) then LGroup.Caption:='Scores' else LGroup.Caption:='Missing scores and selection';
+    end;
+    AddColorRow(LGroup,ScoreColorCaption(C),ScoreColorBase+Ord(C),30+36*(Ord(C) mod 4));
+  end;
 
   LDefaultsButton := TButton.Create(Self);
   LDefaultsButton.Parent := LButtonPanel;
@@ -274,6 +301,10 @@ begin
   LButton.Parent := AParent;
   LButton.SetBounds(294, ATop, 110, 24);
   LButton.Caption := 'Choose...';
+  if AIndex>=ScoreColorBase then begin
+    LButton.Name:='ScoreColorChoose'+IntToStr(AIndex-ScoreColorBase);
+    FSwatches[AIndex].Name:='ScoreColorSwatch'+IntToStr(AIndex-ScoreColorBase);
+  end;
   LButton.Tag := AIndex;
   LButton.OnClick := @ChooseColorClick;
 end;
@@ -290,6 +321,8 @@ begin
     6: Result := FPreferences.PvMoveColor;
     7: Result := FPreferences.HintMoveColor;
     8..8+Ord(High(TNotationStyle)): Result := FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color;
+    ScoreColorBase..ScoreColorBase+Ord(High(TScoreHistoryColor)):
+      Result:=FPreferences.ScoreHistoryColors[TScoreHistoryColor(AIndex-ScoreColorBase)];
   else
     Result := clBlack;
   end;
@@ -307,6 +340,8 @@ begin
     6: FPreferences.PvMoveColor := AColor;
     7: FPreferences.HintMoveColor := AColor;
     8..8+Ord(High(TNotationStyle)): FPreferences.NotationStyles[TNotationStyle(AIndex-8)].Color := AColor;
+    ScoreColorBase..ScoreColorBase+Ord(High(TScoreHistoryColor)):
+      FPreferences.ScoreHistoryColors[TScoreHistoryColor(AIndex-ScoreColorBase)]:=AColor;
   end;
 end;
 
@@ -346,14 +381,15 @@ end;
 procedure TPreferencesForm.ChooseColorClick(Sender: TObject);
 var
   Index: Integer;
+  Chosen:TColor;
 begin
   if not (Sender is TButton) then
     Exit;
   Index := TButton(Sender).Tag;
-  FColorDialog.Color := ColorByIndex(Index);
-  if FColorDialog.Execute then
+  Chosen:=ColorByIndex(Index);
+  if SelectColor(Chosen) then
   begin
-    SetColorByIndex(Index, FColorDialog.Color);
+    SetColorByIndex(Index, Chosen);
     UpdateSwatches;
   end;
 end;

@@ -68,7 +68,7 @@ type
     procedure SearchClick(Sender: TObject);
     procedure SetFenClick(Sender: TObject);
     procedure SetGameFilterControlsEnabled(AEnabled: Boolean);
-    procedure SetupPositionAccepted(Sender: TObject; const AFEN: string);
+    procedure SetupPositionAccepted(Sender: TObject; const AFEN: string; var AAccepted:Boolean);
     procedure SetupPositionClick(Sender: TObject);
     procedure StopImportClick(Sender: TObject);
     procedure UpdateBoardFromFen;
@@ -797,10 +797,11 @@ begin
   Clipboard.AsText := FBoard.CurrentFEN;
 end;
 
-procedure TDatabaseForm.SetupPositionAccepted(Sender: TObject; const AFEN: string);
+procedure TDatabaseForm.SetupPositionAccepted(Sender: TObject; const AFEN: string; var AAccepted:Boolean);
 begin
   FFenEdit.Text := AFEN;
   SetFenClick(Sender);
+  AAccepted:=True; // Retain the legacy database setup acceptance behavior.
 end;
 
 procedure TDatabaseForm.SetupPositionClick(Sender: TObject);

@@ -208,6 +208,10 @@ begin
   for I:=1 to Grid.RowCount-1 do if Grid.Cells[TournamentColBlack,I]<>'BYE' then begin
    Grid.Row:=I;D.SetSelectedResult('1/2-1/2');
   end;
+  GuiTestConfirmationResult:=mrNo;
+  try Button(D,'Clear pairing').Click;finally GuiTestConfirmationResult:=0;end;
+  Check((Pos('Start a new tournament',GuiTestLastConfirmationText)>0) and
+   (Grid.RowCount=4),'T4 Clear pairing confirms before discarding chess results');
   Before:=Contents(D.PdnFileName);
   Check(Pos('[Black "BYE"]',Before)=0,'BYE never becomes an invented played PGN');
   GuiTestConfirmationResult:=mrYes;try Button(D,'Create pairing').Click;finally GuiTestConfirmationResult:=0;end;

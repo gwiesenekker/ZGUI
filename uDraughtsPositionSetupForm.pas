@@ -6,31 +6,35 @@ interface
 
 uses
   Classes, Controls, ExtCtrls, Forms, Graphics, StdCtrls, SysUtils,
-  uDraughtsBoardControl, uDraughtsBoard, uGuiDialogs, uPreferences;
+  uGameBoardControl, uGamePosition, uPositionSetupAdapter, uGuiDialogs, uPreferences;
 
 type
   TPositionSetupAcceptedEvent = procedure(Sender: TObject;
-    const AFEN: string) of object;
+    const AFEN: string; var AAccepted:Boolean) of object;
 
   TPositionSetupForm = class(TForm)
   private
-    FBoard: TDraughtsBoard;
-    FBoardControl: TDraughtsBoardControl;
+    FVariant:TGameVariant; // Borrowed from application composition.
+    FAdapter:TPositionSetupAdapter;
+    FGeneratedFen,FDirtyPrompted,FTypedFenDirty:Boolean;
+    FBoardControl: TGameBoardControl;
     FFenEdit: TEdit;
     FOnAccepted: TPositionSetupAcceptedEvent;
     FPaletteLabel: TLabel;
     FPalettePanel: TPanel;
-    FPiecePaintBoxes: array[0..3] of TPaintBox;
-    FSelectedPiece: TDraughtsPieceKind;
+    FPiecePaintBoxes: array of TPaintBox;
+    FSelectedPiece: Integer;
     FSideGroup: TRadioGroup;
+    procedure FenChanged(Sender:TObject);
+    function AllowBoardEdit:Boolean;
     procedure ApplyClick(Sender: TObject);
     procedure BoardMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure CancelClick(Sender: TObject);
     procedure ClearClick(Sender: TObject);
-    function CurrentPiece: TDraughtsPieceKind;
+    function CurrentPiece: Integer;
     procedure FormResizeHandler(Sender: TObject);
-    function PalettePiece(AIndex: Integer): TDraughtsPieceKind;
+    function PalettePiece(AIndex: Integer): Integer;
     procedure PiecePaletteClick(Sender: TObject);
     procedure PiecePalettePaint(Sender: TObject);
     procedure SetFenClick(Sender: TObject);
@@ -51,15 +55,7 @@ type
 implementation
 
 uses
-  Math;
-
-procedure ShrinkRect(var ARect: TRect; DX, DY: Integer);
-begin
-  Inc(ARect.Left, DX);
-  Inc(ARect.Top, DY);
-  Dec(ARect.Right, DX);
-  Dec(ARect.Bottom, DY);
-end;
+  Math,uGameGuiProfile;
 
 constructor TPositionSetupForm.Create(AOwner: TComponent);
 var
@@ -79,8 +75,10 @@ begin
   Constraints.MinWidth := 520;
   Constraints.MinHeight := 420;
 
-  FBoard := TDraughtsBoard.Create;
-  FSelectedPiece := pkWhiteMan;
+  FVariant:=DefaultGameVariant;
+  FAdapter:=GameGuiProfileFor(FVariant).SetupAdapterClass.Create;
+  FSelectedPiece:=FAdapter.PalettePiece(0);
+  SetLength(FPiecePaintBoxes,FAdapter.PaletteCount);
 
   LBottomPanel := TPanel.Create(Self);
   LBottomPanel.Parent := Self;
@@ -125,6 +123,7 @@ begin
 
   FFenEdit := TEdit.Create(Self);
   FFenEdit.Parent := LControlsPanel;
+  FFenEdit.Name:='SetupFen';FFenEdit.OnChange:=@FenChanged;
   FFenEdit.SetBounds(0, 42, 500, 24);
   FFenEdit.Anchors := [akTop, akLeft, akRight];
 
@@ -150,6 +149,9 @@ begin
   begin
     FPiecePaintBoxes[I] := TPaintBox.Create(Self);
     FPiecePaintBoxes[I].Parent := FPalettePanel;
+    FPiecePaintBoxes[I].Name:='SetupPiece'+IntToStr(I);
+    FPiecePaintBoxes[I].Hint:=FAdapter.PieceName(I);
+    FPiecePaintBoxes[I].ShowHint:=True;
     FPiecePaintBoxes[I].Height := 64;
     FPiecePaintBoxes[I].BorderSpacing.Left := 8;
     FPiecePaintBoxes[I].BorderSpacing.Right := 8;
@@ -179,10 +181,10 @@ begin
   FSideGroup.BorderSpacing.Bottom := 8;
   FSideGroup.OnClick := @SideChange;
 
-  FBoardControl := TDraughtsBoardControl.Create(Self);
+  FBoardControl := FAdapter.CreateBoard(Self);
+  FBoardControl.Name:='SetupBoard';
   FBoardControl.Parent := Self;
   FBoardControl.Align := alClient;
-  FBoardControl.Board := FBoard;
   FBoardControl.ShowSideToMoveMarker := True;
   FBoardControl.OnMouseDown := @BoardMouseDown;
   UpdatePiecePaletteLayout;
@@ -190,7 +192,8 @@ end;
 
 destructor TPositionSetupForm.Destroy;
 begin
-  FBoard.Free;
+  // Destroy the borrowing view before its dialog-local draft.
+  FreeAndNil(FBoardControl);FAdapter.Free;
   inherited Destroy;
 end;
 
@@ -212,11 +215,12 @@ end;
 procedure TPositionSetupForm.StartSetup(const AFEN: string);
 begin
   try
-    FBoard.LoadFromFEN(AFEN);
+    FAdapter.LoadFen(AFEN);
   except
-    FBoard.SetBeginPosition;
+    if FAdapter.IsChessSetup then raise;
+    FAdapter.Start;
   end;
-  if FBoard.SideToMove = dsBlack then
+  if FAdapter.Side = gsBlack then
     FSideGroup.ItemIndex := 1
   else
     FSideGroup.ItemIndex := 0;
@@ -225,7 +229,7 @@ begin
   FBoardControl.Invalidate;
 end;
 
-function TPositionSetupForm.CurrentPiece: TDraughtsPieceKind;
+function TPositionSetupForm.CurrentPiece: Integer;
 begin
   Result := FSelectedPiece;
 end;
@@ -235,17 +239,8 @@ begin
   UpdatePiecePaletteLayout;
 end;
 
-function TPositionSetupForm.PalettePiece(AIndex: Integer): TDraughtsPieceKind;
-begin
-  case AIndex of
-    0: Result := pkWhiteMan;
-    1: Result := pkWhiteKing;
-    2: Result := pkBlackMan;
-    3: Result := pkBlackKing;
-  else
-    Result := pkWhiteMan;
-  end;
-end;
+function TPositionSetupForm.PalettePiece(AIndex: Integer): Integer;
+begin Result:=FAdapter.PalettePiece(AIndex);end;
 
 procedure TPositionSetupForm.PiecePaletteClick(Sender: TObject);
 begin
@@ -257,85 +252,50 @@ begin
 end;
 
 procedure TPositionSetupForm.PiecePalettePaint(Sender: TObject);
-var
-  Box: TPaintBox;
-  CellSize: Integer;
-  Piece: TDraughtsPieceKind;
-  PieceRect: TRect;
-  TextValue: string;
+var Box:TPaintBox;
 begin
-  if not (Sender is TPaintBox) then
-    Exit;
+ if not (Sender is TPaintBox) then Exit;Box:=TPaintBox(Sender);
+ FAdapter.PaintTile(Box.Canvas,Box.ClientRect,Box.Tag,FSelectedPiece,FBoardControl.BoardDarkColor);
+end;
 
-  Box := TPaintBox(Sender);
-  CellSize := Min(Box.Width, Box.Height);
-  Piece := PalettePiece(Box.Tag);
-  Box.Canvas.Brush.Color := FBoardControl.BoardDarkColor;
-  Box.Canvas.FillRect(Box.ClientRect);
-
-  Box.Canvas.Pen.Color := clGray;
-  Box.Canvas.Brush.Style := bsClear;
-  Box.Canvas.Rectangle(Box.ClientRect);
-  Box.Canvas.Brush.Style := bsSolid;
-
-  PieceRect := Rect((Box.Width - CellSize) div 2, (Box.Height - CellSize) div 2,
-    (Box.Width + CellSize) div 2, (Box.Height + CellSize) div 2);
-  ShrinkRect(PieceRect, Max(4, CellSize div 8), Max(4, CellSize div 8));
-  if PieceColor(Piece) = pcWhite then
-  begin
-    Box.Canvas.Brush.Color := RGBToColor(245, 241, 229);
-    Box.Canvas.Pen.Color := RGBToColor(70, 70, 70);
-  end
-  else
-  begin
-    Box.Canvas.Brush.Color := RGBToColor(36, 37, 40);
-    Box.Canvas.Pen.Color := RGBToColor(10, 10, 10);
+procedure TPositionSetupForm.FenChanged(Sender:TObject);
+begin
+ if not FGeneratedFen then begin
+  FDirtyPrompted:=False;FTypedFenDirty:=True;
+  if FAdapter.IsChessSetup then begin
+   FPaletteLabel.Caption:='FEN edited';
+   FPaletteLabel.Hint:='Use Paste FEN or Apply to read the text; Start/Clear replaces it.';
+   FPaletteLabel.ShowHint:=True;
   end;
-  Box.Canvas.Ellipse(PieceRect);
-  ShrinkRect(PieceRect, Max(2, CellSize div 12), Max(2, CellSize div 12));
-  Box.Canvas.Brush.Style := bsClear;
-  Box.Canvas.Pen.Color := RGBToColor(150, 132, 104);
-  Box.Canvas.Ellipse(PieceRect);
-  Box.Canvas.Brush.Style := bsSolid;
+ end;
+end;
 
-  if Piece in [pkWhiteKing, pkBlackKing] then
-  begin
-    Box.Canvas.Font.Style := [fsBold];
-    Box.Canvas.Font.Size := Max(10, CellSize div 3);
-    if PieceColor(Piece) = pcWhite then
-      Box.Canvas.Font.Color := RGBToColor(50, 50, 50)
-    else
-      Box.Canvas.Font.Color := RGBToColor(235, 230, 220);
-    TextValue := 'K';
-    Box.Canvas.Brush.Style := bsClear;
-    Box.Canvas.TextOut((Box.Width - Box.Canvas.TextWidth(TextValue)) div 2,
-      (Box.Height - Box.Canvas.TextHeight(TextValue)) div 2, TextValue);
-    Box.Canvas.Font.Style := [];
-    Box.Canvas.Brush.Style := bsSolid;
-  end;
-
-  if Piece = FSelectedPiece then
-  begin
-    Box.Canvas.Pen.Color := clHighlight;
-    Box.Canvas.Pen.Width := 4;
-    Box.Canvas.Brush.Style := bsClear;
-    Box.Canvas.Rectangle(Box.ClientRect);
-    Box.Canvas.Pen.Width := 1;
-    Box.Canvas.Brush.Style := bsSolid;
-  end;
+function TPositionSetupForm.AllowBoardEdit:Boolean;
+begin
+ Result:=True;
+ if not FAdapter.IsChessSetup or not FTypedFenDirty then Exit;
+ Result:=False;
+ if FDirtyPrompted then Exit;
+ FDirtyPrompted:=True;
+ if ShowGuiConfirmationDialog(Self,'Setup position',
+   'Discard the typed FEN changes and continue editing the board?',
+   'Discard','',mrCancel,True)<>mrYes then Exit;
+ UpdateFenEdit;Result:=True;
 end;
 
 procedure TPositionSetupForm.UpdateFenEdit;
 begin
-  FFenEdit.Text := FBoard.CurrentFEN;
+  FGeneratedFen:=True;
+  try FFenEdit.Text:=FAdapter.DraftFen;finally FGeneratedFen:=False;end;
+  FDirtyPrompted:=False;FTypedFenDirty:=False;FPaletteLabel.Caption:='Pieces';
 end;
 
 procedure TPositionSetupForm.SideChange(Sender: TObject);
 begin
-  if FSideGroup.ItemIndex = 1 then
-    FBoard.SideToMove := dsBlack
-  else
-    FBoard.SideToMove := dsWhite;
+  if not AllowBoardEdit then begin
+    FSideGroup.ItemIndex:=Ord(FAdapter.Side=gsBlack);Exit;
+  end;
+  if FSideGroup.ItemIndex=1 then FAdapter.SetSide(gsBlack) else FAdapter.SetSide(gsWhite);
   UpdateFenEdit;
   FBoardControl.Invalidate;
 end;
@@ -343,7 +303,7 @@ end;
 procedure TPositionSetupForm.BoardMouseDown(Sender: TObject;
   Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  LPiece: TDraughtsPieceKind;
+  LPiece: Integer;
   LSquare: Integer;
 begin
   if Button <> mbLeft then
@@ -351,11 +311,8 @@ begin
   LSquare := FBoardControl.SquareAtPoint(X, Y);
   if LSquare <= 0 then
     Exit;
-  LPiece := CurrentPiece;
-  if FBoard[LSquare] = LPiece then
-    FBoard[LSquare] := pkEmpty
-  else
-    FBoard[LSquare] := LPiece;
+  if not AllowBoardEdit then Exit;
+  LPiece := CurrentPiece;FAdapter.Toggle(LSquare,LPiece);
   UpdateFenEdit;
   FBoardControl.Invalidate;
 end;
@@ -363,8 +320,8 @@ end;
 procedure TPositionSetupForm.SetFenClick(Sender: TObject);
 begin
   try
-    FBoard.LoadFromFEN(Trim(FFenEdit.Text));
-    if FBoard.SideToMove = dsBlack then
+    FAdapter.LoadFen(Trim(FFenEdit.Text));
+    if FAdapter.Side = gsBlack then
       FSideGroup.ItemIndex := 1
     else
       FSideGroup.ItemIndex := 0;
@@ -378,7 +335,7 @@ end;
 
 procedure TPositionSetupForm.SetStartClick(Sender: TObject);
 begin
-  FBoard.SetBeginPosition;
+  FAdapter.Start;
   FSideGroup.ItemIndex := 0;
   UpdateFenEdit;
   FBoardControl.Invalidate;
@@ -386,7 +343,7 @@ end;
 
 procedure TPositionSetupForm.ClearClick(Sender: TObject);
 begin
-  FBoard.Clear;
+  FAdapter.Clear;
   FSideGroup.ItemIndex := 0;
   UpdateFenEdit;
   FBoardControl.Invalidate;
@@ -407,7 +364,7 @@ var
   PaletteWidth: Integer;
   SquareSize: Integer;
   SideMargin: Integer;
-  TopPos: Integer;
+  TopPos,TileSize,Row,Col: Integer;
 begin
   if (FBoardControl = nil) or (FPalettePanel = nil) then
     Exit;
@@ -428,6 +385,14 @@ begin
     FPaletteLabel.SetBounds(0, TopPos, PaletteWidth, 24);
     Inc(TopPos, FPaletteLabel.Height + 4);
   end;
+  if FAdapter.IsChessSetup then begin
+    TileSize:=Max(12,Min((PaletteWidth-24) div 2,(FPalettePanel.ClientHeight-TopPos-12) div 6-4));
+    for I:=0 to High(FPiecePaintBoxes) do begin
+      Row:=I div 2;Col:=I mod 2;
+      FPiecePaintBoxes[I].SetBounds((PaletteWidth-2*TileSize-8) div 2+Col*(TileSize+8),
+        TopPos+Row*(TileSize+4),TileSize,TileSize);
+    end;
+  end else begin
   for I := 0 to High(FPiecePaintBoxes) do
     if FPiecePaintBoxes[I] <> nil then
     begin
@@ -435,14 +400,25 @@ begin
         SquareSize);
       Inc(TopPos, SquareSize + 8);
     end;
+  end;
   UpdatePiecePalette;
 end;
 
 procedure TPositionSetupForm.ApplyClick(Sender: TObject);
+var Fen:string;Accepted:Boolean;P:TGamePosition;
 begin
-  if Assigned(FOnAccepted) then
-    FOnAccepted(Self, FBoard.CurrentFEN);
-  Hide;
+ try
+  if FAdapter.IsChessSetup then begin
+   // Typed text is consumed only by this explicit action or Paste FEN.
+   if FTypedFenDirty then begin
+    P:=FVariant.CreatePosition;
+    try P.LoadFromFEN(Trim(FFenEdit.Text));Fen:=P.ToFEN;finally P.Free;end;
+   end else Fen:=FAdapter.ValidatedFen;
+  end else Fen:=FAdapter.DraftFen;
+ except on E:Exception do begin ShowGuiOkDialog(Self,'Setup position','Invalid FEN: '+E.Message);Exit;end;end;
+ Accepted:=False;
+ if Assigned(FOnAccepted) then FOnAccepted(Self,Fen,Accepted);
+ if Accepted then Hide;
 end;
 
 procedure TPositionSetupForm.CancelClick(Sender: TObject);
