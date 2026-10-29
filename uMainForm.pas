@@ -2100,7 +2100,8 @@ begin
     Exit;
 
   CancelAnalyzerSearch;
-  FAutoPlay.BeginLine(LGameTree, LNode);
+  FAutoPlay.BeginLine(LGameTree, LNode,
+    GameGuiProfileFor(LGameTree.Variant).AutoPlayStopsOnOutcome);
   InvalidateAnalyzerPositionSignature;
   UpdateAutoPlayButtonState;
   StartNextAutoPlaySearch;
@@ -2147,6 +2148,11 @@ begin
     Exit;
   end;
 
+  if FAutoPlay.TerminalReason(LErrorText) then
+  begin
+    StopAutoPlay(LErrorText);
+    Exit;
+  end;
   LPosition := LGameTree.Variant.CreatePosition;
   try
     if not TryBuildDisplayedPosition(LGameTree, LPosition) then

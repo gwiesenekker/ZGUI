@@ -5,7 +5,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Controls, Classes, SysUti
   StdCtrls, Menus, Grids, ExtCtrls, uEngineEditForm, uEngineRegistry,
   uEngineParamsJson, uMainForm, uChessPosition, uChessUciEngine, uGamePosition,
   uGameGuiProfile, uGameTree, uGuiDialogs, uGameTreeSearchRef,
-  uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uRunningGame, uGameBoardControl, Types, Math, uChessPgn, uGameTreePdn, uGameTreeActor;
+  uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uRunningGame, uGameBoardControl, Types, Math, uChessPgn, uGameTreePdn, uGameTreeActor, LCLType;
 type TErrors=class
   procedure Report(Sender: TObject; E: Exception);
 end;
@@ -23,11 +23,15 @@ procedure Check(Value: Boolean; const Text: string);
 begin Inc(Checks); if not Value then raise Exception.Create(Text); end;
 procedure Fake;
 var Line,Move,Fen: string; P: TChessPosition; L: TStringList; I,N: Integer;
+  Active,FirstSearch:Boolean;Trace:TextFile;Tracing:Boolean;
 begin
-  P:=TChessPosition.Create; L:=TStringList.Create; Move:='e2e4';
+  P:=TChessPosition.Create; L:=TStringList.Create; Move:='e2e4';Active:=False;FirstSearch:=True;
+  Tracing:=(ParamStr(2)='autoplay') and (ParamStr(3)<>'');
+  if Tracing then begin AssignFile(Trace,ParamStr(3));Rewrite(Trace);end;
   try
     while not EOF(Input) do begin
       ReadLn(Line);
+      if Tracing then begin WriteLn(Trace,Line);Flush(Trace);end;
       if Line='uci' then begin
         if ParamStr(2)='hang' then Continue;
         WriteLn('id name GUI UCI');
@@ -43,7 +47,21 @@ begin
         end;
         if N>=0 then for I:=N+1 to L.Count-1 do P.PlayMove(L[I]);
         if P.LegalMoveCount>0 then Move:=P.LegalMove(0) else Move:='0000';
+      end else if (Line='stop') and Active then begin
+        // Completion of cancelled live analysis must be drained, never played.
+        WriteLn('bestmove '+Move);Active:=False;
       end else if Copy(Line,1,3)='go ' then begin
+        if ParamStr(2)='autoplay' then begin
+          if FirstSearch then begin
+            FirstSearch:=False;Active:=True;WriteLn('info depth 2 score cp 35 pv '+Move);
+          end else begin
+            // Deliberately differ from the cancelled live search's bestmove.
+            if P.LegalMoveCount>1 then Move:=P.LegalMove(1);
+            Sleep(80);WriteLn('info depth 3 score cp 45 pv '+Move);
+            WriteLn('bestmove '+Move);
+          end;
+          Flush(Output);Continue;
+        end;
         if ParamStr(2)='silent' then Continue;
         WriteLn('info depth 1 score cp 10 pv '+Move); Flush(Output);
         if ParamStr(2)='live' then Sleep(650) else Sleep(40);
@@ -53,7 +71,7 @@ begin
       end else if Line='quit' then Break;
       Flush(Output);
     end;
-  finally L.Free; P.Free; end;
+  finally if Tracing then CloseFile(Trace);L.Free; P.Free; end;
 end;
 function Button(Form: TForm; const Caption: string): TButton;
 var I: Integer;
@@ -147,7 +165,7 @@ begin
     Check((Info<>nil) and (Info.Align=alTop),'Annotator uses the existing PV information header above its moves');
     Check((Pos('score 0.35',Info.Caption)>0) and (Pos('time ',Info.Caption)>0),'Annotator score and time are visible in the header');
     Check(F.ActiveGameTree.Root.ChildCount=0,'Analysis never adds moves or variations');
-    Check(not Button(F,'Auto Play').Enabled,'Auto Play remains disabled for chess');
+    Check(not Button(F,'Auto Play').Enabled,'Waiting game keeps Auto Play disabled');
     Check(not Menu(F,'Open MCTS annotator').Enabled,'MCTS remains disabled for chess');
     F.CollectBusyEngineKeys(Keys); Check(Keys.Count=1,'Existing reservation tracks UCI annotator');
     S:=F.TestAnalysis.Search;
@@ -164,6 +182,85 @@ begin
     Check(Pos('score ',Info.Caption)=0,'Closing annotator clears stale header values');
     Keys.Clear; F.CollectBusyEngineKeys(Keys); Check(Keys.Count=0,'Shutdown releases existing reservation');
   finally F.Free; Engines.Free; Keys.Free; DeleteFile(EnginesJsonFileName); end;
+end;
+procedure AutoPlay(const Exe:string);
+var F:TMainForm;Engines:TExternalEngineList;D:TExternalEngineDefinition;
+  Item:TMenuItem;Popup:TPopupMenu;Tick:QWord;K:Word;P:TChessPosition;
+  Expected,Found,Wire,Trace,BeforeResult:string;Lines:TStringList;
+  OldSearch:TGameTreeSearchRef;Changed:Boolean;
+  procedure StartStopped(const Fen:string);
+  var Setup:TGameSetup;Game:TRunningGame;Started:QWord;
+  begin
+    Setup:=Default(TGameSetup);Setup.StartingFEN:=Fen;Setup.TimeControl:=ChessGuiProfile.DefaultClock;
+    Game:=F.StartGameFromSetup(Setup);Started:=GetTickCount64;
+    repeat Pump(F);until (Game.Lifecycle=rglRunning) or (Game.Lifecycle=rglFinished) or
+      (GetTickCount64-Started>5000);
+    if Game.State=gosRunning then
+      Check(not Button(F,'Auto Play').Enabled,'A running game disables chess Auto Play');
+    F.MarkGameStopped(Game,'Auto Play fixture');Started:=GetTickCount64;
+    repeat Pump(F);until (Game.Lifecycle=rglFinished) or (GetTickCount64-Started>5000);
+    Check(Game.Lifecycle=rglFinished,'Auto Play fixture is a stopped game');
+  end;
+  procedure Escape;
+  begin K:=VK_ESCAPE;F.OnKeyDown(F,K,[]);Pump(F);Check(K=0,'Escape is consumed');end;
+  function MemoContains(const Text:string):Boolean;
+  var I:Integer;
+  begin
+    Result:=False;
+    for I:=0 to F.ComponentCount-1 do
+      if (F.Components[I] is TMemo) and (Pos(Text,TMemo(F.Components[I]).Text)>0) then Exit(True);
+  end;
+begin
+  Engines:=TExternalEngineList.Create;Lines:=TStringList.Create;P:=TChessPosition.Create;
+  Trace:=GetTempFileName(GetTempDir,'uap');DeleteFile(Trace);
+  D:=TExternalEngineDefinition.Create;D.Kind:=eekUci;D.ExePath:=Exe;D.UciId:='Auto Play UCI';
+  D.Arguments:='--fake-uci autoplay "'+Trace+'"';Engines.Add(D);
+  SaveExternalEngines(EnginesJsonFileName,Engines);F:=TMainForm.Create(nil);
+  try
+    StartStopped(ChessStartingFEN);
+    Check(not Button(F,'Auto Play').Enabled,'No annotator disables chess Auto Play');
+    Item:=Menu(F,'Open Annotator');Popup:=TPopupMenu(Item.GetParentMenu);Popup.OnPopup(Popup);Item.Items[0].Click;
+    Tick:=GetTickCount64;
+    repeat Pump(F);until (F.ActiveGameTree.Root.AnnotatorPV<>'') or (GetTickCount64-Tick>5000);
+    Check(F.ActiveGameTree.Root.AnnotatorPV<>'','Live UCI analysis before Auto Play');
+    OldSearch:=F.TestAnalysis.Search;BeforeResult:=F.ActiveGameTree.ResultText;
+    Expected:=P.LegalMove(1);Button(F,'Auto Play').Click;Tick:=GetTickCount64;
+    repeat Pump(F);until (Pos(' ',F.ActiveGameTree.Root.AutoPlayPV)>0) or (GetTickCount64-Tick>5000);
+    Found:=F.ActiveGameTree.Root.AutoPlayPV;
+    Check(Pos(Expected+' ',Found)=1,'One-shot bestmove extends Auto Play; expected='+Expected+'; got='+Found);
+    Check((F.ActiveGameTree.MainlineCount=0) and (F.ActiveGameTree.Root.ChildCount=0) and
+      (F.ActiveGameTree.ResultText=BeforeResult),'Chess Auto Play preserves played tree and result');
+    Lines.Clear;ExtractStrings([' '],[],PChar(Found),Lines);P.LoadFromFEN(ChessStartingFEN);
+    for K:=0 to Lines.Count-1 do P.PlayMove(Lines[K]);
+    Check(TGameBoardControl(F.FindComponent('MainBoard')).Position.ToFEN=P.ToFEN,
+      'Auto Play PV browsing displays the virtual position');
+    Lines.LoadFromFile(Trace);Wire:=Lines.Text;
+    Escape;Found:=F.ActiveGameTree.Root.AutoPlayPV;Tick:=GetTickCount64;
+    repeat Pump(F);until (not SameGameTreeSearchRef(OldSearch,F.TestAnalysis.Search)) and
+      (F.ActiveGameTree.Root.AnnotatorPV<>'') or (GetTickCount64-Tick>5000);
+    for K:=1 to 70 do Pump(F);
+    Check(F.ActiveGameTree.Root.AutoPlayPV=Found,'Late cancelled reply cannot extend a stopped chess Auto Play line');
+    Check(Button(F,'Auto Play').Enabled,'Escape restores chess Auto Play button');
+    Lines.LoadFromFile(Trace);
+    Check(Pos('go movetime 1000',Lines.Text)>0,'Think-once uses configured analysis time via UCI movetime');
+    Check(Pos('go movetime',Copy(Lines.Text,Length(Wire)+1,MaxInt))>0,'Live UCI analysis resumes after Auto Play');
+    Escape; // Leave the Auto Play PV browsing view.
+    // An already drawn position must not send a think-once request.
+    Popup.OnPopup(Popup);Menu(F,'Close Annotator').Click;Tick:=GetTickCount64;
+    repeat Pump(F);until (F.TestAnalyzerRunner=nil) or (GetTickCount64-Tick>5000);
+    F.LoadStandaloneFen('4k3/8/8/8/8/8/8/2B1K3 w - - 0 1');
+    // A stopped custom-position fixture; a real game would already be gosGameOver.
+    F.ActiveGameTree.SetGameState(gosStopped,Changed);
+    Popup.OnPopup(Popup);Item.Items[0].Click;Tick:=GetTickCount64;
+    repeat Pump(F);until (F.ActiveGameTree.Root.AnnotatorPV<>'') or (GetTickCount64-Tick>5000);
+    Check(Button(F,'Auto Play').Enabled,'Stopped custom position enables Auto Play with annotator');
+    BeforeResult:=F.ActiveGameTree.ResultText;
+    Button(F,'Auto Play').Click;for K:=1 to 30 do Pump(F);
+    Check(MemoContains('Auto Play stopped; reason=draw by insufficient mating material'),'Chess Auto Play shows its rule-based stop reason');
+    Check((F.ActiveGameTree.Root.AutoPlayPV='') and (F.ActiveGameTree.Root.ChildCount=0) and
+      (F.ActiveGameTree.ResultText=BeforeResult),'Already drawn Auto Play keeps the game result and topology unchanged');
+    Popup.OnPopup(Popup);Menu(F,'Close Annotator').Click;
+  finally F.Free;P.Free;Lines.Free;Engines.Free;DeleteFile(Trace);DeleteFile(EnginesJsonFileName);end;
 end;
 procedure Games(const Exe: string; RealEngine: Boolean=False);
 var F: TMainForm; Dialog: TGameSetupForm; D: TExternalEngineDefinition; Engines: TExternalEngineList;
@@ -267,7 +364,27 @@ begin
 end;
 procedure RealAnalysis(const Path: string);
 var F: TMainForm; Engines: TExternalEngineList; D: TExternalEngineDefinition;
-  Item: TMenuItem; Popup: TPopupMenu; Tick: QWord;
+  Item: TMenuItem; Popup: TPopupMenu; Tick: QWord;Changed:Boolean;
+  procedure CheckAutoPlay(const Fen,Reason:string;ExpectMoves:Boolean);
+  var Started:QWord;Found:Boolean;I:Integer;
+  begin
+    Popup.OnPopup(Popup);Menu(F,'Close Annotator').Click;Started:=GetTickCount64;
+    repeat Pump(F);until (F.TestAnalyzerRunner=nil) or (GetTickCount64-Started>5000);
+    F.LoadStandaloneFen(Fen);F.ActiveGameTree.SetGameState(gosStopped,Changed);
+    Popup.OnPopup(Popup);Item.Items[0].Click;
+    Check(Button(F,'Auto Play').Enabled,'Stockfish Auto Play enabled for stopped position');
+    Button(F,'Auto Play').Click;Started:=GetTickCount64;
+    repeat
+      Pump(F);Found:=False;
+      for I:=0 to F.ComponentCount-1 do
+        if (F.Components[I] is TMemo) and
+          (Pos('Auto Play stopped; reason='+Reason,TMemo(F.Components[I]).Text)>0) then Found:=True;
+    until Found or (GetTickCount64-Started>15000);
+    Check(Found,'Stockfish Auto Play stop: '+Reason);
+    Check((F.ActiveGameTree.Root.AutoPlayPV<>'')=ExpectMoves,'Stockfish Auto Play expected stored moves');
+    Check((F.ActiveGameTree.Root.ChildCount=0) and (F.ActiveGameTree.ResultText='*'),
+      'Stockfish Auto Play preserves played topology and result');
+  end;
   procedure WaitForPV;
   begin
     Tick:=GetTickCount64;
@@ -283,6 +400,8 @@ begin
     Item:=Menu(F,'Open Annotator'); Popup:=TPopupMenu(Item.GetParentMenu); Popup.OnPopup(Popup); Item.Items[0].Click;
     WaitForPV;
     F.LoadStandaloneFen('4k3/8/8/8/8/8/8/R3K3 b - - 0 37'); WaitForPV;
+    CheckAutoPlay('7k/5Q2/6K1/8/8/8/8/8 w - - 0 1','checkmate',True);
+    CheckAutoPlay('4k3/8/8/8/8/8/8/2B1K3 w - - 0 1','draw by insufficient mating material',False);
     Popup.OnPopup(Popup); Menu(F,'Close Annotator').Click; Tick:=GetTickCount64;
     repeat Pump(F); until (F.TestAnalyzerRunner=nil) or (GetTickCount64-Tick>5000);
     Check(F.TestAnalyzerRunner=nil,'Stockfish closes through existing GUI runner');
@@ -294,7 +413,7 @@ begin
   Application.Initialize; Application.ShowMainForm:=False; Errors:=TErrors.Create; Application.OnException:=@Errors.Report; V:=TChessVariant.Create;
   RegisterDefaultGameVariant(V); RegisterGameGuiProfile(V,ChessGuiProfile);
   try Editor(ExpandFileName(ParamStr(0))); Analysis(ExpandFileName(ParamStr(0)));
-    Games(ExpandFileName(ParamStr(0)));
+    AutoPlay(ExpandFileName(ParamStr(0)));Games(ExpandFileName(ParamStr(0)));
     if ParamStr(1)<>'' then begin RealAnalysis(ParamStr(1)); Games(ExpandFileName(ParamStr(1)),True); end;
     WriteLn('UCI GUI checks passed (',Checks,' checks)');
   finally RegisterDefaultGameVariant(nil); V.Free; Errors.Free; end;

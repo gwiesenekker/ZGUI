@@ -31,6 +31,7 @@ end;
 procedure Tests;
 var D,E: TGameTreeNodeData; Tags: TGameFileTags; Header: TGameTreeHeaderInput;
   C: TGameTreeCommand; Text,Name: string; Reader: TChessPgnReader;
+  Stored:TChessPgnDatabaseGame;Policy:TPgnStoragePolicy;
   Start: QWord; Edited: Boolean; I: Integer; Saved: TStringList; Broken: string; O: TGameTreePdnRenderOptions;
 begin
   RoundTrip('[Event "Escaped \"event\" \\ club"] [Site "Amsterdam"] [Date "2026.10.28"] '+
@@ -65,6 +66,27 @@ begin
   RoundTrip('[SetUp "1"] [FEN "4k3/P7/8/8/8/8/8/4K3 w - - 0 1"] 1.a8=Q+ *');
   RoundTrip('1.Nf3 Nf6 2.g3 g6 3.Bg2 Bg7 4.O-O O-O *');
   Check(Pos('[FEN ',Export(A))=0,'Default FEN omitted');
+  RoundTrip('1.e4 e5 *',True);
+  Execute(A.CreateRecordAutoPlayPVCommand(A.GameTree.Root.NodeId,'d2d4 d7d5'));
+  Execute(A.CreateRecordAutoPlayPVCommand(A.GameTree.MainlineNode[1].NodeId,'c7c5 g1f3'));
+  Text:=Export(A,True);ImportChessPgn(Text,B,nil);
+  Check((B.GameTree.Root.AutoPlayPV='d2d4 d7d5') and
+    (B.GameTree.MainlineNode[1].AutoPlayPV='c7c5 g1f3'),'Lossless PGN retains typed root and node Auto Play PVs');
+  Check((B.GameTree.MainlineCount=2) and (B.GameTree.Root.ChildCount=1) and
+    (B.GameTree.MainlineNode[1].ChildCount=1),'Lossless Auto Play PVs never become played variations');
+  for Policy:=Low(TPgnStoragePolicy) to High(TPgnStoragePolicy) do begin
+    Stored:=ReadChessPgnDatabaseGame(Text,V,nil,Policy);
+    try
+      Check((Stored.Moves.Count=2) and (Stored.PositionKeys.Count=3),'Database output indexes mainline only with Auto Play PVs');
+      ImportChessPgn(Stored.CompletePgn,B,nil);
+      Check((B.GameTree.Root.AutoPlayPV='d2d4 d7d5') and
+        (B.GameTree.MainlineNode[1].AutoPlayPV='c7c5 g1f3'),'Both database policies retain the lossless Auto Play envelope');
+    finally Stored.Free;end;
+  end;
+  Text:=Export(A);ImportChessPgn(Text,B,nil);
+  Check((B.GameTree.Root.AutoPlayPV='') and (B.GameTree.MainlineNode[1].AutoPlayPV='') and
+    (B.GameTree.MainlineCount=2) and (B.GameTree.Root.ChildCount=1) and
+    (B.GameTree.MainlineNode[1].ChildCount=1),'Ordinary PGN omits analysis PVs and preserves played tree');
   RoundTrip('1.e4 {[%eval -0.0001] [%clk 0:00:59.9999]} *');
   RoundTrip('1.e4 {[%eval'+#10+'0.25]} *');
   RoundTrip('1.e4 {[%eval 0.25] [%clk 0:03:00] [%emt 0:00:05] [%unknown keep]} '+

@@ -4,6 +4,34 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Chess Auto Play — 2026-10-29
+
+- Enable the existing Auto Play button for stopped chess games with a UCI
+  annotator. Reuse timed annotator searches, search references, PV browsing,
+  Escape cancellation and typed Auto Play PV storage; keep the GUI layout.
+- Apply Claude's reviewed rules seam in the existing coordinator. Seed one
+  variant rules object with the root-to-source-node path (including variations),
+  then feed accepted preview moves. Check outcomes before the first request and
+  each next request, including mate, stalemate, material and automatic/claimable
+  draws. Report the stop reason in the existing annotator log; retain the played
+  tree and game result.
+- Follow the user's chess-only policy: the GUI profile enables outcome stopping
+  for chess and leaves draughts Auto Play behavior unchanged. Chess MCTS remains
+  disabled; clocks, running games, tournaments and rules implementations are
+  unchanged.
+- Verify the existing lossless PGN envelope already retains root/node Auto Play
+  PVs. Ordinary file exports omit analysis PVs, as before. Both database storage
+  policies preserve lossless PV data and index only the played mainline.
+- Extend coordinator and UCI GUI checks with historical variation/repetition
+  paths, terminal starts, a mating preview move, cancellation of live analysis,
+  timed one-shot replies, preview-board display, late replies after Escape and
+  resumed analysis. Document the stopping and export policies in the manual.
+- Validation: application build, full headless regression, all nine GTK GUI
+  suites and both tournament suites pass. The UCI GUI suite passes 76 checks;
+  its optional Stockfish run passes 110, including Auto Play mate and terminal
+  material cases. PGN checks pass 139 assertions. Focused coordinator checks pass
+  with range/overflow/heap checks, and existing draughts Auto Play/Hub tests pass.
+
 ### Legal SAN aliases and compatible PGN storage (P14/P16) — 2026-10-29
 
 Commit: `4ac129c`.

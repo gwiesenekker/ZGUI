@@ -1,7 +1,7 @@
 unit uAnalysisCoordinator;
 {$mode objfpc}{$H+}
 interface
-uses SysUtils, uGamePosition, uGameTree, uGameTreeActor, uGameTreeSearchRef,
+uses Classes, SysUtils, uGamePosition, uGameTree, uGameTreeActor, uGameTreeSearchRef,
   uGameOrchestrator, uPvSnapshot, uDisplayedPosition;
 type
   // PV base positions are owned copies. Each belongs to the variant recorded
@@ -53,8 +53,14 @@ type
     FTreeId, FNodeId: Int64;
     FMovesText: string;
     FSearch: TGameTreeSearchRef;
+    // Optional outcome policy; the GUI enables it only for chess.
+    FRules:TGameRules;
+    FLinePosition:TGamePosition; // Owned current state, not a second history.
   public
-    procedure BeginLine(ATree: TGameTree; ANode: TGameTreePlyNode);
+    destructor Destroy;override;
+    procedure BeginLine(ATree: TGameTree; ANode: TGameTreePlyNode;
+      AStopsOnOutcome:Boolean=False);
+    function TerminalReason(out AReason:string):Boolean;
     procedure Stop;
     procedure TrackSearch(const ASearch: TGameTreeSearchRef);
     procedure ClearSearch;
@@ -393,8 +399,31 @@ begin
     AStartingFEN + #10 + AMovesText + #10 +
     IntToStr(Ord(AGameState));
 end;
-procedure TAutoPlayCoordinator.BeginLine(ATree: TGameTree; ANode: TGameTreePlyNode);
+destructor TAutoPlayCoordinator.Destroy;
+begin Stop;inherited Destroy;end;
+procedure TAutoPlayCoordinator.BeginLine(ATree: TGameTree; ANode: TGameTreePlyNode;
+  AStopsOnOutcome:Boolean);
+var Moves:TStringList;After:TGamePosition;I:Integer;
 begin
+  Stop;
+  if AStopsOnOutcome then begin
+    Moves:=TStringList.Create;After:=nil;
+    try
+      try
+        FLinePosition:=ATree.Variant.CreatePositionFromFEN(ATree.StartingFEN);
+        FRules:=ATree.Variant.CreateRules;FRules.Reset(FLinePosition);
+        if not ATree.CopyNodeMovesTo(ANode,Moves) then
+          raise EGamePositionError.Create('Auto Play start node is no longer in the tree');
+        // Seed once from the actual root-to-node path, including variations.
+        After:=FLinePosition.Clone;
+        for I:=0 to Moves.Count-1 do begin
+          After.AssignFrom(FLinePosition);After.PlayMove(Moves[I]);
+          FRules.MovePlayed(FLinePosition,Moves[I],After);
+          FLinePosition.AssignFrom(After);
+        end;
+      except Stop;raise;end;
+    finally After.Free;Moves.Free;end;
+  end;
   FBasePly := ANode.PlyNumber;
   FNodeId := ANode.NodeId;
   FMoveCount := 0;
@@ -405,10 +434,17 @@ begin
 end;
 procedure TAutoPlayCoordinator.Stop;
 begin
+  FreeAndNil(FRules);FreeAndNil(FLinePosition);
   FActive := False;
   FSearch := EmptyGameTreeSearchRef;
   FTreeId := 0;
   FNodeId := 0;
+end;
+function TAutoPlayCoordinator.TerminalReason(out AReason:string):Boolean;
+begin
+  AReason:='';Result:=False;
+  if FActive and (FRules<>nil) then
+    Result:=FRules.Outcome(FLinePosition,AReason)<>goOngoing;
 end;
 procedure TAutoPlayCoordinator.TrackSearch(const ASearch: TGameTreeSearchRef);
 begin FSearch := ASearch; end;
@@ -441,9 +477,18 @@ begin
   Result := AActor.CreateRecordAutoPlayPVCommand(FNodeId, Moves);
 end;
 procedure TAutoPlayCoordinator.MoveStored(ACommand: TGameTreeCommand);
+var After:TGamePosition;Move:string;
 begin
   // The form applies actor results before advancing the preview, as before.
   if (ACommand = nil) or not ACommand.Accepted then Exit;
+  if FRules<>nil then begin
+    Move:=Trim(Copy(ACommand.PvText,Length(FMovesText)+1,MaxInt));
+    After:=FLinePosition.Clone;
+    try
+      After.PlayMove(Move);FRules.MovePlayed(FLinePosition,Move,After);
+      FLinePosition.AssignFrom(After);
+    finally After.Free;end;
+  end;
   FMovesText := ACommand.PvText;
   Inc(FMoveCount);
 end;

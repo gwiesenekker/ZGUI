@@ -2,7 +2,7 @@ program analysis_coordinator_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uAnalysisCoordinator,
   uGameTree, uGameTreeActor, uGameTreeSearchRef, uGameOrchestrator,
-  uGamePosition, uPvSnapshot, uTreeTestUtils, uDisplayedPosition, uDraughtsPosition;
+  uGamePosition, uPvSnapshot, uTreeTestUtils, uDisplayedPosition, uDraughtsPosition, uChessPosition, uChessPgn;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure Execute(Actor: TGameTreeActor; Command: TGameTreeCommand);
@@ -130,6 +130,71 @@ begin
   finally Board.Free; AutoPlay.Free; Other.Free; Actor.Free; end;
 end;
 
+procedure CheckChessAutoPlay;
+var V:TChessVariant;Actor:TGameTreeActor;AutoPlay:TAutoPlayCoordinator;
+  P:TGamePosition;Node:TGameTreePlyNode;C:TGameTreeCommand;
+  Words:TStringList;Reason,Text:string;I:Integer;
+  procedure ExpectStart(const Fen,Expected:string);
+  begin
+    ImportChessPgn('[SetUp "1"] [FEN "'+Fen+'"] *',Actor,nil);
+    AutoPlay.BeginLine(Actor.GameTree,Actor.GameTree.Root,True);
+    Check(AutoPlay.TerminalReason(Reason) and (Pos(Expected,Reason)>0),
+      'Chess Auto Play start outcome '+Expected+': '+Reason);
+    Check((AutoPlay.MoveCount=0) and (Actor.GameTree.Root.AutoPlayPV='') and
+      (Actor.GameTree.ResultText='*'),'Terminal start changes neither PV nor game result');
+  end;
+begin
+  V:=TChessVariant.Create;Actor:=TGameTreeActor.Create(TGameTree.Create(V),True);
+  AutoPlay:=TAutoPlayCoordinator.Create;Words:=TStringList.Create;P:=V.CreatePosition;
+  try
+    ExpectStart('7k/6Q1/6K1/8/8/8/8/8 b - - 0 1','checkmate');
+    ExpectStart('7k/5Q2/6K1/8/8/8/8/8 b - - 0 1','stalemate');
+    ExpectStart('4k3/8/8/8/8/8/8/2B1K3 w - - 0 1','insufficient mating material');
+    ExpectStart('7k/8/6K1/8/8/8/8/R7 w - - 150 1','75-move');
+    ExpectStart('7k/8/6K1/8/8/8/8/R7 w - - 100 1','50-move');
+    ExpectStart('7k/8/6K1/8/8/8/8/R7 w - - 99 1','intended 50-move');
+    // Feed the whole historical path, even when it is on a variation.
+    ImportChessPgn('1.e4 (1.Nf3 Nf6 2.Ng1 Ng8 3.Nf3 Nf6 4.Ng1 Ng8) e5 *',Actor,nil);
+    Node:=Actor.GameTree.Root.Children[1];while Node.ChildCount>0 do Node:=Node.Children[0];
+    AutoPlay.BeginLine(Actor.GameTree,Node,True);
+    Check(AutoPlay.TerminalReason(Reason) and (Pos('threefold repetition',Reason)>0),
+      'Variation-node history is seeded from the root: '+Reason);
+    Check((AutoPlay.NodeId=Node.NodeId) and (AutoPlay.BasePly=8),'Variation source identity retained');
+    Text:='';for I:=1 to 4 do Text+='Nf3 Nf6 Ng1 Ng8 ';
+    ImportChessPgn(Text+'*',Actor,nil);
+    AutoPlay.BeginLine(Actor.GameTree,Actor.GameTree.MainlineNode[16],True);
+    Check(AutoPlay.TerminalReason(Reason) and (Pos('fivefold',Reason)>0),'Fivefold history at a mainline start');
+    ImportChessPgn('*',Actor,nil);AutoPlay.BeginLine(Actor.GameTree,Actor.GameTree.Root,True);
+    Check(not AutoPlay.TerminalReason(Reason),'New line clears previous draw history');
+    P.LoadFromFEN(ChessStartingFEN);
+    ExtractStrings([' '],[],PChar('g1f3 g8f6 f3g1 f6g8 g1f3 g8f6 f3g1'),Words);
+    for I:=0 to Words.Count-1 do begin
+      C:=AutoPlay.CreateMoveCommand(Actor,Actor.GameTree,P,Words[I],Reason);
+      Check(C<>nil,Reason);
+      try Actor.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);AutoPlay.MoveStored(C);finally C.Free;end;
+      P.PlayMove(Words[I]);
+      if I<Words.Count-1 then Check(not AutoPlay.TerminalReason(Reason),'Repetition does not stop early')
+      else Check(AutoPlay.TerminalReason(Reason) and (Pos('intended threefold',Reason)>0),
+        'Stored Auto Play moves update repetition history: '+Reason);
+    end;
+    Check((AutoPlay.MoveCount=7) and (Actor.GameTree.MainlineCount=0) and
+      (Actor.GameTree.Root.ChildCount=0) and (Actor.GameTree.ResultText='*'),
+      'Rule stopping leaves moves as analysis only');
+    AutoPlay.Stop;Check(not AutoPlay.TerminalReason(Reason),'Stopped line releases rules');
+    ImportChessPgn('[SetUp "1"] [FEN "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1"] *',Actor,nil);
+    AutoPlay.BeginLine(Actor.GameTree,Actor.GameTree.Root,True);
+    P.LoadFromFEN(Actor.GameTree.StartingFEN);
+    Check(not AutoPlay.TerminalReason(Reason),'Mate-in-one position is ongoing');
+    C:=AutoPlay.CreateMoveCommand(Actor,Actor.GameTree,P,'f7g7',Reason);
+    Check(C<>nil,Reason);
+    try Actor.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);AutoPlay.MoveStored(C);finally C.Free;end;
+    Check(AutoPlay.TerminalReason(Reason) and (Reason='checkmate'),'Stored mating move stops Auto Play');
+    Check((Actor.GameTree.Root.AutoPlayPV='f7g7') and (Actor.GameTree.Root.ChildCount=0) and
+      (Actor.GameTree.ResultText='*'),'Mating analysis move preserves the played tree and result');
+
+  finally P.Free;Words.Free;AutoPlay.Free;Actor.Free;V.Free;end;
+end;
+
 procedure CheckRequestsAndSnapshots;
 var Actor, Previous: TGameTreeActor; Coordinator: TAnalysisCoordinator;
   Display: TDisplayedPosition; Board, OtherBoard: TGamePosition;
@@ -216,6 +281,7 @@ var Actor, Other: TGameTreeActor; Coordinator: TAnalysisCoordinator;
   ErrorText, Key, Signature: string; State: TGameTreeSearchState;
 begin
   CheckAutoPlay;
+  CheckChessAutoPlay;
   CheckPvState;
   CheckRequestsAndSnapshots;
   Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;

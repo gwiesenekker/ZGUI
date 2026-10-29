@@ -175,7 +175,8 @@ normal rules-based result. Draughts tournament files remain separate and cannot
 be loaded into the chess tournament dialog.
 
 Chess databases are available through the existing **Database** menu and window;
-see section 9. Auto Play and the MCTS annotator remain disabled.
+see section 9. Chess Auto Play uses the existing annotator and controls (section
+5.5). The MCTS annotator remains disabled for chess.
 
 The numbered sections below are retained reference documentation for the
 inherited draughts features. They do not imply those features are enabled for
@@ -480,15 +481,16 @@ The tree window's context menu can copy the tree as PDN.
 
 ### 5.1 Loading an annotator
 
-Right-click the annotator analysis area and choose a registered Hub engine from
-the **Open Annotator** submenu. Use **Close Annotator** to stop it.
+Right-click the annotator analysis area and choose a registered engine from
+the **Open Annotator** submenu (UCI for chess, Hub for draughts). Use
+**Close Annotator** to stop it.
 
 The annotator analyzes the position currently displayed on the main board,
 including a position selected while browsing. Its score and PV are stored as
 analysis attached to the relevant game-tree node.
 
-Only Hub engines are available as annotators. An annotator engine is reserved
-while loaded and therefore cannot simultaneously be selected for an unrelated
+Only engines compatible with the selected game are offered. An annotator engine
+is reserved while loaded and therefore cannot simultaneously be selected for an unrelated
 game that requires the same engine instance.
 
 ### 5.2 Analysis time
@@ -543,6 +545,21 @@ Play PV, but no later engine reply is appended. If the Auto Play PV is being
 browsed, press `Escape` again to leave variation browsing.
 
 Leave any other PV-browsing mode before starting Auto Play.
+
+For chess, Auto Play checks the existing chess rules before its first move request
+and after each stored move, using the history from the root to the selected node
+(including variations). It stops on checkmate, stalemate, insufficient mating
+material, repetition and the 50/75-move rules. As in engine games, available
+threefold/50-move claims are accepted immediately, including claims by an
+intended legal move. The annotator log shows **Auto Play stopped; reason=…**.
+The played game and its result are unchanged. Live annotator analysis resumes
+when Auto Play stops. Draughts retains its existing behavior: Auto Play stops
+when no legal moves remain or the user stops it; it does not apply draw rules.
+
+Lossless chess PGN export retains Auto Play PVs as typed analysis on their source
+nodes. Ordinary PGN export omits analysis PVs; it does not turn them into played
+variations. Both chess database schemas retain the exported PGN representation;
+only mainline positions are indexed, so Auto Play PVs add no database positions.
 
 ### 5.6 Larger analysis boards
 
@@ -1005,8 +1022,9 @@ provide a separate annotator score.
 
 ### Auto Play is disabled
 
-Stop the selected game and load a Hub annotator. Auto Play is intentionally not
-available for a running game or without an annotator.
+Stop the selected game and load an annotator (UCI for chess, Hub for draughts).
+Auto Play requires the selected game to be in the stopped state; it is unavailable
+while waiting to start, running, completed by a game result, or without an annotator.
 
 ### A tournament will not start all requested games
 
