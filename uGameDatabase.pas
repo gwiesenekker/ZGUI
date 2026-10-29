@@ -5,7 +5,7 @@ unit uGameDatabase;
 interface
 
 uses
-  Classes, SQLite3Conn, SQLDB, SysUtils, uDraughtsBoard, uDraughtsPdn;
+  Classes, SQLite3Conn, SQLDB, SysUtils, uDraughtsBoard, uDraughtsPdn, uGamePosition, uGameTreePdn, uGameFileReader;
 
 type
   TDatabaseGameSortColumn = (dgscId, dgscWhite, dgscBlack, dgscEvent);
@@ -35,9 +35,17 @@ type
 
   TGameDatabase = class
   private
+    FFormat: TGameFileFormat;
+    FVariant: TGameVariant;
+    FWhiteWin, FDraw, FBlackWin: string;
     FConnection: TSQLite3Connection;
     FFileName: string;
     FTransaction: TSQLTransaction;
+    procedure BindPositionKey(AQuery:TSQLQuery;const APositionKey:string);
+    procedure CheckPosition(Position:TGamePosition);
+    function GamesForPositionByKey(const APositionKey:string;ASideToMove:TGameSide;ALimit:Integer;out AProbeCount:Integer):Boolean;
+    procedure LoadGamesForPositionByKey(const APositionKey:string;ASideToMove:TGameSide;AList:TList;ALimit:Integer;out ATotalMatches:Integer);
+    procedure SearchPositionByKey(const APositionKey:string;ASideToMove:TGameSide;AList:TList);
     procedure InitializeDatabase(const AFileName: string);
     procedure PreflightDatabase(const AFileName:string);
     procedure ClearObjectList(AList: TList);
@@ -53,7 +61,7 @@ type
     function TableColumnExists(const ATableName, AColumnName: string): Boolean;
     function Query: TSQLQuery;
   public
-    constructor Create;
+    constructor Create(AFormat:TGameFileFormat = gffPdn);
     destructor Destroy; override;
 
     procedure Close;
@@ -63,6 +71,13 @@ type
       ADuplicates, AErrors: Integer;
       AOnProgress: TDatabaseImportProgressEvent = nil;
       const AImportLogFileName: string = '');
+    procedure ImportFile(const AFileName:string;out AImported,ADuplicates,AErrors:Integer;
+      AOnProgress:TDatabaseImportProgressEvent=nil;const AImportLogFileName:string='');
+    // Caller owns the entry; keep this database alive during validation/import.
+    function LoadFileGameById(AGameId:Integer):TGameFileEntry;
+    function GamesForPositionExceedLimit(Position:TGamePosition;Limit:Integer;out Count:Integer):Boolean; overload;
+    procedure LoadGamesForPosition(Position:TGamePosition;List:TList;Limit:Integer;out Count:Integer); overload;
+    procedure SearchPosition(Position:TGamePosition;List:TList); overload;
     procedure LoadGames(AList: TList; ALimit: Integer;
       const AWhiteFilter, ABlackFilter, AEventFilter, APlayerFilter: string;
       ASortColumn: TDatabaseGameSortColumn; ASortDescending: Boolean;
@@ -70,20 +85,22 @@ type
     procedure LoadGames(AList: TList);
     function LoadGameById(AGameId: Integer): TPdnGame;
     function GamesForPositionExceedLimit(const APositionKey: string;
-      ASideToMove: TDraughtsSide; ALimit: Integer; out AProbeCount: Integer): Boolean;
+      ASideToMove: TDraughtsSide; ALimit: Integer; out AProbeCount: Integer): Boolean; overload;
     procedure LoadGamesForPosition(const APositionKey: string;
       ASideToMove: TDraughtsSide; AList: TList; ALimit: Integer;
-      out ATotalMatches: Integer);
+      out ATotalMatches: Integer); overload;
     procedure RebuildContinuationSummary;
     procedure SearchPosition(const APositionKey: string; ASideToMove: TDraughtsSide;
-      AList: TList);
+      AList: TList); overload;
 
+    property FileFormat:TGameFileFormat read FFormat;
     property FileName: string read FFileName;
   end;
 
 implementation
 
-uses SQLite3Dyn, ctypes, UnicodeData, ZStream, Base64;
+uses SQLite3Dyn, ctypes, UnicodeData, ZStream, Base64, DB, uChessPosition,
+  uChessPgn, uChessPgnLexer, uGameFileMetadata, uDraughtsPosition;
 
 function PackStoredPdn(const Text: string): string;
 var Buffer: TStringStream; Compressor: TCompressionStream;
@@ -147,6 +164,9 @@ type
     FGame: TPdnGame;
     FGameId: Integer;
     FFullPdn: string;
+    FWhite,FBlack,FEvent,FResult,FStartingFen,FAnnotations:string;
+    FDate,FEco:string;FWhiteElo,FBlackElo:Integer;
+    FKeys:TStringList;FStartingSide:TGameSide;
     FGameInsertQuery: TSQLQuery;
     FHashQuery: TSQLQuery;
     FIdQuery: TSQLQuery;
@@ -158,6 +178,9 @@ type
     FMoves: TStringList;
     FOnProgress: TDatabaseImportProgressEvent;
     FPositionInsertQuery: TSQLQuery;
+    procedure StoreGame(const Hash:THash128);
+    procedure ImportPgnGame(const Text,ErrorText:string;BytesRead,TotalBytes:Int64;var Cancel:Boolean);
+    procedure ScanProgress(BytesRead,TotalBytes:Int64;var Cancel:Boolean);
     procedure CanonicalizeMovesForImport;
     procedure CommitBatchIfNeeded;
     function GameHash: THash128;
@@ -190,6 +213,8 @@ begin
     Result := 'W';
 end;
 
+function GameSideToText(Side:TGameSide):string;
+begin if Side=gsBlack then Result:='B' else Result:='W';end;
 function MoveCountText(const AMovesText: string): Integer;
 var
   LMoves: TStringList;
@@ -380,11 +405,12 @@ begin
   Result := IntToHex(HashHi, 16) + IntToHex(HashLo, 16);
 end;
 
-procedure BindPositionKey(AQuery: TSQLQuery; const APositionKey: string);
+procedure TGameDatabase.BindPositionKey(AQuery: TSQLQuery; const APositionKey: string);
 var
   PositionKey: THash128;
 begin
-  PositionKey := PackedPositionKey128Value(APositionKey);
+  if FFormat=gffPgn then PositionKey:=Fnv1a128Value('chess-position-key-v1'#10+APositionKey)
+  else PositionKey := PackedPositionKey128Value(APositionKey);
   AQuery.ParamByName('position_key_lo').AsLargeInt := PositionKey.Lo;
   AQuery.ParamByName('position_key_hi').AsLargeInt := PositionKey.Hi;
 end;
@@ -403,14 +429,20 @@ begin
     FLogOpen := True;
   end;
   FBoard := TDraughtsBoard.Create;
-  FMoves := TStringList.Create;
+  FMoves := TStringList.Create; FKeys:=TStringList.Create;
   FGameInsertQuery := FDatabase.Query;
   FGameInsertQuery.SQL.Text :=
     'insert into games(game_hash_lo, game_hash_hi, white, black, event, result, starting_fen, moves_text, annotations_text, full_pdn, ply_count, hash_version) ' +
     'values(:game_hash_lo, :game_hash_hi, :white, :black, :event, :result, :starting_fen, :moves_text, :annotations_text,  :full_pdn, :ply_count, 6)';
+  if FDatabase.FFormat=gffPgn then
+    FGameInsertQuery.SQL.Text:=
+      'insert into games(game_hash_lo,game_hash_hi,white,black,event,result,starting_fen,moves_text,annotations_text,full_pdn,ply_count,hash_version,date,eco,white_elo,black_elo) '+
+      'values(:game_hash_lo,:game_hash_hi,:white,:black,:event,:result,:starting_fen,:moves_text,:annotations_text,:full_pdn,:ply_count,7,:date,:eco,:white_elo,:black_elo)';
   FHashQuery := FDatabase.Query;
   FHashQuery.SQL.Text :=
     'select id from games where game_hash_lo = :game_hash_lo and game_hash_hi = :game_hash_hi limit 1';
+  if FDatabase.FFormat=gffPgn then FHashQuery.SQL.Text:=
+    'select id, full_pdn from games where game_hash_lo = :game_hash_lo and game_hash_hi = :game_hash_hi limit 1';
   FPositionInsertQuery := FDatabase.Query;
   FPositionInsertQuery.SQL.Text :=
     'insert into positions(game_id, ply, position_key_lo, position_key_hi, side_to_move, next_move, result) ' +
@@ -433,7 +465,7 @@ begin
   FPositionInsertQuery.Free;
   FHashQuery.Free;
   FGameInsertQuery.Free;
-  FMoves.Free;
+  FKeys.Free;FMoves.Free;
   FBoard.Free;
   inherited Destroy;
 end;
@@ -450,6 +482,10 @@ procedure TDatabasePdnImporter.LogDuplicate(const AGameHash: THash128);
 var
   LPlyCount: Integer;
 begin
+  if FDatabase.FFormat=gffPgn then begin
+    LogLine('duplicate'+#9+'hash='+Hash128ToHex(AGameHash)+#9+'event='+LogField(FEvent)+#9+'white='+LogField(FWhite)+#9+'black='+LogField(FBlack));
+    if FLogOpen then WriteLn(FLogFile,FFullPdn);Exit;
+  end;
   LPlyCount := MoveCountText(FGame.MovesText);
   if (LPlyCount = 0) and (FMoves <> nil) then
     LPlyCount := FMoves.Count;
@@ -475,7 +511,8 @@ begin
   if FLogOpen then
   begin
     Writeln(FLogFile, '----- PDN -----');
-    Writeln(FLogFile, PdnGameToText(FGame));
+    if FDatabase.FFormat=gffPgn then WriteLn(FLogFile,FFullPdn)
+    else Writeln(FLogFile, PdnGameToText(FGame));
     Writeln(FLogFile, '---------------');
   end;
 end;
@@ -515,7 +552,9 @@ function TDatabasePdnImporter.GameHash: THash128;
 var
   LHashText: string;
 begin
-  LHashText := 'gwdgui-db-v6-complete-game' + #10 + FFullPdn;
+  if FDatabase.FFormat=gffPgn then
+    LHashText:='zgui-db-v7-chess-complete-game-token-v1'#10+FFullPdn
+  else LHashText := 'gwdgui-db-v6-complete-game' + #10 + FFullPdn;
   Result := Fnv1a128Value(LHashText);
 end;
 
@@ -527,6 +566,9 @@ begin
   FHashQuery.Open;
   try
     Result := not FHashQuery.EOF;
+    if Result and (FDatabase.FFormat=gffPgn) and
+      (UnpackStoredPdn(FHashQuery.FieldByName('full_pdn').AsUTF8String)<>FFullPdn) then
+      raise EConvertError.Create('Complete PGN game hash conflict');
   finally
     FHashQuery.Close;
   end;
@@ -598,15 +640,23 @@ var
   PositionKey: THash128;
   SideText: string;
 begin
-  PositionKey := PackedPositionKey128Value(FBoard.PositionKey);
-  SideText := SideToText(FBoard.SideToMove);
+  if FDatabase.FFormat=gffPgn then begin
+    PositionKey:=Fnv1a128Value('chess-position-key-v1'#10+FKeys[APly]);
+    if (FStartingSide=gsWhite)=(APly mod 2=0) then SideText:='W' else SideText:='B';
+  end else begin
+    PositionKey := PackedPositionKey128Value(FBoard.PositionKey);
+    SideText := SideToText(FBoard.SideToMove);
+  end;
   FPositionInsertQuery.ParamByName('game_id').AsInteger := FGameId;
   FPositionInsertQuery.ParamByName('ply').AsInteger := APly;
   FPositionInsertQuery.ParamByName('position_key_lo').AsLargeInt := PositionKey.Lo;
   FPositionInsertQuery.ParamByName('position_key_hi').AsLargeInt := PositionKey.Hi;
   FPositionInsertQuery.ParamByName('side_to_move').AsUTF8String := SideText;
   FPositionInsertQuery.ParamByName('next_move').AsUTF8String := ANextMove;
-  FPositionInsertQuery.ParamByName('result').AsUTF8String := FGame.ResultText;
+  FPositionInsertQuery.ParamByName('result').AsUTF8String := FResult;
+  // SQLDB's implicit ExecSQL preparation is released after each execution.
+  // Explicit preparation reuses this same statement until a batch commit.
+  if FDatabase.FFormat=gffPgn then FPositionInsertQuery.Prepare;
   FPositionInsertQuery.ExecSQL;
 end;
 
@@ -627,7 +677,6 @@ procedure TDatabasePdnImporter.ImportGame(AGame: TPdnGame; ABytesRead,
   ATotalBytes: Int64; var AStop: Boolean);
 var
   LGameHash: THash128;
-  Points: Integer;
   InitialWarnings, NewWarnings: string;
 begin
   FGame := AGame;
@@ -664,6 +713,8 @@ begin
     NewWarnings := Trim(Copy(FGame.ImportWarningsText, Length(InitialWarnings) + 1, MaxInt));
     if NewWarnings <> '' then
       LogLine('warning' + #9 + 'event=' + LogField(FGame.EventName) + #9 + LogField(NewWarnings));
+    FWhite:=FGame.WhiteName;FBlack:=FGame.BlackName;FEvent:=FGame.EventName;
+    FResult:=FGame.ResultText;FStartingFen:=FGame.StartingFEN;FAnnotations:=FGame.MoveAnnotationsText;
     LGameHash := GameHash;
     if IsDuplicateGame(LGameHash) or IsLegacyDuplicate then
     begin
@@ -675,32 +726,7 @@ begin
 
     FBoard.LoadFromFEN(FGame.StartingFEN);
 
-    FGameInsertQuery.ParamByName('game_hash_lo').AsLargeInt := LGameHash.Lo;
-    FGameInsertQuery.ParamByName('game_hash_hi').AsLargeInt := LGameHash.Hi;
-    FGameInsertQuery.ParamByName('white').AsUTF8String := FGame.WhiteName;
-    FGameInsertQuery.ParamByName('black').AsUTF8String := FGame.BlackName;
-    FGameInsertQuery.ParamByName('event').AsUTF8String := FGame.EventName;
-    FGameInsertQuery.ParamByName('result').AsUTF8String := FGame.ResultText;
-    FGameInsertQuery.ParamByName('starting_fen').AsUTF8String := FGame.StartingFEN;
-    FGameInsertQuery.ParamByName('moves_text').AsUTF8String := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
-    FGameInsertQuery.ParamByName('annotations_text').AsUTF8String := FGame.MoveAnnotationsText;
-    FGameInsertQuery.ParamByName('full_pdn').AsUTF8String := PackStoredPdn(FFullPdn);
-    FGameInsertQuery.ParamByName('ply_count').AsInteger := FMoves.Count;
-    FGameInsertQuery.ExecSQL;
-
-    FIdQuery.Open;
-    FGameId := FIdQuery.FieldByName('id').AsInteger;
-    FIdQuery.Close;
-
-    for Points := 0 to FMoves.Count do
-    begin
-      if Points < FMoves.Count then
-        InsertPosition(Points, FMoves[Points])
-      else
-        InsertPosition(Points, '');
-      if Points < FMoves.Count then
-        FBoard.PlayMove(FMoves[Points], False, False, False);
-    end;
+    StoreGame(LGameHash);
     Inc(FImported);
     CommitBatchIfNeeded;
   except
@@ -714,16 +740,123 @@ begin
   ReportProgress(ABytesRead, ATotalBytes, AStop);
 end;
 
+procedure TDatabasePdnImporter.StoreGame(const Hash:THash128);
+var Points:Integer;
+  procedure BindText(const Name,Value:string);
+  begin
+    FGameInsertQuery.ParamByName(Name).DataType:=ftString;
+    if Value='' then FGameInsertQuery.ParamByName(Name).Clear
+    else FGameInsertQuery.ParamByName(Name).AsUTF8String:=Value;
+  end;
+  procedure BindElo(const Name:string;Value:Integer);
+  begin
+    FGameInsertQuery.ParamByName(Name).DataType:=ftInteger;
+    if Value<0 then FGameInsertQuery.ParamByName(Name).Clear
+    else FGameInsertQuery.ParamByName(Name).AsInteger:=Value;
+  end;
+begin
+    FGameInsertQuery.ParamByName('game_hash_lo').AsLargeInt := Hash.Lo;
+    FGameInsertQuery.ParamByName('game_hash_hi').AsLargeInt := Hash.Hi;
+    FGameInsertQuery.ParamByName('white').AsUTF8String := FWhite;
+    FGameInsertQuery.ParamByName('black').AsUTF8String := FBlack;
+    FGameInsertQuery.ParamByName('event').AsUTF8String := FEvent;
+    FGameInsertQuery.ParamByName('result').AsUTF8String := FResult;
+    FGameInsertQuery.ParamByName('starting_fen').AsUTF8String := FStartingFen;
+    FGameInsertQuery.ParamByName('moves_text').AsUTF8String := Trim(StringReplace(FMoves.Text, LineEnding, ' ', [rfReplaceAll]));
+    FGameInsertQuery.ParamByName('annotations_text').AsUTF8String := FAnnotations;
+    FGameInsertQuery.ParamByName('full_pdn').AsUTF8String := PackStoredPdn(FFullPdn);
+    FGameInsertQuery.ParamByName('ply_count').AsInteger := FMoves.Count;
+    if FDatabase.FFormat=gffPgn then begin
+      BindText('date',FDate);BindText('eco',FEco);
+      BindElo('white_elo',FWhiteElo);BindElo('black_elo',FBlackElo);
+    end;
+    FGameInsertQuery.ExecSQL;
+
+    FIdQuery.Open;
+    FGameId := FIdQuery.FieldByName('id').AsInteger;
+    FIdQuery.Close;
+
+    for Points := 0 to FMoves.Count do
+    begin
+      if Points < FMoves.Count then
+        InsertPosition(Points, FMoves[Points])
+      else
+        InsertPosition(Points, '');
+      if (FDatabase.FFormat=gffPdn) and (Points < FMoves.Count) then
+        FBoard.PlayMove(FMoves[Points], False, False, False);
+    end;
+end;
+
+procedure TDatabasePdnImporter.ScanProgress(BytesRead,TotalBytes:Int64;var Cancel:Boolean);
+begin ReportProgress(BytesRead,TotalBytes,Cancel);end;
+
+function DatabaseDate(const Text:string):string;
+var I,N:Integer;
+begin
+  Result:='';if (Length(Text)<>10) or (Text[5]<>'.') or (Text[8]<>'.') then Exit;
+  for I:=1 to 10 do if not (I in [5,8]) and not (Text[I] in ['0'..'9','?']) then Exit;
+  if TryStrToInt(Copy(Text,6,2),N) and ((N<1) or (N>12)) then Exit;
+  if TryStrToInt(Copy(Text,9,2),N) and ((N<1) or (N>31)) then Exit;
+  Result:=Text;
+end;
+function DatabaseElo(const Text:string):Integer;
+var C:Char;
+begin
+ Result:=-1;if Text='' then Exit;
+ for C in Text do if not (C in ['0'..'9']) then Exit;
+ if not TryStrToInt(Text,Result) or (Result<0) then Result:=-1;
+end;
+procedure TDatabasePdnImporter.ImportPgnGame(const Text,ErrorText:string;
+  BytesRead,TotalBytes:Int64;var Cancel:Boolean);
+var G:TChessPgnDatabaseGame;W:TStringList;Hash:THash128;I:Integer;Duplicate:Boolean;
+begin
+ FFullPdn:=Text;
+ if ErrorText<>'' then begin Inc(FErrors);LogError(ErrorText);ReportProgress(BytesRead,TotalBytes,Cancel);Exit;end;
+ G:=nil;W:=TStringList.Create;
+ try
+  try G:=ReadChessPgnDatabaseGame(Text,FDatabase.FVariant,W);
+  except on E:EPgnSyntaxError do begin Inc(FErrors);LogError(E.Message);ReportProgress(BytesRead,TotalBytes,Cancel);Exit;end;end;
+  for I:=0 to W.Count-1 do LogLine('warning'+#9+LogField(W[I]));
+  FWhite:=GameFileTagValue(G.Tags,'White','?');FBlack:=GameFileTagValue(G.Tags,'Black','?');
+  FEvent:=GameFileTagValue(G.Tags,'Event','?');FResult:=G.ResultText;FStartingFen:=G.StartingFEN;
+  FAnnotations:='';FFullPdn:=G.CompletePgn;FMoves.Assign(G.Moves);FKeys.Assign(G.PositionKeys);
+  FStartingSide:=FDatabase.FVariant.SideFromFEN(G.StartingFEN);
+  FDate:=DatabaseDate(GameFileTagValue(G.Tags,'Date',GameFileTagValue(G.Tags,'UTCDate','')));
+  FEco:=GameFileTagValue(G.Tags,'ECO','');
+  if (Length(FEco)<>3) or not (FEco[1] in ['A'..'E']) or not (FEco[2] in ['0'..'9']) or not (FEco[3] in ['0'..'9']) then FEco:='';
+  FWhiteElo:=DatabaseElo(GameFileTagValue(G.Tags,'WhiteElo',''));FBlackElo:=DatabaseElo(GameFileTagValue(G.Tags,'BlackElo',''));
+  Hash:=GameHash;
+  try Duplicate:=IsDuplicateGame(Hash);
+  except on E:EConvertError do begin Inc(FErrors);LogError(E.Message);ReportProgress(BytesRead,TotalBytes,Cancel);Exit;end;end;
+  if Duplicate then begin Inc(FDuplicates);LogDuplicate(Hash);end
+  else begin StoreGame(Hash);Inc(FImported);CommitBatchIfNeeded;end;
+  ReportProgress(BytesRead,TotalBytes,Cancel);
+ finally G.Free;W.Free;end;
+end;
+
 procedure TDatabasePdnImporter.Run(const AFileName: string);
+var Reader:TChessPgnReader;
 begin
   FLastProgressTick := 0;
   LogLine('started' + #9 + 'file=' + LogField(AFileName));
-  ReadPdnGamesFromFile(AFileName, @ImportGame);
+  try
+    if FDatabase.FFormat=gffPgn then begin
+      Reader:=TChessPgnReader.Create(FDatabase.FVariant);
+      try Reader.ScanFile(AFileName,@ImportPgnGame,@ScanProgress);finally Reader.Free;end;
+    end else ReadPdnGamesFromFile(AFileName, @ImportGame);
+  finally
+    // Release the retained insert before summary/index DDL or recovery.
+    if FDatabase.FFormat=gffPgn then FPositionInsertQuery.UnPrepare;
+  end;
 end;
 
-constructor TGameDatabase.Create;
+constructor TGameDatabase.Create(AFormat:TGameFileFormat);
 begin
   inherited Create;
+  FFormat:=AFormat;
+  if FFormat=gffPgn then begin
+    FVariant:=TChessVariant.Create;FWhiteWin:='1-0';FDraw:='1/2-1/2';FBlackWin:='0-1';
+  end else begin FWhiteWin:='2-0';FDraw:='1-1';FBlackWin:='0-2';end;
   FConnection := TSQLite3Connection.Create(nil);
   FTransaction := TSQLTransaction.Create(nil);
   FConnection.Transaction := FTransaction;
@@ -733,7 +866,7 @@ destructor TGameDatabase.Destroy;
 begin
   Close;
   FTransaction.Free;
-  FConnection.Free;
+  FConnection.Free;FVariant.Free;
   inherited Destroy;
 end;
 
@@ -874,7 +1007,8 @@ end;
 procedure TGameDatabase.SetBulkImportPragmas;
 begin
   CommitActiveTransaction;
-  FConnection.ExecuteDirect('pragma temp_store=memory');
+  if FFormat=gffPgn then FConnection.ExecuteDirect('pragma temp_store=file')
+  else FConnection.ExecuteDirect('pragma temp_store=memory');
   FConnection.ExecuteDirect('pragma cache_size=-200000');
   CommitActiveTransaction;
 end;
@@ -917,7 +1051,7 @@ begin
     Q.SQL.Text := 'pragma user_version';
     Q.Open;
     SchemaVersion := Q.Fields[0].AsInteger;
-    if SchemaVersion > 6 then
+    if ((FFormat=gffPdn) and (SchemaVersion>6)) or (SchemaVersion>7) then
       raise EInvalidOperation.Create('This database was created by a newer GWDGUI version');
     Q.Close;
     Q.SQL.Text :=
@@ -934,9 +1068,19 @@ begin
       ExecuteSql('alter table games add column full_pdn text');
     if not TableColumnExists('games', 'hash_version') then
       ExecuteSql('alter table games add column hash_version integer not null default 0');
-    if SchemaVersion < 6 then ExecuteSql('drop index if exists games_legacy_candidates');
-    ExecuteSql('create index if not exists games_legacy_candidates on games(white, black, event, result, ply_count) where hash_version < 6');
-    ExecuteSql('pragma user_version=6');
+    if FFormat=gffPdn then begin
+      if SchemaVersion < 6 then ExecuteSql('drop index if exists games_legacy_candidates');
+      ExecuteSql('create index if not exists games_legacy_candidates on games(white, black, event, result, ply_count) where hash_version < 6');
+      ExecuteSql('pragma user_version=6');
+    end else begin
+      if SchemaVersion=0 then begin
+        ExecuteSql('alter table games add column date text');ExecuteSql('alter table games add column eco text');
+        ExecuteSql('alter table games add column white_elo integer');ExecuteSql('alter table games add column black_elo integer');
+        ExecuteSql('create table database_metadata (name text primary key,value text not null)');
+        ExecuteSql('insert into database_metadata values(''game_variant'',''chess''),(''notation_format'',''pgn''),(''position_key_format'',''chess-position-key-v1-fnv128''),(''game_identity_format'',''complete-lossless-pgn-token-v1'')');
+      end;
+      ExecuteSql('pragma user_version=7');
+    end;
     Q.SQL.Text :=
       'create table if not exists positions (' +
       'id integer primary key autoincrement,' +
@@ -976,13 +1120,23 @@ var C:TSQLite3Connection;T:TSQLTransaction;Q:TSQLQuery;Stream:TFileStream;
    while not Q.EOF do begin Found.Add(Q.FieldByName('name').AsString);Q.Next;end;
    Q.Close;
    for I:=0 to High(Names) do if Found.IndexOf(Names[I])<0 then
-    raise EInvalidOperation.Create('Not a supported draughts database: missing '+TableName+'.'+Names[I]);
+    raise EInvalidOperation.Create('Unsupported database: missing '+TableName+'.'+Names[I]);
   finally Found.Free;end;
+ end;
+ procedure RequireMetadata(const Name,Value:string);
+ begin
+   Q.Close;Q.SQL.Text:='select value from database_metadata where name=:name';
+   Q.ParamByName('name').AsString:=Name;Q.Open;
+   if Q.EOF or (Q.Fields[0].AsString<>Value) then raise EInvalidOperation.Create('Unsupported chess database metadata: '+Name);
+   Q.Close;
  end;
 begin
  // Inspect before closing the current database or running any schema upgrades.
  Stream:=TFileStream.Create(AFileName,fmOpenRead or fmShareDenyNone);
- try if Stream.Size=0 then Exit;finally Stream.Free;end;
+ try if Stream.Size=0 then begin
+   if FFormat=gffPgn then raise EInvalidOperation.Create('Empty file is not a chess database; use Create database');
+   Exit;
+ end;finally Stream.Free;end;
  C:=TSQLite3Connection.Create(nil);T:=TSQLTransaction.Create(nil);Q:=TSQLQuery.Create(nil);
  try
   // Allow SQLite to recover a hot rollback journal before inspecting the schema.
@@ -990,11 +1144,19 @@ begin
   C.DatabaseName:=AFileName;C.Transaction:=T;
   Q.DataBase:=C;Q.Transaction:=T;C.Connected:=True;T.StartTransaction;
   Q.SQL.Text:='pragma user_version';Q.Open;Version:=Q.Fields[0].AsInteger;Q.Close;
-  if Version>6 then raise EInvalidOperation.Create('Unsupported database schema version');
+  if ((FFormat=gffPdn) and (Version>6)) or ((FFormat=gffPgn) and (Version<>7)) then
+    raise EInvalidOperation.Create('Unsupported database variant or schema version');
   RequireColumns('games',['game_hash_lo','game_hash_hi','white','black','event','result',
    'starting_fen','moves_text','annotations_text','ply_count']);
   RequireColumns('positions',['game_id','ply','position_key_lo','position_key_hi',
    'side_to_move','next_move','result']);
+  if FFormat=gffPgn then begin
+    RequireColumns('games',['full_pdn','hash_version','date','eco','white_elo','black_elo']);
+    RequireColumns('database_metadata',['name','value']);
+    RequireMetadata('game_variant','chess');RequireMetadata('notation_format','pgn');
+    RequireMetadata('position_key_format','chess-position-key-v1-fnv128');
+    RequireMetadata('game_identity_format','complete-lossless-pgn-token-v1');
+  end;
  finally
   Q.Free;if T.Active then T.Rollback;C.Close;T.Free;C.Free;
  end;
@@ -1008,7 +1170,13 @@ begin
   InitializeDatabase(AFileName);
 end;
 
-procedure TGameDatabase.ImportPdnFile(const AFileName: string; out AImported,
+procedure TGameDatabase.ImportPdnFile(const AFileName:string;out AImported,ADuplicates,AErrors:Integer;
+  AOnProgress:TDatabaseImportProgressEvent;const AImportLogFileName:string);
+begin
+  if FFormat<>gffPdn then raise EInvalidOperation.Create('Use ImportFile for chess PGN');
+  ImportFile(AFileName,AImported,ADuplicates,AErrors,AOnProgress,AImportLogFileName);
+end;
+procedure TGameDatabase.ImportFile(const AFileName: string; out AImported,
   ADuplicates, AErrors: Integer; AOnProgress: TDatabaseImportProgressEvent;
   const AImportLogFileName: string);
 var
@@ -1030,9 +1198,19 @@ begin
       // Commit invalidation before any import rows can become durable (including
       // progress callbacks which may query and commit the active transaction).
       ExecuteSql('update database_state set summary_dirty=1 where id=1');
-      // Keep search and game-position indexes available throughout the import.
+      // Draughts retains its search/game indexes throughout the import.
+      // Chess uses the reviewed bulk policy below, retaining the unique hash.
       CommitActiveTransaction;
       StartTransactionIfNeeded;
+      if FFormat=gffPgn then begin
+        // Reviewed bulk-import policy: keep uniqueness and dirty-state recovery,
+        // rebuild secondary indexes through the existing success/error shell.
+        ExecuteSql('drop index if exists idx_positions_search');
+        ExecuteSql('drop index if exists idx_positions_game');
+        ExecuteSql('drop index if exists idx_games_white');
+        ExecuteSql('drop index if exists idx_games_black');
+        ExecuteSql('drop index if exists idx_games_event');
+      end;
       Importer.Run(AFileName);
       CommitActiveTransaction;
       StartTransactionIfNeeded;
@@ -1075,9 +1253,9 @@ begin
     ExecuteSql(
       'insert into continuations(position_key_lo, position_key_hi, side_to_move, next_move, game_count, white_wins, draws, black_wins) ' +
       'select position_key_lo, position_key_hi, side_to_move, next_move, count(*) as game_count, ' +
-      'sum(case when result = ''2-0'' then 1 else 0 end) as white_wins, ' +
-      'sum(case when result = ''1-1'' then 1 else 0 end) as draws, ' +
-      'sum(case when result = ''0-2'' then 1 else 0 end) as black_wins ' +
+      'sum(case when result = '+QuotedStr(FWhiteWin)+' then 1 else 0 end) as white_wins, ' +
+      'sum(case when result = '+QuotedStr(FDraw)+' then 1 else 0 end) as draws, ' +
+      'sum(case when result = '+QuotedStr(FBlackWin)+' then 1 else 0 end) as black_wins ' +
       'from positions ' +
       'where coalesce(next_move, '''') <> '''' ' +
       'group by position_key_lo, position_key_hi, side_to_move, next_move');
@@ -1212,6 +1390,7 @@ var
   Games: TList;
   I: Integer;
 begin
+  if FFormat<>gffPdn then raise EInvalidOperation.Create('Use LoadFileGameById for chess');
   if not FConnection.Connected then
     raise EInvalidOperation.Create('No database is open');
 
@@ -1256,8 +1435,8 @@ begin
   end;
 end;
 
-function TGameDatabase.GamesForPositionExceedLimit(const APositionKey: string;
-  ASideToMove: TDraughtsSide; ALimit: Integer; out AProbeCount: Integer): Boolean;
+function TGameDatabase.GamesForPositionByKey(const APositionKey: string;
+  ASideToMove: TGameSide; ALimit: Integer; out AProbeCount: Integer): Boolean;
 var
   Q: TSQLQuery;
 begin
@@ -1276,7 +1455,7 @@ begin
       'and p.side_to_move = :side_to_move ' +
       'group by p.game_id limit ' + IntToStr(ALimit + 1);
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := GameSideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
@@ -1291,8 +1470,8 @@ begin
   end;
 end;
 
-procedure TGameDatabase.LoadGamesForPosition(const APositionKey: string;
-  ASideToMove: TDraughtsSide; AList: TList; ALimit: Integer;
+procedure TGameDatabase.LoadGamesForPositionByKey(const APositionKey: string;
+  ASideToMove: TGameSide; AList: TList; ALimit: Integer;
   out ATotalMatches: Integer);
 var
   Info: TDatabaseGameInfo;
@@ -1312,7 +1491,7 @@ begin
       'and p.side_to_move = :side_to_move ' +
       'group by p.game_id)';
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := GameSideToText(ASideToMove);
     Q.Open;
     ATotalMatches := Q.FieldByName('game_count').AsInteger;
     Q.Close;
@@ -1328,7 +1507,7 @@ begin
     if ALimit > 0 then
       Q.SQL.Text := Q.SQL.Text + ' limit ' + IntToStr(ALimit);
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := GameSideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
@@ -1350,8 +1529,8 @@ begin
   end;
 end;
 
-procedure TGameDatabase.SearchPosition(const APositionKey: string;
-  ASideToMove: TDraughtsSide; AList: TList);
+procedure TGameDatabase.SearchPositionByKey(const APositionKey: string;
+  ASideToMove: TGameSide; AList: TList);
 var
   ResultItem: TDatabaseSearchResult;
   Q: TSQLQuery;
@@ -1366,7 +1545,7 @@ begin
   try
     if UseSummary then
     begin
-      if ASideToMove = dsBlack then
+      if ASideToMove = gsBlack then
         Q.SQL.Text :=
           'select c.next_move, c.game_count, c.black_wins as wins, c.draws, c.white_wins as losses ' +
           'from continuations c ' +
@@ -1380,14 +1559,14 @@ begin
           'where c.position_key_lo = :position_key_lo and c.position_key_hi = :position_key_hi ' +
           'and c.side_to_move = :side_to_move ' +
           'order by c.game_count desc, wins desc, c.next_move';
-      Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
+      Q.ParamByName('side_to_move').AsUTF8String := GameSideToText(ASideToMove);
     end
-    else if ASideToMove = dsBlack then
+    else if ASideToMove = gsBlack then
       Q.SQL.Text :=
         'select p.next_move, count(*) as game_count, ' +
-        'sum(case when p.result = ''0-2'' then 1 else 0 end) as wins, ' +
-        'sum(case when p.result = ''1-1'' then 1 else 0 end) as draws, ' +
-        'sum(case when p.result = ''2-0'' then 1 else 0 end) as losses ' +
+        'sum(case when p.result = '+QuotedStr(FBlackWin)+' then 1 else 0 end) as wins, ' +
+        'sum(case when p.result = '+QuotedStr(FDraw)+' then 1 else 0 end) as draws, ' +
+        'sum(case when p.result = '+QuotedStr(FWhiteWin)+' then 1 else 0 end) as losses ' +
         'from positions p ' +
         'where p.position_key_lo = :position_key_lo and p.position_key_hi = :position_key_hi ' +
         'and p.side_to_move = :side_to_move ' +
@@ -1397,9 +1576,9 @@ begin
     else
       Q.SQL.Text :=
         'select p.next_move, count(*) as game_count, ' +
-        'sum(case when p.result = ''2-0'' then 1 else 0 end) as wins, ' +
-        'sum(case when p.result = ''1-1'' then 1 else 0 end) as draws, ' +
-        'sum(case when p.result = ''0-2'' then 1 else 0 end) as losses ' +
+        'sum(case when p.result = '+QuotedStr(FWhiteWin)+' then 1 else 0 end) as wins, ' +
+        'sum(case when p.result = '+QuotedStr(FDraw)+' then 1 else 0 end) as draws, ' +
+        'sum(case when p.result = '+QuotedStr(FBlackWin)+' then 1 else 0 end) as losses ' +
         'from positions p ' +
         'where p.position_key_lo = :position_key_lo and p.position_key_hi = :position_key_hi ' +
         'and p.side_to_move = :side_to_move ' +
@@ -1407,7 +1586,7 @@ begin
         'group by p.next_move ' +
         'order by game_count desc, wins desc, p.next_move';
     BindPositionKey(Q, APositionKey);
-    Q.ParamByName('side_to_move').AsUTF8String := SideToText(ASideToMove);
+    Q.ParamByName('side_to_move').AsUTF8String := GameSideToText(ASideToMove);
     Q.Open;
     while not Q.EOF do
     begin
@@ -1425,6 +1604,45 @@ begin
     Q.Free;
     CommitActiveTransaction;
   end;
+end;
+
+
+procedure TGameDatabase.CheckPosition(Position:TGamePosition);
+begin
+ if (Position=nil) or ((FFormat=gffPgn)<>(Position is TChessPosition)) or
+   ((FFormat=gffPdn) and not (Position is TDraughtsPosition)) then
+   raise EInvalidOperation.Create('Position does not match database variant');
+end;
+function TGameDatabase.GamesForPositionExceedLimit(Position:TGamePosition;Limit:Integer;out Count:Integer):Boolean;
+begin CheckPosition(Position);Result:=GamesForPositionByKey(Position.PositionKey,Position.SideToMove,Limit,Count);end;
+procedure TGameDatabase.LoadGamesForPosition(Position:TGamePosition;List:TList;Limit:Integer;out Count:Integer);
+begin CheckPosition(Position);LoadGamesForPositionByKey(Position.PositionKey,Position.SideToMove,List,Limit,Count);end;
+procedure TGameDatabase.SearchPosition(Position:TGamePosition;List:TList);
+begin CheckPosition(Position);SearchPositionByKey(Position.PositionKey,Position.SideToMove,List);end;
+function DraughtsGameSide(Side:TDraughtsSide):TGameSide;
+begin if Side=dsBlack then Result:=gsBlack else Result:=gsWhite;end;
+function TGameDatabase.GamesForPositionExceedLimit(const APositionKey:string;ASideToMove:TDraughtsSide;ALimit:Integer;out AProbeCount:Integer):Boolean;
+begin Result:=GamesForPositionByKey(APositionKey,DraughtsGameSide(ASideToMove),ALimit,AProbeCount);end;
+procedure TGameDatabase.LoadGamesForPosition(const APositionKey:string;ASideToMove:TDraughtsSide;AList:TList;ALimit:Integer;out ATotalMatches:Integer);
+begin LoadGamesForPositionByKey(APositionKey,DraughtsGameSide(ASideToMove),AList,ALimit,ATotalMatches);end;
+procedure TGameDatabase.SearchPosition(const APositionKey:string;ASideToMove:TDraughtsSide;AList:TList);
+begin SearchPositionByKey(APositionKey,DraughtsGameSide(ASideToMove),AList);end;
+function TGameDatabase.LoadFileGameById(AGameId:Integer):TGameFileEntry;
+var Q:TSQLQuery;Text:string;
+begin
+ if FFormat<>gffPgn then raise EInvalidOperation.Create('Use LoadGameById for draughts');
+ if not FConnection.Connected then raise EInvalidOperation.Create('No database is open');
+ Q:=Query;
+ try
+  Q.SQL.Text:='select full_pdn,white,black,event,result from games where id=:id';
+  Q.ParamByName('id').AsInteger:=AGameId;Q.Open;
+  if Q.EOF then raise EInvalidOperation.Create('Game not found');
+  Text:=UnpackStoredPdn(Q.FieldByName('full_pdn').AsUTF8String);
+  if Text='' then raise EConvertError.Create('Stored chess game is missing full PGN');
+  Result:=ChessPgnEntryFromText(Text,FVariant);
+  Result.WhiteName:=Q.FieldByName('white').AsUTF8String;Result.BlackName:=Q.FieldByName('black').AsUTF8String;
+  Result.EventName:=Q.FieldByName('event').AsUTF8String;Result.ResultText:=Q.FieldByName('result').AsUTF8String;
+ finally Q.Free;CommitActiveTransaction;end;
 end;
 
 end.

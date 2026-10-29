@@ -1,4 +1,4 @@
-# Full-game chess parser benchmark
+# Full-game chess import benchmarks
 
 This directory contains the preparation tool and pinned provenance for the
 100,000-game F3/F4 benchmark. Generated PGNs and working manifests are ignored;
@@ -44,3 +44,15 @@ A separate normal regression (`chess_pgn_database_check`) uses small fixtures,
 including nested and repeated RAVs, comments/NAGs/typed metadata, malformed and
 oversized entries, progress/cancellation and semantic GUI round trips. Neither
 network access nor this large benchmark is required for normal regression.
+
+
+For the complete SQLite import, including summary and index creation, run:
+
+```sh
+bash tests/run_chess_database_benchmark.sh testdata/benchmarks/lichess-2013-12-rapid-100k.pgn
+```
+
+See `RESULTS.md` for the separately measured parser and full-database results,
+the accepted performance/memory gates and raw measurements. The database runner
+uses a temporary database by default; pass a new pathname as the second argument
+to retain it. Do not commit generated PGNs or databases.

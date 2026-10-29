@@ -1,7 +1,7 @@
 unit uDatabaseImportWorker;
 {$mode objfpc}{$H+}
 interface
-uses Classes, SyncObjs, SysUtils, uGameDatabase;
+uses Classes, SyncObjs, SysUtils, uGameDatabase,uGameTreePdn;
 type
   TDatabaseImportState = record
     BytesRead, TotalBytes: Int64;
@@ -15,23 +15,24 @@ type
     FLock: TCriticalSection;
     FCancel: Boolean;
     FState: TDatabaseImportState;
+    FFormat:TGameFileFormat;
     FDatabaseName, FPdnName: string;
     procedure Progress(BytesRead, TotalBytes: Int64; Imported, Duplicates,
       Errors: Integer; var Cancel: Boolean);
   protected
     procedure Execute; override;
   public
-    constructor Create(const DatabaseName, PdnName: string);
+    constructor Create(const DatabaseName, PdnName: string;Format:TGameFileFormat=gffPdn);
     destructor Destroy; override;
     procedure RequestCancel;
     function Snapshot: TDatabaseImportState;
   end;
 implementation
-constructor TDatabaseImportWorker.Create(const DatabaseName, PdnName: string);
+constructor TDatabaseImportWorker.Create(const DatabaseName, PdnName: string;Format:TGameFileFormat);
 begin
   inherited Create(True);
   FLock := TCriticalSection.Create;
-  FDatabaseName := DatabaseName; FPdnName := PdnName;
+  FFormat:=Format;FDatabaseName := DatabaseName; FPdnName := PdnName;
 end;
 destructor TDatabaseImportWorker.Destroy;
 begin
@@ -61,9 +62,9 @@ begin
   try
     try
       // No GUI objects or main-thread SQLite connection cross this boundary.
-      Database := TGameDatabase.Create;
+      Database := TGameDatabase.Create(FFormat);
       Database.OpenDatabase(FDatabaseName);
-      Database.ImportPdnFile(FPdnName, Imported, Duplicates, Errors,
+      Database.ImportFile(FPdnName, Imported, Duplicates, Errors,
         @Progress, ChangeFileExt(FPdnName, '.import.log'));
     except on E: Exception do Failure := E.Message; end;
   finally

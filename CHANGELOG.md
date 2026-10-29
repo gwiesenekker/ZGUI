@@ -4,7 +4,41 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed chess database storage and import — 2026-10-29
+
+- Extend the existing database importer, SQL queries, worker and recovery shell
+  with the approved PGN boundary; retain the draughts defaults and schema 6.
+  Chess schema 7 records explicit variant/key/identity metadata and typed
+  Date/UTCDate, ECO and Elo columns without adding filter controls.
+- Consume the existing parser's single-pass database output, pack complete PGN
+  including tags/comments/NAGs/variations, and index initial-through-terminal
+  mainline positions. Hash the existing chess position key into the two integer
+  columns; canonical UCI moves remain the stored continuation format.
+- Compare complete canonical PGN on duplicate hash matches. A conflicting hash
+  logs/counts one bad game and continues. Reject cross-variant, missing-metadata,
+  foreign and future schemas before replacing the open connection or running DDL.
+- Keep the existing transaction batches, cancellation, dirty-summary fallback,
+  rollback and recovery. For chess bulk imports, retain the unique hash index,
+  rebuild secondary indexes, use file-backed temporary sorting and explicitly
+  prepare the existing position INSERT. No second persistence pipeline is added.
+- Return selected chess games as immutable memory-backed entries through the
+  existing PGN validation/import path. Borrow the database's variant during entry
+  validation/import; callers own and free each entry.
+- Validation: chess model, worker and injected-failure/cancellation checks pass;
+  legacy database suites and full headless regression pass. Test hand-calculated
+  occurrence/WDL counts, repeated and terminal positions, transpositions,
+  castling/en-passant/counter identity, duplicate conflict handling, annotations,
+  typed metadata and byte-preserving cross-format rejection.
+- Full fresh import of 100,000 real games / 9,170,786 position rows completes in
+  319.091 seconds: 313.39 games/sec, zero errors and 434,944 KiB peak RSS. Both
+  reviewed gates (250 games/sec; 512 MiB) pass. Summary counts and indexes verify;
+  zero orphan rows. All 3,865 opening-catalogue records import, covering 500 ECO
+  codes. Raw measurements and reproduction instructions are in testdata/benchmarks.
+- Keep the chess GUI feature gate for the following integration commit.
+
 ### Reviewed PGN database-output milestone (F4) — 2026-10-29
+
+Commit: `1d137d8`.
 
 - Extend the existing PGN scanner with per-game callbacks and 64 KiB progress /
   cancellation checks, retaining browser collection/recovery behavior. Streaming

@@ -38,6 +38,8 @@ type
 // Parse into a disposable existing tree first, then replay the immutable text
 // into the target actor. No IO or grammar/rules validation is deferred to UI.
 procedure ImportChessPgn(const Text: string; Actor: TGameTreeActor; Warnings: TStrings);
+// Immutable memory-backed entry; caller owns it and keeps Variant alive.
+function ChessPgnEntryFromText(const Text:string;Variant:TGameVariant):TGameFileEntry;
 function ReadChessPgnDatabaseGame(const Text: string; Variant: TGameVariant;
   Warnings: TStrings = nil): TChessPgnDatabaseGame;
 function PgnUtf8(const Bytes: string; out Converted: Boolean): string;
@@ -329,10 +331,26 @@ type
     ValidatedDigest,TournamentId: string;
     IdentityHeaderValid: Boolean;
     FileName: string; Offset,Size: Int64; Variant: TGameVariant;
-    function Text: string;
+    function Text: string; virtual;
     procedure Validate; override;
     procedure ImportInto(Actor: TGameTreeActor); override;
   end;
+  TMemoryPgnEntry = class(TPgnEntry)
+  private
+    FText:string;
+  public
+    function Text:string;override;
+  end;
+function TMemoryPgnEntry.Text:string;
+begin Result:=FText;end;
+function ChessPgnEntryFromText(const Text:string;Variant:TGameVariant):TGameFileEntry;
+var Entry:TMemoryPgnEntry;
+begin
+ if not (Variant is TChessVariant) then raise EArgumentException.Create('PGN entry requires a chess variant');
+ if Length(Text)>MaxPgnGameBytes then raise EPgnSyntaxError.Create('PGN game exceeds 16 MiB limit');
+ Entry:=TMemoryPgnEntry.Create;Entry.FText:=Text;Entry.Variant:=Variant;Entry.Deferred:=True;
+ Result:=Entry;
+end;
 function TPgnEntry.Text: string;
 var F: TFileStream;
 begin
