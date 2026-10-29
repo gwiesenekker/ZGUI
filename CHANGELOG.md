@@ -4,6 +4,26 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Tournament start failure review (T1) — 2026-10-29
+
+- Apply Claude review 909d6ce's standalone fix before chess tournament changes.
+  Check executable availability and contain throwing or rejected start callbacks
+  in the existing scheduler. Persist/log one unfinished row reason and allow
+  independent rows to continue; timer ticks do not repeatedly retry failures.
+- Validation: application compiles and the existing tournament preservation
+  suite passes, including missing executables, throwing/nil callbacks and
+  repeated ticks. GUI layout and game/engine infrastructure remain unchanged.
+
+### Chess engine tournament design review — 2026-10-29
+
+- Prepare a proposal against `909d6ce` for Claude's review. Reuse the existing
+  tournament dialog, pairings, scheduler, standings, game runner, clocks, engine
+  factory, reservations, records and recovery paths while preserving GUI layout.
+- Identify proposed shared boundaries for profile defaults/validation, chess
+  result display, PGN capture/publication, versioned storage and tournament-only
+  runtime ponder-off policy. Include compatibility and failure/recovery tests.
+- Documentation only; no application code or GUI behaviour changed.
+
 ### Reviewed UCI pondering and annotator information — 2026-10-28
 
 Commit: `481aa77`.

@@ -15,6 +15,18 @@ type
     FailCapture: Boolean;
     function CaptureGamePdn(AGame: TObject): string; override;
   end;
+type
+  TStartProbe=class
+    Calls:Integer;
+    Game:TRunningGame;
+    procedure Start(Sender:TObject;const Setup:TGameSetup;const Title:string;out Started:TObject);
+  end;
+procedure TStartProbe.Start(Sender:TObject;const Setup:TGameSetup;const Title:string;out Started:TObject);
+begin
+  Inc(Calls);Started:=nil;
+  if Setup.WhiteEngine.HubId='throw' then raise EConvertError.Create('injected start failure');
+  if Setup.WhiteEngine.HubId='good' then Started:=Game;
+end;
 function TFailingCaptureTournament.CaptureGamePdn(AGame: TObject): string;
 begin
   if FailCapture then raise EInOutError.Create('injected capture failure');
@@ -1283,6 +1295,41 @@ begin
   end;
 end;
 
+procedure CheckStartFailuresDoNotRepeat(const Fixture:string);
+var Dialog:TTournamentDialog;Engines:TExternalEngineList;D:TExternalEngineDefinition;
+ Probe:TStartProbe;Grid:TStringGrid;Button:TButton;Timer:TTimer;
+ I,J:Integer;Saved,MissingReason:string;Had:Boolean;
+const Names:array[0..4]of string=('missing','throw','nil','good','opponent');
+begin
+ Had:=FileExists(EnginesJsonFileName);if Had then Saved:=FileContents(EnginesJsonFileName);
+ Engines:=TExternalEngineList.Create;Probe:=TStartProbe.Create;Dialog:=nil;
+ try
+  for I:=0 to High(Names) do begin
+   D:=TExternalEngineDefinition.Create;D.Kind:=eekHub;D.HubId:=Names[I];
+   D.ExePath:=ExpandFileName(ParamStr(0));if I=0 then D.ExePath:=Fixture+'.missing';Engines.Add(D);
+  end;
+  SaveExternalEngines(EnginesJsonFileName,Engines);Dialog:=TTournamentDialog.Create(nil);
+  Grid:=TStringGrid(Dialog.FindComponent('TournamentPairings'));
+  for I:=0 to 3 do AddTournamentPairingRow(Grid,EnginePickerDisplayName(Engines[I],I+1),EnginePickerDisplayName(Engines[4],5),1);
+  Dialog.SaveTournamentToFile(Fixture);Probe.Game:=NewGame(901);Dialog.OnStartGame:=@Probe.Start;
+  Button:=nil;Timer:=nil;
+  for I:=0 to Dialog.ComponentCount-1 do begin
+   if (Dialog.Components[I] is TButton) and (TButton(Dialog.Components[I]).Caption='Play') then Button:=TButton(Dialog.Components[I]);
+   if Dialog.Components[I] is TTimer then Timer:=TTimer(Dialog.Components[I]);
+  end;
+  Check((Button<>nil) and (Timer<>nil),'existing tournament start controls');Button.Click;
+  MissingReason:=Grid.Cells[TournamentColReason,1];
+  Check(Pos('was not found',MissingReason)>0,'missing executable is a row failure before callback');
+  Check(Pos('injected start failure',Grid.Cells[TournamentColReason,2])>0,'throwing start is contained in its row');
+  Check(Pos('rejected',Grid.Cells[TournamentColReason,3])>0,'nil start is a contained row failure');
+  Check((Probe.Calls=3) and (Grid.Cells[TournamentColReason,4]='Running'),'other rows still start after failures');
+  for J:=1 to 8 do Timer.OnTimer(Timer);
+  Check((Probe.Calls=3) and (Grid.Cells[TournamentColReason,1]=MissingReason),'timer never retries failed rows or raises a dialog');
+ finally Dialog.Free;Probe.Game.Free;Probe.Free;Engines.Free;
+  if Had then WriteContents(EnginesJsonFileName,Saved) else DeleteFile(EnginesJsonFileName);
+ end;
+end;
+
 var
   Fixture, OtherFile, TestDirectory: string;
   Id: TGUID;
@@ -1303,6 +1350,7 @@ begin
       end;
       WriteFixture(Fixture, 'Original');
       WriteFixture(OtherFile, 'Other');
+      CheckStartFailuresDoNotRepeat(IncludeTrailingPathDelimiter(TestDirectory)+'start-failures.json');
       CheckCaptureFailureDoesNotBlockSaving(IncludeTrailingPathDelimiter(TestDirectory) + 'capture-isolation.json');
       CheckCaptureFailureStopsCleanly(IncludeTrailingPathDelimiter(TestDirectory) + 'capture-failure.json');
       CheckCompletionIsAppliedOnce(Fixture);

@@ -106,6 +106,7 @@ type
     procedure SetSelectedResultClick(Sender: TObject);
     procedure StartStopClick(Sender: TObject);
     procedure StartPendingGames;
+    procedure StartFailure(ARow: Integer; const AReason: string);
     procedure StopRunningGames;
     procedure TimerTick(Sender: TObject);
     function TournamentSignature: string;
@@ -141,7 +142,7 @@ uses
   Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils, uGameOrchestrator,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
-  uAtomicFile, uGameTreePdn, uDraughtsPdn;
+  uAtomicFile, uGameTreePdn, uDraughtsPdn, LazLoggerBase;
 
 procedure DrawGridText(AGrid: TStringGrid; ACol, ARow: Integer;
   const ARect: TRect);
@@ -1182,6 +1183,10 @@ begin
   BlackKey := EngineIdentityKey(BlackEngine);
   if (WhiteKey = '') or (BlackKey = '') then
   begin FGrid.Cells[TournamentColReason, ARow] := 'Missing engine'; Exit; end;
+  if EngineExecutableProblem(WhiteEngine)<>'' then
+  begin StartFailure(ARow,EngineExecutableProblem(WhiteEngine)); Exit; end;
+  if EngineExecutableProblem(BlackEngine)<>'' then
+  begin StartFailure(ARow,EngineExecutableProblem(BlackEngine)); Exit; end;
   if ABusyEngineKeys <> nil then
   begin
     CandidateKeys := TStringList.Create;
@@ -1911,6 +1916,14 @@ begin
   AutoSaveTournament;
 end;
 
+procedure TTournamentDialog.StartFailure(ARow: Integer; const AReason: string);
+begin
+  FGrid.Cells[TournamentColResult,ARow]:='*';
+  FGrid.Cells[TournamentColReason,ARow]:='Could not start: '+AReason;
+  DebugLn(['Tournament row ',ARow,': ',FGrid.Cells[TournamentColReason,ARow]]);
+  AutoSaveTournament;
+end;
+
 procedure TTournamentDialog.StartPendingGames;
 var
   BusyEngineKeys: TStringList;
@@ -1959,9 +1972,13 @@ begin
         Continue;
 
       GameObject := nil;
-      FOnStartGame(Self, Setup, 'Tournament game', GameObject);
+      try
+        FOnStartGame(Self, Setup, 'Tournament game', GameObject);
+      except
+        on E:Exception do begin StartFailure(Row,E.Message); Continue; end;
+      end;
       if not (GameObject is TRunningGame) then
-        Continue;
+      begin StartFailure(Row,'Game start was rejected'); Continue; end;
 
       RegisterRunningGame(Row, GameObject);
       FGrid.Invalidate;
