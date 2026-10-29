@@ -818,7 +818,10 @@ Choose **Database > Create database** for a new `.sqlite` or `.db` file, or
 In the database window, right-click and choose **Import PGN** for chess or
 **Import PDN** for draughts. The progress view shows imported games, errors and
 duplicates, and allows the import to be stopped. An `.import.log` file is written
-beside the imported file. An invalid chess mainline or variation rejects that
+beside the imported file. Chess log entries identify the game number and its
+ending byte offset in the source; parser line/column numbers are relative to that
+game. Fatal import errors include the failing PGN record. An invalid chess
+mainline or variation rejects that
 game; other valid games can still be imported. Column-one tag-like lines are
 collection recovery boundaries even inside a damaged comment or variation;
 indent literal tag-like lines in multiline comments. Draughts logs also record nonfatal

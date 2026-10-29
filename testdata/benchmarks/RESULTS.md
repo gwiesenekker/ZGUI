@@ -25,7 +25,9 @@ These results are not database import throughput.
 
 ## F4 decision
 
-Use the review's offered 250 games/sec end-to-end import gate. The current
+Use the review's offered 250 games/sec end-to-end import gate on the Ryzen 9
+5950X reference host and compiler settings listed above. This is a reproducible
+reference-machine gate, not a minimum speed promised on other hardware. The current
 parser ceiling leaves capacity for the remaining work; the original 500/sec
 full-import target would exceed the measured parser throughput. A move-generator
 rewrite is not needed to start the approved database seams. The full import result below demonstrates this target separately from the parser

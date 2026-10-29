@@ -164,6 +164,8 @@ type
     FGame: TPdnGame;
     FGameId: Integer;
     FFullPdn: string;
+    FRecordNumber: Integer;
+    FRecordEnd, FSourceBytes: Int64;
     FWhite,FBlack,FEvent,FResult,FStartingFen,FAnnotations:string;
     FDate,FEco:string;FWhiteElo,FBlackElo:Integer;
     FKeys:TStringList;FStartingSide:TGameSide;
@@ -192,6 +194,7 @@ type
     procedure LogDuplicate(const AGameHash: THash128);
     procedure LogError(const AMessage: string);
     procedure LogLine(const ALine: string);
+    function PgnRecordContext: string;
     procedure ReportProgress(ABytesRead, ATotalBytes: Int64;
       var ACancel: Boolean);
   public
@@ -483,8 +486,13 @@ var
   LPlyCount: Integer;
 begin
   if FDatabase.FFormat=gffPgn then begin
-    LogLine('duplicate'+#9+'hash='+Hash128ToHex(AGameHash)+#9+'event='+LogField(FEvent)+#9+'white='+LogField(FWhite)+#9+'black='+LogField(FBlack));
-    if FLogOpen then WriteLn(FLogFile,FFullPdn);Exit;
+    LogLine('duplicate'+#9+'hash='+Hash128ToHex(AGameHash)+#9+'event='+LogField(FEvent)+#9+'white='+LogField(FWhite)+#9+'black='+LogField(FBlack)+PgnRecordContext);
+    if FLogOpen then begin
+      WriteLn(FLogFile,'----- DUPLICATE PGN -----');
+      WriteLn(FLogFile,FFullPdn);
+      WriteLn(FLogFile,'-------------------------');
+    end;
+    Exit;
   end;
   LPlyCount := MoveCountText(FGame.MovesText);
   if (LPlyCount = 0) and (FMoves <> nil) then
@@ -505,14 +513,27 @@ begin
   end;
 end;
 
+function TDatabasePdnImporter.PgnRecordContext: string;
+begin
+  Result := '';
+  if FDatabase.FFormat = gffPgn then
+    Result := #9 + 'game=' + IntToStr(FRecordNumber) +
+      #9 + 'byte_end=' + IntToStr(FRecordEnd) +
+      #9 + 'source_bytes=' + IntToStr(FSourceBytes);
+end;
+
 procedure TDatabasePdnImporter.LogError(const AMessage: string);
 begin
-  LogLine('error' + #9 + LogField(AMessage));
+  LogLine('error' + #9 + LogField(AMessage) + PgnRecordContext);
   if FLogOpen then
   begin
-    Writeln(FLogFile, '----- PDN -----');
-    if FDatabase.FFormat=gffPgn then WriteLn(FLogFile,FFullPdn)
-    else Writeln(FLogFile, PdnGameToText(FGame));
+    if FDatabase.FFormat=gffPgn then begin
+      WriteLn(FLogFile, '----- PGN -----');
+      WriteLn(FLogFile,FFullPdn);
+    end else begin
+      Writeln(FLogFile, '----- PDN -----');
+      Writeln(FLogFile, PdnGameToText(FGame));
+    end;
     Writeln(FLogFile, '---------------');
   end;
 end;
@@ -810,13 +831,15 @@ procedure TDatabasePdnImporter.ImportPgnGame(const Text,ErrorText:string;
   BytesRead,TotalBytes:Int64;var Cancel:Boolean);
 var G:TChessPgnDatabaseGame;W:TStringList;Hash:THash128;I:Integer;Duplicate:Boolean;
 begin
+ Inc(FRecordNumber);FRecordEnd:=BytesRead;FSourceBytes:=TotalBytes;
  FFullPdn:=Text;
  if ErrorText<>'' then begin Inc(FErrors);LogError(ErrorText);ReportProgress(BytesRead,TotalBytes,Cancel);Exit;end;
  G:=nil;W:=TStringList.Create;
  try
+  try
   try G:=ReadChessPgnDatabaseGame(Text,FDatabase.FVariant,W);
   except on E:EPgnSyntaxError do begin Inc(FErrors);LogError(E.Message);ReportProgress(BytesRead,TotalBytes,Cancel);Exit;end;end;
-  for I:=0 to W.Count-1 do LogLine('warning'+#9+LogField(W[I]));
+  for I:=0 to W.Count-1 do LogLine('warning'+#9+LogField(W[I])+PgnRecordContext);
   FWhite:=GameFileTagValue(G.Tags,'White','?');FBlack:=GameFileTagValue(G.Tags,'Black','?');
   FEvent:=GameFileTagValue(G.Tags,'Event','?');FResult:=G.ResultText;FStartingFen:=G.StartingFEN;
   FAnnotations:='';FFullPdn:=G.CompletePgn;FMoves.Assign(G.Moves);FKeys.Assign(G.PositionKeys);
@@ -831,6 +854,12 @@ begin
   if Duplicate then begin Inc(FDuplicates);LogDuplicate(Hash);end
   else begin StoreGame(Hash);Inc(FImported);CommitBatchIfNeeded;end;
   ReportProgress(BytesRead,TotalBytes,Cancel);
+  except
+    on E:Exception do begin
+      Inc(FErrors);LogError(E.Message);
+      raise;
+    end;
+  end;
  finally G.Free;W.Free;end;
 end;
 

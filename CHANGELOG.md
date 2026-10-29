@@ -4,7 +4,25 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Chess import logging (D9) — 2026-10-29
+
+- Log and count the failing chess record before propagating a fatal import error,
+  matching the existing draughts failure behavior. Keep syntax/hash conflicts
+  recoverable per game and SQL/I/O failures fatal with existing rollback/recovery.
+- Use PGN labels and duplicate-record delimiters. Add game number, ending source
+  byte offset and source size to chess error/warning/duplicate entries; parser
+  line/column values remain relative to the game. Draughts log content is retained.
+- Extend recovery tests with fatal-error and duplicate logs and verify that a
+  recoverable syntax error reports the correct record and is counted once.
+- Clarify that the measured import speed gate applies to the documented Ryzen
+  reference host, rather than promising the same throughput on other hardware.
+- Validation: application build, full headless regression and all nine GTK GUI
+  suites pass, including 125 database GUI checks. Draughts rendering matches the
+  baseline at default/minimum sizes. P14/P16 schema/identity changes await review.
+
 ### Database stale-result display (U19) — 2026-10-29
+
+Commit: `4f40d5a`.
 
 - Clear old continuations after a successful database Open/Create, when the
   search board changes, after accepted setup and before import. Rendering stale
