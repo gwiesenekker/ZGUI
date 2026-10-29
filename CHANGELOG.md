@@ -4,7 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Database continuation browsing proposal — 2026-10-29
+
+- Prepare the requested double-click continuation browsing for Claude's review:
+  play the stored canonical move through the existing position interface, update
+  the database miniboard/FEN and reuse the current search flow. Preserve the
+  existing game-grid selection and main game tree.
+- Include stale-result and busy-state guards, both game adapters, special moves
+  and unchanged-layout validation. Proposal only; shared behavior awaits review
+  under the repository's existing constraints. No production code changed.
+
 ### Database FEN column width — 2026-10-29
+
+Commit: `c69b62a`.
 
 - Widen the chess database window's miniboard/FEN column from 220 to 440 pixels
   so the complete starting FEN is visible at the default window size. Retain
