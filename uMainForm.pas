@@ -4877,13 +4877,14 @@ begin
     Dialog.DefaultExt := 'sqlite';
     Dialog.Filter := 'SQLite database (*.sqlite)|*.sqlite|All files (*)|*';
     Dialog.Options := Dialog.Options + [ofOverwritePrompt, ofEnableSizing];
-    if not Dialog.Execute then
+    if not ExecuteGuiFileDialog(Dialog) then
       Exit;
 
     if FDatabaseForm = nil then
       FDatabaseForm := TDatabaseForm.Create(Self);
     try
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
+      FDatabaseForm.OnFileGameSelected := @FileGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.CreateDatabase(Dialog.FileName);
       if TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
@@ -4912,13 +4913,14 @@ begin
     Dialog.Title := 'Open database';
     Dialog.Filter := 'SQLite database (*.sqlite;*.db)|*.sqlite;*.db|All files (*)|*';
     Dialog.Options := Dialog.Options + [ofFileMustExist, ofEnableSizing];
-    if not Dialog.Execute then
+    if not ExecuteGuiFileDialog(Dialog) then
       Exit;
 
     if FDatabaseForm = nil then
       FDatabaseForm := TDatabaseForm.Create(Self);
     try
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
+      FDatabaseForm.OnFileGameSelected := @FileGameSelected;
       FDatabaseForm.ApplyPreferences(FPreferences);
       FDatabaseForm.OpenDatabase(Dialog.FileName);
       if TryGetDisplayedBoardFen(ActiveGameTree, LFen) then

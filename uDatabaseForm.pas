@@ -7,15 +7,20 @@ interface
 uses
   Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   Grids, Math, Menus, StdCtrls, SysUtils, uDraughtsBoardControl, uDraughtsBoard,
+  uGamePosition,uGameGuiProfile,uGameBoardFactory,uGameBoardControl,uGameFileReader,uGameTreePdn,
   uGameDatabase, uDatabaseImportWorker, uGuiDialogs, uDraughtsPdn, uDraughtsPositionSetupForm, uPreferences;
 
 type
+  TDatabaseFileGameSelectedEvent=procedure(Sender:TObject;Entry:TGameFileEntry) of object;
   TDatabaseGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
 
   TDatabaseForm = class(TForm)
   private
-    FBoard: TDraughtsBoard;
-    FBoardControl: TDraughtsBoardControl;
+    FVariant:TGameVariant; // Borrowed from application composition.
+    FProfile:TGameGuiProfile;
+    FBoard: TGamePosition;
+    FBoardControl: TGameBoardControl;
+    FOnFileGameSelected:TDatabaseFileGameSelectedEvent;
     FApplyFilterButton: TButton;
     FBlackFilterEdit: TEdit;
     FDatabase: TGameDatabase;
@@ -82,6 +87,7 @@ type
     procedure SearchCurrentPosition;
     procedure ImportPdnFile(const AFileName: string);
     procedure SetSearchFEN(const AFEN: string);
+    property OnFileGameSelected:TDatabaseFileGameSelectedEvent read FOnFileGameSelected write FOnFileGameSelected;
     property OnGameSelected: TDatabaseGameSelectedEvent read FOnGameSelected
       write FOnGameSelected;
   end;
@@ -128,8 +134,9 @@ begin
   Constraints.MinHeight := 420;
   OnClose := @FormCloseHandler;
 
-  FDatabase := TGameDatabase.Create;
-  FBoard := TDraughtsBoard.Create;
+  FVariant:=DefaultGameVariant;FProfile:=GameGuiProfileFor(FVariant);
+  FDatabase := TGameDatabase.Create(FProfile.FileFormat);
+  FBoard := FVariant.CreatePosition;
   FPreferences := DefaultGuiPreferences;
   FGameInfos := TList.Create;
   FResults := TList.Create;
@@ -270,7 +277,7 @@ begin
   FFenEdit := TEdit.Create(Self);
   FFenEdit.Parent := LBoardPanel;
   FFenEdit.Align := alTop;
-  FFenEdit.Text := FBoard.CurrentFEN;
+  FFenEdit.Text := FBoard.ToFEN;
 
   FSearchButton := TButton.Create(Self);
   FSearchButton.Parent := LBoardPanel;
@@ -295,10 +302,10 @@ begin
   LMenuItem.OnClick := @SetupPositionClick;
   LBoardPopup.Items.Add(LMenuItem);
 
-  FBoardControl := TDraughtsBoardControl.Create(Self);
+  FBoardControl := CreateGameBoardControl(Self,FVariant);
   FBoardControl.Parent := LBoardPanel;
   FBoardControl.Align := alClient;
-  FBoardControl.Board := FBoard;
+  FBoardControl.SetPosition(FBoard);
   FBoardControl.ShowCoordinates := False;
   FBoardControl.PopupMenu := LBoardPopup;
 
@@ -324,7 +331,7 @@ begin
 
   LBoardPopup := TPopupMenu.Create(Self);
   LMenuItem := TMenuItem.Create(Self);
-  LMenuItem.Caption := 'Import PDN...';
+  LMenuItem.Caption := 'Import '+FProfile.FormatName+'...';
   LMenuItem.OnClick := @ImportPdnClick;
   LBoardPopup.Items.Add(LMenuItem);
   LMenuItem := TMenuItem.Create(Self);
@@ -638,6 +645,7 @@ end;
 procedure TDatabaseForm.GamesGridDblClick(Sender: TObject);
 var
   Game: TPdnGame;
+  Entry:TGameFileEntry;
   Info: TDatabaseGameInfo;
   Row: Integer;
 begin
@@ -647,6 +655,11 @@ begin
 
   Info := TDatabaseGameInfo(FGameInfos[Row - 1]);
   try
+    if FProfile.FileFormat=gffPgn then begin
+      Entry:=FDatabase.LoadFileGameById(Info.Id);
+      try if Assigned(FOnFileGameSelected) then FOnFileGameSelected(Self,Entry);finally Entry.Free;end;
+      Exit;
+    end;
     Game := FDatabase.LoadGameById(Info.Id);
     try
       if Assigned(FOnGameSelected) then
@@ -681,7 +694,10 @@ begin
   for Row := 1 to FResults.Count do
   begin
     Item := TDatabaseSearchResult(FResults[Row - 1]);
-    FResultsGrid.Cells[0, Row] := Item.MoveText;
+    if FProfile.FileFormat=gffPgn then begin
+      if FBoard.IsLegal(Item.MoveText) then FResultsGrid.Cells[0,Row]:=FBoard.MoveNotation(Item.MoveText)
+      else raise EConvertError.Create('Invalid stored chess continuation: '+Item.MoveText);
+    end else FResultsGrid.Cells[0, Row] := Item.MoveText;
     FResultsGrid.Cells[1, Row] := IntToStr(Item.GameCount);
     FResultsGrid.Cells[2, Row] := IntToStr(Item.Wins);
     FResultsGrid.Cells[3, Row] := IntToStr(Item.Draws);
@@ -692,7 +708,8 @@ end;
 procedure TDatabaseForm.UpdateBoardFromFen;
 begin
   FBoard.LoadFromFEN(Trim(FFenEdit.Text));
-  FFenEdit.Text := FBoard.CurrentFEN;
+  FFenEdit.Text := FBoard.ToFEN;
+  FBoardControl.SetPosition(FBoard);
   FBoardControl.Invalidate;
 end;
 
@@ -724,7 +741,7 @@ begin
   try
     try
       UpdateBoardFromFen;
-      FDatabase.SearchPosition(FBoard.PositionKey, FBoard.SideToMove, FResults);
+      FDatabase.SearchPosition(FBoard, FResults);
       Limit := GameDisplayLimit;
       PopulateResultsGrid;
       ContinuationGameCount := 0;
@@ -735,31 +752,29 @@ begin
         ClearObjectList(FGameInfos);
         PopulateGamesGridFromList(IntToStr(FResults.Count) +
           ' continuation(s); ' + IntToStr(ContinuationGameCount) +
-          ' game(s) contain ' + FBoard.CurrentFEN +
+          ' game(s) contain ' + FBoard.ToFEN +
           '; game list skipped')
       end
-      else if FDatabase.GamesForPositionExceedLimit(FBoard.PositionKey,
-        FBoard.SideToMove, Limit, ProbeCount) then
+      else if FDatabase.GamesForPositionExceedLimit(FBoard,Limit,ProbeCount) then
       begin
         ClearObjectList(FGameInfos);
         PopulateGamesGridFromList(IntToStr(FResults.Count) +
           ' continuation(s); at least ' + IntToStr(ProbeCount) +
-          ' game(s) contain ' + FBoard.CurrentFEN +
+          ' game(s) contain ' + FBoard.ToFEN +
           '; game list skipped')
       end
       else
       begin
-        FDatabase.LoadGamesForPosition(FBoard.PositionKey, FBoard.SideToMove,
-          FGameInfos, Limit, TotalGames);
+        FDatabase.LoadGamesForPosition(FBoard,FGameInfos,Limit,TotalGames);
         if TotalGames > FGameInfos.Count then
           PopulateGamesGridFromList(IntToStr(FResults.Count) +
             ' continuation(s), ' + IntToStr(TotalGames) +
-            ' game(s) containing ' + FBoard.CurrentFEN +
+            ' game(s) containing ' + FBoard.ToFEN +
             '; showing first ' + IntToStr(FGameInfos.Count))
         else
           PopulateGamesGridFromList(IntToStr(FResults.Count) +
             ' continuation(s), ' + IntToStr(TotalGames) +
-            ' game(s) containing ' + FBoard.CurrentFEN);
+            ' game(s) containing ' + FBoard.ToFEN);
       end;
     except
       on E: Exception do
@@ -794,11 +809,17 @@ end;
 
 procedure TDatabaseForm.BoardCopyFenClick(Sender: TObject);
 begin
-  Clipboard.AsText := FBoard.CurrentFEN;
+  Clipboard.AsText := FBoard.ToFEN;
 end;
 
 procedure TDatabaseForm.SetupPositionAccepted(Sender: TObject; const AFEN: string; var AAccepted:Boolean);
 begin
+  if FProfile.FileFormat=gffPgn then begin
+    AAccepted:=False;
+    try FBoard.LoadFromFEN(AFEN);FFenEdit.Text:=FBoard.ToFEN;FBoardControl.SetPosition(FBoard);AAccepted:=True;
+    except on E:Exception do ShowGuiOkDialog(Self,'Database','Invalid FEN: '+E.Message);end;
+    Exit;
+  end;
   FFenEdit.Text := AFEN;
   SetFenClick(Sender);
   AAccepted:=True; // Retain the legacy database setup acceptance behavior.
@@ -812,7 +833,7 @@ begin
     FPositionSetupForm.OnAccepted := @SetupPositionAccepted;
     FPositionSetupForm.ApplyPreferences(FPreferences);
   end;
-  FPositionSetupForm.StartSetup(FBoard.CurrentFEN);
+  FPositionSetupForm.StartSetup(FBoard.ToFEN);
   ShowFormCenteredOnOwner(FPositionSetupForm, Self);
 end;
 
@@ -845,7 +866,7 @@ begin
   FImportProgressForm := TForm.Create(Self);
   FImportBusy := True;
   try
-    FImportProgressForm.Caption := 'Import PDN';
+    FImportProgressForm.Caption := 'Import '+FProfile.FormatName;
     FImportProgressForm.Position := poOwnerFormCenter;
     FImportProgressForm.PopupParent := Self;
     FImportProgressForm.BorderStyle := bsDialog;
@@ -866,7 +887,7 @@ begin
     Button.Caption := 'Stop';
     Button.OnClick := @StopImportClick;
     FDatabase.Close;
-    FImportWorker := TDatabaseImportWorker.Create(DatabaseName, AFileName);
+    FImportWorker := TDatabaseImportWorker.Create(DatabaseName,AFileName,FProfile.FileFormat);
     FImportTimer := TTimer.Create(FImportProgressForm);
     FImportTimer.Interval := 50;
     FImportTimer.OnTimer := @PollImport;
@@ -902,11 +923,11 @@ begin
   if FImportBusy then Exit;
   Dialog := TOpenDialog.Create(Self);
   try
-    Dialog.Title := 'Import PDN';
-    Dialog.Filter := 'PDN files|*.pdn|All files|*';
+    Dialog.Title := 'Import '+FProfile.FormatName;
+    Dialog.Filter := FProfile.FileFilter;
     if not Dialog.Execute then Exit;
     try ImportPdnFile(Dialog.FileName);
-    except on E: Exception do ShowGuiTextDialog(Self, 'Import PDN', E.Message); end;
+    except on E: Exception do ShowGuiTextDialog(Self,'Import '+FProfile.FormatName,E.Message); end;
   finally Dialog.Free; end;
 end;
 

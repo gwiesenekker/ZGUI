@@ -279,9 +279,7 @@ var Main: TMainForm; B: TGameBoardControl; Legal: TMemo; Memo: TGameNotationView
     Key: Word; Before: string; Actor: TGameTreeActor; C: TGameTreeCommand;
     Score: TScoreHistoryControl; Value: Double;
 const Promotions: array[0..3] of string=('a7a8q','a7a8r','a7a8b','a7a8n');
-  Unsupported: array[0..2] of string = (
-    '&Database','Search position in database',
-    'Open MCTS annotator');
+  Unsupported: array[0..0] of string = ('Open MCTS annotator');
 begin
   Main:=TMainForm.Create(nil); Expected:=TChessPosition.Create; Choice:=TChoice.Create;
   Actor:=nil;
@@ -350,6 +348,7 @@ begin
     Check(Pos('37...Ke7',Memo.Text)>0,'Main notation uses black fullmove 37');
     for I:=Low(Unsupported) to High(Unsupported) do
       Check(not Menu(Main,Unsupported[I]).Enabled,'Unsupported action disabled: '+Unsupported[I]);
+    Check(Menu(Main,'&Database').Enabled and Menu(Main,'Search position in database').Enabled,'Chess database actions enabled');
     Check(Menu(Main,'&Open PGN...').Enabled and Menu(Main,'&Save PGN...').Enabled,'PGN file actions enabled');
     Clipboard.AsText:='sentinel'; Menu(Main,'Setup position...').OnClick(nil);
     Check(Clipboard.AsText='sentinel','Opening setup does not change clipboard');

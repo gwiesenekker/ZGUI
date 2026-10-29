@@ -159,9 +159,8 @@ errors are not silently retried or awarded as forfeits. A flag fall remains a
 normal rules-based result. Draughts tournament files remain separate and cannot
 be loaded into the chess tournament dialog.
 
-Auto Play and databases are not yet connected.
-Their controls remain visible in their original locations but are disabled,
-with automatic database search also guarded.
+Chess databases are available through the existing **Database** menu and window;
+see section 9. Auto Play and the MCTS annotator remain disabled.
 
 The numbered sections below are retained reference documentation for the
 inherited draughts features. They do not imply those features are enabled for
@@ -804,25 +803,37 @@ its clock.
 
 ## 9. Game database
 
-ZGUI uses SQLite databases for collections of PDN games and position search.
+ZGUI uses SQLite databases for collections of chess PGN or draughts PDN games
+and position search. The window layout, filters and import controls are shared.
+Chess uses schema 7, with explicit variant and key-format metadata. Chess and
+draughts databases are separate: opening the other format is rejected. A chess
+database must be created through **Create database**, rather than by opening an
+empty file.
 
 Choose **Database > Create database** for a new `.sqlite` or `.db` file, or
 **Database > Open database** for an existing one.
 
 ### 9.1 Importing games
 
-In the database window, right-click and choose **Import PDN**. The progress view
-shows imported games, errors, and duplicates, and allows the import to be
-stopped. An `.import.log` file is written beside the imported PDN file. It also records
-nonfatal warnings for skipped malformed variations.
+In the database window, right-click and choose **Import PGN** for chess or
+**Import PDN** for draughts. The progress view shows imported games, errors and
+duplicates, and allows the import to be stopped. An `.import.log` file is written
+beside the imported file. An invalid chess mainline or variation rejects that
+game; other valid games can still be imported. Draughts logs also record nonfatal
+warnings for skipped malformed variations.
 
 Duplicate detection compares complete canonical game content, including comments
-and variations. Equivalent capture spellings identify the same game; changed
-comments or branches remain separate records. Older database identities are
-compared and upgraded as matching games are encountered, so the first import
-against an older database may take longer.
+and variations. Changed comments or branches remain separate records. Chess
+identity preserves complete PGN tokens, including tag values, comments, NAGs and
+variations; whitespace and formatting outside those tokens are normalized.
+Date (or UTCDate), ECO, WhiteElo and BlackElo also have typed database columns.
+Unknown or malformed values become NULL in those columns while the original
+PGN tags remain intact; the existing filters are unchanged.
 
-Opening a supported older database upgrades its internal format. An older ZGUI
+For draughts, equivalent capture spellings identify the same game. Older
+database identities are compared and upgraded as matching games are encountered,
+so the first import against an older database may take longer. Opening a
+supported older draughts database upgrades its internal format. An older ZGUI
 that cannot understand the newer format refuses to open it. Keep a backup before
 upgrading when you need to continue using an older executable.
 
@@ -839,7 +850,9 @@ recreated, for example after repairing or migrating a database.
 The game filters include White, Black, Event, Player, and a maximum number of
 rows. Click **Apply filter** after changing them. Click the White, Black, or
 Event column heading to sort; click it again to reverse the order. Double-click
-a game to load it in the main window.
+a game to load it in the main window. Chess loads the complete PGN, including
+comments and variations, through the same Save / Discard / Cancel protection as
+opening a PGN file.
 
 ### 9.3 Searching for a position
 
@@ -847,7 +860,17 @@ The database board's context menu also offers **Paste FEN position from clipboar
 
 Enter or paste a FEN in the position panel and click **Search**. The result lists
 continuation moves with game, win, draw, and loss counts and provides matching
-games where practical.
+games where practical. Chess moves are shown in SAN. Only mainline positions
+are indexed, including the starting and final positions; variations remain
+available when loading the complete game. Position matching includes side to
+move, castling rights and legally usable en passant, and ignores move counters.
+Transpositions therefore find the same position.
+
+The continuation grid counts occurrences: a repeated position in one game can
+contribute more than once. The matching-game list counts distinct games. Wins
+and losses are from the side-to-move perspective. Games with result `*` contribute
+to occurrences but not to wins, draws or losses. A final position without a next
+move can appear in the matching-game list without a continuation row.
 
 The database board's context menu can copy or paste FEN and open the position
 setup window.
@@ -1010,8 +1033,8 @@ For protocol details, see [DXP Protocol.md](DXP%20Protocol.md) and
 - `engines.json` and `prefs.json` live beside the ZGUI executable. Keep that
   directory writable. Per-engine `.params.json` files live beside the engine
   executable they describe; launch/INI paths remain part of engine configuration.
-- PDN, database and saved tournament files live where you choose them. Import logs
-  use the imported PDN's filename with the `.import.log` extension beside that PDN.
+- PGN/PDN, database and saved tournament files live where you choose them. Import logs
+  use the imported game file's filename with the `.import.log` extension beside it.
 - Unsaved tournament recovery is the exception to portable storage: it uses the
   operating system's per-user application configuration directory, under
   `tournaments` (normally `~/.config/zgui/tournaments` on Linux). The tournament

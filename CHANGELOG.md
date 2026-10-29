@@ -4,7 +4,28 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Chess database GUI integration — 2026-10-29
+
+- Enable the chess database actions after the measured import and cross-format /
+  recovery gates pass. Reuse the existing database window, board factory,
+  position setup, filters, sorting, modal import progress and worker lifecycle;
+  preserve all control geometry. Chess labels/files use PGN and continuations
+  display SAN while stored moves remain UCI.
+- Wire database selection into the existing validated file-game selection path,
+  retaining full comments/variations and Save / Discard / Cancel protection.
+  Automatic search follows the displayed chess position without changing the tree.
+- Document the chess schema boundary, metadata, import identity, mainline indexing,
+  occurrence counts and distinct-game list in the existing manual.
+- Validation: application build, full headless regression, all nine GTK GUI suites
+  and both tournament suites pass. The chess database GUI checks cover create,
+  import, search, SAN, setup, real main-window selection, automatic search and
+  cancelled/failed saves. Draughts database rendering matches the previous commit
+  pixel-for-pixel at default and minimum window sizes. Native Windows execution
+  was not tested.
+
 ### Reviewed chess database storage and import — 2026-10-29
+
+Commit: `3d14d17`.
 
 - Extend the existing database importer, SQL queries, worker and recovery shell
   with the approved PGN boundary; retain the draughts defaults and schema 6.

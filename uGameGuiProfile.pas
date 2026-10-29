@@ -33,7 +33,7 @@ begin
   Result.TournamentForcePonderOff:=True;
   Result.DefaultClock:=DefaultTimeControl; Result.DefaultClock.MovesPerPeriod:=0;
   Result.DefaultClock.MinutesPerPeriod:=5; Result.DefaultClock.IncrementSeconds:=3;
-  Result.Features:=[gfPdn,gfEngines,gfNewGame,gfTournament,gfPositionSetup]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
+  Result.Features:=[gfPdn,gfEngines,gfNewGame,gfTournament,gfPositionSetup,gfDatabase]; Result.EngineKinds:=[eekUci]; Result.BoardClass:=TChessBoardControl;
   Result.SourceClickSingleMove:=False; Result.FileFormat:=gffPgn;
   Result.FormatName:='PGN'; Result.FileFilter:='PGN files (*.pgn)|*.pgn|All files (*)|*'; Result.FileExtension:='pgn';
 end;
