@@ -1,0 +1,29 @@
+[Event "g1"]
+[Result "*"]
+
+1. e4 e5 *
+
+[Event "g2"]
+[Result "*"]
+
+1. d4 {unclosed comment d5 *
+
+[Event "g3"]
+[Result "*"]
+
+1. c4 {fine} e5 *
+
+[Event "g4"]
+[Result "*"]
+
+1. Nf3 d5 *
+
+[Event "g5"]
+[Result "*"]
+
+1. e4 {x} c5 *
+
+[Event "g6"]
+[Result "*"]
+
+1. b3 e5 *

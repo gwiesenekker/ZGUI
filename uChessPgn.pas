@@ -30,8 +30,8 @@ type
     constructor Create(AVariant: TGameVariant);
     procedure OpenFile(const FileName: string); override;
     // Same scanner, one record in flight, cancellable at each 64 KiB block.
-    // Does not populate or alter Entries. Stops rather than guessing a boundary
-    // inside an unterminated comment/string/variation.
+    // Does not populate or alter Entries. Uses the browser's column-one
+    // tag-prefix boundary to recover after damaged comments/variations.
     procedure ScanFile(const FileName: string; OnGame: TChessPgnScanGameEvent;
       OnProgress: TChessPgnScanProgressEvent = nil);
   end;
@@ -128,7 +128,7 @@ begin
     ptComment: begin
       // Preserve literal comment whitespace. The display/file exporter also
       // indents column-one '['/'%' for its browser recovery boundary; the
-      // strict database scanner does not need that display transformation.
+      // database token representation retains literal comment whitespace.
       if Pos('}',T.Text)>0 then S:=PgnBraceComment(T.Text)
       else S:='{'+T.Text+'}';
     end;
@@ -472,11 +472,10 @@ begin
       Count:=F.Read(Buffer,SizeOf(Buffer));
       for I:=0 to Count-1 do begin
         C:=Chr(Buffer[I]);
-        // Preserve the browser recovery boundary. Streaming mode only splits
-        // outside structural text; it never guesses at a header in a comment.
-        if (C='[') and ColumnOne and Body and
-          (Collect or (not Brace and not Quote and not LineComment and not Tag and (Depth=0)))
-          and StartsTagLine then Finish
+        // Use the same recovery boundary for browsing and streaming: a damaged
+        // comment or variation must not swallow a following tagged game.
+        // Literal tag-like lines in multiline comments must be indented.
+        if (C='[') and ColumnOne and Body and StartsTagLine then Finish
         else if not Brace and not Quote and not LineComment and not Tag and (Depth=0) and
           not (C in ['0'..'9','a'..'z','A'..'Z','/','-','*']) and IsResult then Finish;
         if Cancel then Exit;

@@ -1,0 +1,19 @@
+[Event "g1"]
+[Result "*"]
+
+1. e4 e5 *
+
+[Event "g2"]
+[Result "*"]
+
+1. d4 ( 1. e4 d5 *
+
+[Event "g3"]
+[Result "*"]
+
+1. c4 e5 *
+
+[Event "g4"]
+[Result "*"]
+
+1. Nf3 d5 *

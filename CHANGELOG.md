@@ -4,7 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### PGN collection recovery (P15) — 2026-10-29
+
+- Use the existing browser's column-one tag-prefix recovery boundary for streaming
+  imports too. A broken comment or variation rejects its own game instead of
+  silently merging or swallowing subsequent games. Indent literal tag-like
+  lines inside multiline comments; document this collection recovery policy.
+- Add malformed-comment/variation fixtures and check recovered game names and
+  exact moves in scanner and database tests. Parser checks and import recovery
+  checks pass; later valid games survive and no malformed game is stored.
+
 ### Database continuation browsing — 2026-10-29
+
+Commit: `216bdc4`.
 
 - Connect continuation-row double-clicks to the existing position adapter,
   miniboard/FEN update and position search. Use the stored canonical move while

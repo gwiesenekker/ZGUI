@@ -819,7 +819,9 @@ In the database window, right-click and choose **Import PGN** for chess or
 **Import PDN** for draughts. The progress view shows imported games, errors and
 duplicates, and allows the import to be stopped. An `.import.log` file is written
 beside the imported file. An invalid chess mainline or variation rejects that
-game; other valid games can still be imported. Draughts logs also record nonfatal
+game; other valid games can still be imported. Column-one tag-like lines are
+collection recovery boundaries even inside a damaged comment or variation;
+indent literal tag-like lines in multiline comments. Draughts logs also record nonfatal
 warnings for skipped malformed variations.
 
 Duplicate detection compares complete canonical game content, including comments

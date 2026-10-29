@@ -24,7 +24,7 @@ type TCancel=class
 end;
 procedure TCancel.Progress(Bytes,Total:Int64;Imported,Duplicates,Errors:Integer;var Cancel:Boolean);
 begin Cancel:=Imported>=1;end;
-var Name,Pgn:string;Db:TGameDatabase;Text:TStringList;Games:TList;P:TChessPosition;
+var Name,Pgn,Root:string;Db:TGameDatabase;Text:TStringList;Games:TList;P:TChessPosition;
  Cancel:TCancel;I,D,E,J:Integer;Raised:Boolean;
 procedure Clear;
 var J:Integer;
@@ -53,6 +53,13 @@ begin
   Check(Scalar(Name,'select count(*) from positions')=(I+2)*3,'Cancelled batch has complete position rows');
   Check(Scalar(Name,'select count(*) from positions p left join games g on g.id=p.game_id where g.id is null')=0,'No cancelled orphan positions');
   Check(Scalar(Name,'select summary_dirty from database_state where id=1')=0,'Cancelled import rebuilds summary');
+  Root:=GetEnvironmentVariable('GWDGUI_ROOT');if Root='' then Root:=GetCurrentDir;
+  Db.ImportFile(IncludeTrailingPathDelimiter(Root)+'tests/fixtures/chess-unclosed-comment.pgn',I,D,E);
+  Check((I=5) and (D=0) and (E=1),'Malformed comment rejects one game and imports following games');
+  Check(Scalar(Name,'select count(*) from games where event=''g2''')=0,'Malformed comment game is not stored');
+  Check(Scalar(Name,'select count(*) from games where event=''g3'' and moves_text=''c2c4 e7e5''')=1,'Following game keeps its own identity and moves');
+  Db.ImportFile(IncludeTrailingPathDelimiter(Root)+'tests/fixtures/chess-unclosed-variation.pgn',I,D,E);
+  Check((I=1) and (D=2) and (E=1),'Malformed variation preserves valid games including changed annotations');
   WriteLn('Chess database recovery checks passed');
  finally Clear;Cancel.Free;P.Free;Games.Free;Text.Free;Db.Free;DeleteFile(Pgn);DeleteFile(Name);end;
 end.

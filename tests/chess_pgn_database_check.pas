@@ -49,6 +49,7 @@ type TScanner=class
  Count,Errors,ProgressCalls,CancelAfter:Integer;
  LastBytes,Total:Int64;
  CancelAtStart,CancelOnBlock:Boolean;
+ Events,Moves:TStringList;
  procedure Game(const Text,ErrorText:string;BytesRead,TotalBytes:Int64;var Cancel:Boolean);
  procedure Progress(BytesRead,TotalBytes:Int64;var Cancel:Boolean);
 end;
@@ -57,7 +58,8 @@ var G:TChessPgnDatabaseGame;
 begin
  Inc(Count);Check(BytesRead>=LastBytes,'Game progress monotonic');LastBytes:=BytesRead;
  if ErrorText<>'' then Inc(Errors)
- else try G:=ReadChessPgnDatabaseGame(Text,V);G.Free;
+ else try G:=ReadChessPgnDatabaseGame(Text,V);
+  try Events.Add(GameFileTagValue(G.Tags,'Event',''));Moves.Add(G.Moves.CommaText);finally G.Free;end;
  except on E:EPgnSyntaxError do Inc(Errors);end;
  Cancel:=(CancelAfter>0) and (Count>=CancelAfter);
 end;
@@ -68,28 +70,36 @@ begin
  Cancel:=CancelAtStart or (CancelOnBlock and (BytesRead>=65536));
 end;
 procedure Scanning;
-var S:TScanner;R:TChessPgnReader;Name,Text:string;F:TStringStream;I:Integer;
+var S:TScanner;R:TChessPgnReader;Name,Text,Root:string;F:TStringStream;I:Integer;
  procedure Save(const Text:string);
  begin F:=TStringStream.Create(Text);try F.SaveToFile(Name);finally F.Free;end;end;
  procedure Run(Expected,Errors:Integer);
  begin
-  S.Count:=0;S.Errors:=0;S.LastBytes:=0;S.ProgressCalls:=0;
+  S.Count:=0;S.Errors:=0;S.LastBytes:=0;S.ProgressCalls:=0;S.Events.Clear;S.Moves.Clear;
   R.ScanFile(Name,@S.Game,@S.Progress);
   Check(S.Count=Expected,'Streaming entry count: '+IntToStr(S.Count));
   Check(S.Errors=Errors,'Streaming error count');
   Check(R.Entries.Count=0,'Streaming retains no entry list');
  end;
 begin
- S:=TScanner.Create;R:=TChessPgnReader.Create(V);Name:=GetTempFileName(GetTempDir,'zps');
+ S:=TScanner.Create;S.Events:=TStringList.Create;S.Moves:=TStringList.Create;R:=TChessPgnReader.Create(V);Name:=GetTempFileName(GetTempDir,'zps');
  try
   Save(#$EF#$BB#$BF+'% escaped *'+#10+'[Event "one"] 1.e4 e5 *'+#10+
    '[Event "bad"] 1.Ke5 *'+#10+'[Event "three"] 1.d4 d5 1/2-1/2');
   Run(3,1);Check(S.ProgressCalls>=2,'Start/end progress');
   S.CancelAfter:=1;Run(1,0);S.CancelAfter:=0;
   S.CancelAtStart:=True;Run(0,0);S.CancelAtStart:=False;
-  Save('[Event "one"] 1.e4 {unfinished'+#10+'[Event "two"] 1.d4 *');Run(1,1);
-  Save('[Event "one"] 1.e4 (1.d4'+#10+'[Event "two"] 1.c4 *');Run(1,1);
-  Save('[Event "one"] 1.e4 {literal'+#10+'[Event "not a header"]'+#10+'} e5 *');Run(1,0);
+  Save('[Event "one"] 1.e4 {unfinished'+#10+'[Event "two"] 1.d4 *');Run(2,1);
+  Save('[Event "one"] 1.e4 (1.d4'+#10+'[Event "two"] 1.c4 *');Run(2,1);
+  Save('[Event "one"] 1.e4 {literal'+#10+' [Event "not a header"]'+#10+'} e5 *');Run(1,0);
+  Root:=GetEnvironmentVariable('GWDGUI_ROOT');if Root='' then Root:=GetCurrentDir;
+  F:=TStringStream.Create('');
+  try F.LoadFromFile(IncludeTrailingPathDelimiter(Root)+'tests/fixtures/chess-unclosed-comment.pgn');Text:=F.DataString;finally F.Free;end;
+  Save(Text);Run(6,1);Check(S.Events.CommaText='g1,g3,g4,g5,g6','Broken comment loses only its own game');
+  Check(S.Moves[1]='c2c4,e7e5','Following game retains its own moves');
+  F:=TStringStream.Create('');
+  try F.LoadFromFile(IncludeTrailingPathDelimiter(Root)+'tests/fixtures/chess-unclosed-variation.pgn');Text:=F.DataString;finally F.Free;end;
+  Save(Text);Run(4,1);Check(S.Events.CommaText='g1,g3,g4','Broken variation loses only its own game');
   Save('1.e4 ;closing } brace'+#10+'e5 *'+#10+'1.d4 d5 *');Run(2,0);
   // Cancellation is checked before dispatching any part of a long game.
   S.CancelOnBlock:=True;
@@ -98,7 +108,7 @@ begin
   Save('1.e4 {'+StringOfChar('x',MaxPgnGameBytes)+'} *'+#10+'1.d4 d5 *');Run(2,1);
   Text:='';for I:=1 to 2000 do Text+='1.Nf3 Nf6 *'+#10;
   Save(Text);Run(2000,0);
- finally DeleteFile(Name);R.Free;S.Free;end;
+ finally DeleteFile(Name);R.Free;S.Events.Free;S.Moves.Free;S.Free;end;
 end;
 var I:Integer;Text,Root:string;F:TStringList;G:TChessPgnDatabaseGame;W:TStringList;Rejected:Boolean;
 begin
