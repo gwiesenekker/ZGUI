@@ -271,6 +271,7 @@ begin
   LBoardPanel.Parent := LSearchPanel;
   LBoardPanel.Align := alRight;
   LBoardPanel.Width := 220;
+  if FProfile.FileFormat=gffPgn then LBoardPanel.Width:=440;
   LBoardPanel.BevelOuter := bvNone;
   LBoardPanel.BorderSpacing.Left := 8;
 

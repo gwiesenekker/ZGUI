@@ -4,7 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Database FEN column width — 2026-10-29
+
+- Widen the chess database window's miniboard/FEN column from 220 to 440 pixels
+  so the complete starting FEN is visible at the default window size. Retain
+  the existing controls, window size and database behavior; draughts keeps its
+  previous width.
+- Adjust the existing GUI layout check for this requested difference; verify
+  that the full starting FEN fits and the continuation grid retains room for its
+  columns. Application build and focused database GUI checks pass.
+
 ### Chess database GUI integration — 2026-10-29
+
+Commit: `e52f274`.
 
 - Enable the chess database actions after the measured import and cross-format /
   recovery gates pass. Reuse the existing database window, board factory,

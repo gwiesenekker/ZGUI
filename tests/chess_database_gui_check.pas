@@ -1,12 +1,12 @@
 program chess_database_gui_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,StdCtrls,ExtCtrls,Menus,
- Grids,Classes,SysUtils,Types,uGamePosition,uChessPosition,uDraughtsPosition,
+ Grids,Graphics,Classes,SysUtils,Types,uGamePosition,uChessPosition,uDraughtsPosition,
  uChessBoardControl,uGameBoardControl,uDatabaseForm,uMainForm,uGuiDialogs,uPdnOpenDialog,
  uGameTree,uPreferences,uGameGuiProfile,uDraughtsPositionSetupForm;
 var Checks:Integer=0;V:TChessVariant;Main:TMainForm;F:TDatabaseForm;Browser:TPdnOpenDialog;
  Games,Results:TStringGrid;Board:TGameBoardControl;FenEdit:TEdit;Data:TStringList;
- Name,DbName,Before:string;I:Integer;RootId:Int64;Setup:TPositionSetupForm;SetupFen:TEdit;OwnedDatabase:TDatabaseForm;Bounds:array of TRect;
+ Name,DbName,Before:string;I,ColumnGrowth:Integer;RootId:Int64;Setup:TPositionSetupForm;SetupFen:TEdit;OwnedDatabase:TDatabaseForm;Bounds:array of TRect;C:TControl;TextCanvas:TControlCanvas;
 procedure Check(B:Boolean;const Text:string);
 begin Inc(Checks);if not B then raise Exception.Create(Text);end;
 procedure Button(Form:TForm;const Text:string);
@@ -31,14 +31,25 @@ begin
  V:=TChessVariant.Create;Name:=GetTempFileName(GetTempDir,'zdbgui');DbName:=Name+'.db';Data:=TStringList.Create;
  Main:=nil;F:=nil;
  try
-  // Same control geometry in the two existing dialog compositions.
+  // Same control geometry except the explicitly requested wider chess FEN column.
   RegisterDefaultGameVariant(DraughtsVariant);F:=TDatabaseForm.Create(nil);F.Show;Pump;
   SetLength(Bounds,F.ComponentCount);
   for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then Bounds[I]:=TControl(F.Components[I]).BoundsRect;
   F.Free;F:=nil;RegisterDefaultGameVariant(V);F:=TDatabaseForm.Create(nil);F.Show;Pump;
   Check(F.ComponentCount=Length(Bounds),'Existing component count');
-  for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then
-   Check(EqualRect(Bounds[I],TControl(F.Components[I]).BoundsRect),'Existing component bounds '+IntToStr(I));
+  Board:=nil;
+  for I:=0 to F.ComponentCount-1 do if F.Components[I] is TGameBoardControl then
+   Board:=TGameBoardControl(F.Components[I]);
+  ColumnGrowth:=0;
+  for I:=0 to F.ComponentCount-1 do if F.Components[I]=Board.Parent then
+   ColumnGrowth:=Board.Parent.Width-(Bounds[I].Right-Bounds[I].Left);
+  for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then begin
+   C:=TControl(F.Components[I]);
+   if C=Board.Parent then Dec(Bounds[I].Left,ColumnGrowth)
+   else if C.Parent=Board.Parent then Inc(Bounds[I].Right,ColumnGrowth)
+   else if (C is TStringGrid) and (TStringGrid(C).ColCount=5) then Dec(Bounds[I].Right,ColumnGrowth);
+   Check(EqualRect(Bounds[I],C.BoundsRect),'Only requested column width affects bounds '+IntToStr(I));
+  end;
   Board:=nil;Games:=nil;Results:=nil;FenEdit:=nil;
   for I:=0 to F.ComponentCount-1 do begin
    if F.Components[I] is TGameBoardControl then Board:=TGameBoardControl(F.Components[I]);
@@ -47,6 +58,12 @@ begin
    if (F.Components[I] is TEdit) and (TEdit(F.Components[I]).Text=ChessStartingFEN) then FenEdit:=TEdit(F.Components[I]);
   end;
   Check(Board is TChessBoardControl,'Existing board factory supplies chess');Check(FenEdit<>nil,'Existing FEN field supplies chess');
+  TextCanvas:=TControlCanvas.Create;
+  try
+   TextCanvas.Control:=FenEdit;TextCanvas.Font.Assign(FenEdit.Font);
+   Check(TextCanvas.TextWidth(FenEdit.Text)+16<=FenEdit.ClientWidth,Format('Complete starting FEN fits: text=%d, client=%d',[TextCanvas.TextWidth(FenEdit.Text),FenEdit.ClientWidth]));
+  finally TextCanvas.Free;end;
+  Check(Results.ClientWidth>=420,'Default continuation grid retains room for its columns');
   Check(Menu(F,'Import PGN...')<>nil,'Existing import action uses PGN');
   Data.Text:='[Event "First"] 1.e4 {note} e5 (1...c5 $5) *'+#10+'[Event "Second"] 1.d4 d5 *';Data.SaveToFile(Name);
   F.CreateDatabase(DbName);F.ImportPdnFile(Name);Pump;
