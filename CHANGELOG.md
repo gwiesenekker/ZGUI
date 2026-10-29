@@ -4,7 +4,17 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reviewed FEN error wording (U18) — 2026-10-29
+
+- Raise the specific reason from the chess FEN validator, allowing existing
+  callers to supply their single "Invalid FEN:" prefix. Draughts wording and
+  accepted chess positions are unchanged.
+- Validation: application builds, full headless regression and all eight GTK
+  GUI suites pass, including the 460 rules checks and 207 setup checks.
+
 ### Chess SAN parsing and revised database design — 2026-10-29
+
+Commit: `a158e9e`.
 
 - Filter legal SAN candidates by piece and destination before using the existing
   formatter for final matching. Skip check/mate suffix calculation when input

@@ -384,7 +384,7 @@ end;
 
 procedure FenError(const Reason: string);
 begin
-  raise EConvertError.Create('Invalid chess FEN: '+Reason);
+  raise EConvertError.Create(Reason);
 end;
 
 function Fields(const Text: string): TStringArray;

@@ -73,7 +73,7 @@ var P:TChessPosition; Before,Move,MessageText:string; Rejected:Boolean;
     try P.LoadFromFEN(Text);except on E:EConvertError do
       begin Rejected:=True;MessageText:=E.Message;end;end;
     Check(Rejected,'Reject FEN: '+Text);
-    Check(Pos('Invalid chess FEN: ',MessageText)=1,'FEN diagnostic prefix');
+    Check(Pos('Invalid',MessageText)=0,'Caller supplies FEN diagnostic prefix');
     Check(Pos(Reason,MessageText)>0,'Expected '+Reason+'; got '+MessageText);
     Check(P.ToFEN=Before,'Diagnostic failure preserves position');
     Check(P.TryParseMove('e4',Move) and (Move='e2e4'),'Diagnostic failure preserves cached moves');
