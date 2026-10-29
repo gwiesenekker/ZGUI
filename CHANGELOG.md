@@ -4,6 +4,16 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Chess opening database test collection — 2026-10-29
+
+- Download the CC0 Lichess opening catalogue at commit
+  `e76b8b4ec5c8aeeba41dac6caf4a60b938f652db` into `testdata/openings`.
+  Include its five original tables, licence, provenance and checksums, plus a
+  reproducible PGN conversion containing 3,865 named lines across A00–E99.
+- Validate every PGN entry through the existing chess reader/rules interfaces
+  and independently with python-chess: 37,700 legal plies. All results are
+  unfinished; repeated positions and transpositions are intentional.
+
 ### Database preflight protection (C4) — 2026-10-29
 
 - Inspect existing databases through a read-only connection before closing the
