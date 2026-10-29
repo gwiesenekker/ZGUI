@@ -304,6 +304,7 @@ begin
   if AIndex>=ScoreColorBase then begin
     LButton.Name:='ScoreColorChoose'+IntToStr(AIndex-ScoreColorBase);
     FSwatches[AIndex].Name:='ScoreColorSwatch'+IntToStr(AIndex-ScoreColorBase);
+    FSwatches[AIndex].Caption:='';
   end;
   LButton.Tag := AIndex;
   LButton.OnClick := @ChooseColorClick;

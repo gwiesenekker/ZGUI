@@ -39,6 +39,7 @@ type
     FFileName: string;
     FTransaction: TSQLTransaction;
     procedure InitializeDatabase(const AFileName: string);
+    procedure PreflightDatabase(const AFileName:string);
     procedure ClearObjectList(AList: TList);
     procedure CommitActiveTransaction;
     function ContinuationSummaryAvailable: Boolean;
@@ -963,10 +964,45 @@ begin
   end;
 end;
 
+procedure TGameDatabase.PreflightDatabase(const AFileName:string);
+var C:TSQLite3Connection;T:TSQLTransaction;Q:TSQLQuery;Stream:TFileStream;
+ Version:Integer;
+ procedure RequireColumns(const TableName:string;const Names:array of string);
+ var Found:TStringList;I:Integer;
+ begin
+  Found:=TStringList.Create;
+  try
+   Q.Close;Q.SQL.Text:='pragma table_info('+TableName+')';Q.Open;
+   while not Q.EOF do begin Found.Add(Q.FieldByName('name').AsString);Q.Next;end;
+   Q.Close;
+   for I:=0 to High(Names) do if Found.IndexOf(Names[I])<0 then
+    raise EInvalidOperation.Create('Not a supported draughts database: missing '+TableName+'.'+Names[I]);
+  finally Found.Free;end;
+ end;
+begin
+ // Inspect before closing the current database or running any schema upgrades.
+ Stream:=TFileStream.Create(AFileName,fmOpenRead or fmShareDenyNone);
+ try if Stream.Size=0 then Exit;finally Stream.Free;end;
+ C:=TSQLite3Connection.Create(nil);T:=TSQLTransaction.Create(nil);Q:=TSQLQuery.Create(nil);
+ try
+  C.OpenFlags:=[sofReadOnly];C.DatabaseName:=AFileName;C.Transaction:=T;
+  Q.DataBase:=C;Q.Transaction:=T;C.Connected:=True;T.StartTransaction;
+  Q.SQL.Text:='pragma user_version';Q.Open;Version:=Q.Fields[0].AsInteger;Q.Close;
+  if Version>6 then raise EInvalidOperation.Create('Unsupported database schema version');
+  RequireColumns('games',['game_hash_lo','game_hash_hi','white','black','event','result',
+   'starting_fen','moves_text','annotations_text','ply_count']);
+  RequireColumns('positions',['game_id','ply','position_key_lo','position_key_hi',
+   'side_to_move','next_move','result']);
+ finally
+  Q.Free;if T.Active then T.Rollback;C.Close;T.Free;C.Free;
+ end;
+end;
+
 procedure TGameDatabase.OpenDatabase(const AFileName: string);
 begin
   if not FileExists(AFileName) then
     raise EInvalidOperation.Create('Database file does not exist');
+  PreflightDatabase(AFileName);
   InitializeDatabase(AFileName);
 end;
 

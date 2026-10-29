@@ -149,6 +149,8 @@ begin
   D.OnAccepted:=@R.Preferences;D.StartEdit(P);
   Check(TTabSheet(D.FindComponent('ScoreHistoryTab')).Caption='Score history','Dedicated preferences tab');
   for C:=Low(C) to High(C) do begin
+   Check(TPanel(D.FindComponent('ScoreColorSwatch'+IntToStr(Ord(C)))).Caption='',
+    'Score-history swatch contains colour only');
    D.Chosen:=RGBToColor(100+Ord(C),80,90);D.AcceptChoice:=True;
    TButton(D.FindComponent('ScoreColorChoose'+IntToStr(Ord(C)))).Click;
   end;

@@ -4,6 +4,32 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Database preflight protection (C4) — 2026-10-29
+
+- Inspect existing databases through a read-only connection before closing the
+  current database or running migrations. Reject foreign schemas without
+  modifying their bytes; retain supported draughts upgrades and explicit creation.
+- Add a focused foreign-file/current-connection preservation check.
+
+### Score-history swatch captions — 2026-10-29
+
+- Clear the score-history swatch panel captions after assigning their control
+  names, so the colour squares display no text. Preserve their size and colours.
+
+### Chess database design review — 2026-10-29
+
+- Prepare a proposal against `a48eb28` for Claude: reuse the existing database
+  window, SQLite/import worker, queries and recovery machinery, with explicit
+  chess schema/format boundaries, exact position keys, existing PGN adapters
+  and preserved GUI layout. Retain the legacy draughts schema and behavior.
+- Record intermittent setup repaint QA separately. An isolated input/paint
+  probe did not reproduce the delay; no speculative application fix added.
+- Capture the exact Clear/black-pawn/a7/b7 reproduction and delayed visible FEN
+  observation. Native mouse probes also remain inconclusive; keep the issue open.
+- User confirms the delay occurs through RustDesk and not locally on the laptop;
+  classify it as remote-session-specific without changing application behavior.
+- Documentation only; shared database and additional repaint changes await review.
+
 ### Reviewed chess setup and score-history preferences — 2026-10-29
 
 Commit: `abf927e`.
