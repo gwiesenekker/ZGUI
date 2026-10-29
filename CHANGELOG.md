@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Indefinite live UCI annotation — 2026-10-29
 
+Commit: `64c5eeb`.
+
 - Correct live UCI annotation to send go infinite and exclude that search from
   the finite-search watchdog. The previous adapter incorrectly applied the
   Auto Play time allowance to live annotation, causing Arasan to stop with
