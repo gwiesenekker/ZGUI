@@ -216,8 +216,8 @@ Database and tournament files are checked before changing contexts. New database
 ask for their game. Each document saves in its own format. Closing ZGUI offers to
 save both standalone documents and tournament records; Cancel leaves them open.
 Finish or stop a database import before replacing its window or closing ZGUI.
-Board colours and evaluation ranges are per game; fonts, notation and score-history
-colours remain shared. ZGUI restores the last selected game on startup.
+Board colours, notation fonts/styles, evaluation ranges and score-history colours
+are independent for chess and draughts. ZGUI restores the last selected game on startup.
 
 ## 1. Getting started
 
@@ -672,8 +672,9 @@ Choose **File > Preferences > Score history** to change the eight colours,
 including missing-score marks and the selected-move line. These settings apply
 to both the main graph and its popout, and can help distinguish scores when the
 default red/green colours are difficult to tell apart. **Save** applies and saves
-the choices; **Close** discards unsaved changes. **Defaults** restores all
-preferences in the dialog, not just this tab; use Save to keep them.
+the choices for every edited game section. **Close** asks before discarding unsaved
+changes. **Chess defaults** or **Draughts defaults** restores all preferences for
+the selected game, not just this tab; use Save to keep them.
 
 The evaluation bar uses the displayed game position's score, including the root
 and real variations, preferring its annotator score and then its playing-engine
@@ -1012,7 +1013,10 @@ navigation also replaces any position you explored inside the database window.
 
 ## 10. Preferences
 
-Choose **File > Preferences**.
+Choose **File > Preferences**. Select **Chess** or **Draughts** at the top to edit
+that game's appearance. The existing pages are reused for each game; switching
+sections keeps both drafts and does not change the main board's selected game.
+The dialog initially selects the game currently shown in the main window.
 
 The appearance settings control:
 
@@ -1051,9 +1055,16 @@ these settings affects only presentation: move/variation/PV clicks, Left/Right n
 saved PDN keep their existing meaning. Colours and styles apply when you choose
 **Save**; editing the dialog or choosing **Defaults** alone does not apply them.
 
-Use **Defaults** to restore default values, **Save** to apply and persist the
-settings, or **Close** to leave without saving changes. Preferences are stored
-in `prefs.json` beside the ZGUI executable.
+Use **Chess defaults** or **Draughts defaults** to reset only the selected game's
+draft. **Save** applies and persists every changed game section together. Settings
+for an inactive game take effect when you select that game in the main window.
+**Close**, including the window's close button, asks **Discard / Cancel** when
+there are unsaved changes in either section; Cancel keeps both drafts.
+
+Preferences are stored in `prefs.json` beside the ZGUI executable, under
+`game_preferences.chess` and `game_preferences.draughts`. Existing root settings
+remain as fallbacks for older files and are preserved when saving a game section.
+Board orientation remains shared.
 
 ## 11. Common problems
 

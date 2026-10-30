@@ -13,8 +13,16 @@ type
   TPreferencesAcceptedEvent = procedure(Sender: TObject;
     const APreferences: TGuiPreferences) of object;
 
+  TGamePreferencesAcceptedEvent = procedure(Sender:TObject;
+    const Edits:TGamePreferencesEdits) of object;
+
   TPreferencesForm = class(TForm)
   private
+    FGameSelector:TComboBox;
+    FDefaultsButton:TButton;
+    FGameDrafts,FOriginals:TGamePreferencesEdits;
+    FSelectedGame:Integer;
+    FOnGamesAccepted:TGamePreferencesAcceptedEvent;
     FColorDialog: TColorDialog;
     FFontDialog: TFontDialog;
     FNotationFontLabel: TLabel;
@@ -25,6 +33,10 @@ type
     FSwatches: array[0..ScoreColorBase+Ord(High(TScoreHistoryColor))] of TPanel;
     FNotationBold, FNotationItalic: array[TNotationStyle] of TCheckBox;
     FNotationSamples: array[TNotationStyle] of TLabel;
+    procedure CaptureDraft;
+    procedure GameChanged(Sender:TObject);
+    procedure CloseQueryHandler(Sender:TObject;var CanClose:Boolean);
+    function HasUnsavedChanges:Boolean;
     procedure ChooseNotationFontClick(Sender: TObject);
     procedure UpdateNotationFontLabel;
     procedure AddNotationRow(AParent: TWinControl; AStyle: TNotationStyle; ATop: Integer);
@@ -45,6 +57,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure StartEdit(const APreferences: TGuiPreferences);
+    procedure StartGameEdits(const Edits:TGamePreferencesEdits;const ActiveGameId:string);
+    property OnGamesAccepted:TGamePreferencesAcceptedEvent read FOnGamesAccepted write FOnGamesAccepted;
     property OnAccepted: TPreferencesAcceptedEvent read FOnAccepted
       write FOnAccepted;
   end;
@@ -52,7 +66,7 @@ type
 implementation
 
 uses
-  SysUtils;
+  SysUtils, Math, uGuiDialogs;
 
 function ScoreColorCaption(C:TScoreHistoryColor):string;
 const Names:array[TScoreHistoryColor] of string=(
@@ -82,6 +96,8 @@ var
 begin
   inherited Create(AOwner);
   Caption := 'Preferences';
+  FSelectedGame:=-1;
+  OnCloseQuery:=@CloseQueryHandler;
   Position := poDesigned;
   BorderStyle := bsSizeable;
   Width := 520;
@@ -99,6 +115,14 @@ begin
   LButtonPanel.Height := 52;
   LButtonPanel.BevelOuter := bvNone;
   LButtonPanel.BorderSpacing.Around := 8;
+
+  FGameSelector:=TComboBox.Create(Self);
+  FGameSelector.Parent:=Self;FGameSelector.Align:=alTop;
+  FGameSelector.Style:=csDropDownList;FGameSelector.Name:='PreferencesGameSelector';
+  FGameSelector.BorderSpacing.Around:=8;
+  FGameSelector.OnChange:=@GameChanged;FGameSelector.Visible:=False;
+  FGameSelector.Constraints.MinHeight:=MeasureGuiText('Chess Draughts',Font).cy+12;
+  Constraints.MinWidth:=Max(Constraints.MinWidth,MeasureGuiText('Draughts defaults',Font).cx+360);
 
   LPageControl := TPageControl.Create(Self);
   LPageControl.Parent := Self;
@@ -197,6 +221,7 @@ begin
   LDefaultsButton.Width := 96;
   LDefaultsButton.Caption := 'Defaults'; LDefaultsButton.Name := 'PreferencesDefaults';
   LDefaultsButton.OnClick := @DefaultsClick;
+  FDefaultsButton:=LDefaultsButton;
 
   LCancelButton := TButton.Create(Self);
   LCancelButton.Parent := LButtonPanel;
@@ -396,9 +421,12 @@ begin
 end;
 
 procedure TPreferencesForm.DefaultsClick(Sender: TObject);
-begin StartEdit(DefaultGuiPreferences); end;
+begin
+  // StartEdit fills the reusable controls; it does not replace the edit session.
+  StartEdit(DefaultGuiPreferences);
+end;
 
-procedure TPreferencesForm.ApplyClick(Sender: TObject);
+procedure TPreferencesForm.CaptureDraft;
 var
   MaxScore: Double;
   S: TNotationStyle;
@@ -419,13 +447,75 @@ begin
     else
       FPreferences.EvaluationScale := ssLogarithmic;
   end;
-  if Assigned(FOnAccepted) then
-    FOnAccepted(Self, FPreferences);
+  if FSelectedGame>=0 then FGameDrafts[FSelectedGame].Preferences:=FPreferences;
+end;
+
+procedure TPreferencesForm.ApplyClick(Sender:TObject);
+var Edits:TGamePreferencesEdits;I,N:Integer;
+begin
+  CaptureDraft;
+  if Length(FGameDrafts)=0 then begin
+    if Assigned(FOnAccepted) then FOnAccepted(Self,FPreferences);
+    Exit;
+  end;
+  Edits:=nil;
+  for I:=0 to High(FGameDrafts) do
+    if not SameGuiPreferences(FGameDrafts[I].Preferences,FOriginals[I].Preferences) then begin
+      N:=Length(Edits);SetLength(Edits,N+1);Edits[N]:=FGameDrafts[I];
+    end;
+  if (Length(Edits)>0) and Assigned(FOnGamesAccepted) then begin
+    FOnGamesAccepted(Self,Edits);
+    FOriginals:=Copy(FGameDrafts,0,Length(FGameDrafts));
+  end;
+end;
+
+procedure TPreferencesForm.StartGameEdits(const Edits:TGamePreferencesEdits;const ActiveGameId:string);
+var I:Integer;
+begin
+  FGameDrafts:=Copy(Edits,0,Length(Edits));FOriginals:=Copy(Edits,0,Length(Edits));
+  FSelectedGame:=-1;FGameSelector.Items.Clear;
+  for I:=0 to High(Edits) do begin
+    if Edits[I].GameId='chess' then FGameSelector.Items.Add('Chess')
+    else if Edits[I].GameId='draughts' then FGameSelector.Items.Add('Draughts')
+    else FGameSelector.Items.Add(Edits[I].GameId);
+    if Edits[I].GameId=ActiveGameId then FGameSelector.ItemIndex:=I;
+  end;
+  FGameSelector.Visible:=Length(Edits)>0;
+  if FGameSelector.ItemIndex<0 then FGameSelector.ItemIndex:=0;
+  GameChanged(FGameSelector);
+end;
+
+procedure TPreferencesForm.GameChanged(Sender:TObject);
+begin
+  if FSelectedGame>=0 then CaptureDraft;
+  FSelectedGame:=FGameSelector.ItemIndex;
+  if (FSelectedGame<0) or (FSelectedGame>High(FGameDrafts)) then Exit;
+  StartEdit(FGameDrafts[FSelectedGame].Preferences);
+  FDefaultsButton.Caption:=FGameSelector.Text+' defaults';
+  FDefaultsButton.Width:=MeasureGuiText(FDefaultsButton.Caption,FDefaultsButton.Font).cx+24;
+end;
+
+function TPreferencesForm.HasUnsavedChanges:Boolean;
+var I:Integer;
+begin
+  CaptureDraft;Result:=False;
+  for I:=0 to High(FGameDrafts) do
+    if not SameGuiPreferences(FGameDrafts[I].Preferences,FOriginals[I].Preferences) then Exit(True);
+end;
+
+procedure TPreferencesForm.CloseQueryHandler(Sender:TObject;var CanClose:Boolean);
+begin
+  CanClose:=not HasUnsavedChanges;
+  if not CanClose then CanClose:=ShowGuiConfirmationDialog(Self,'Preferences',
+    'Discard unsaved preferences for all games?','Discard','',mrCancel,True)=mrYes;
+  if CanClose then begin
+    FGameDrafts:=nil;FOriginals:=nil;FSelectedGame:=-1;
+  end;
 end;
 
 procedure TPreferencesForm.CancelClick(Sender: TObject);
 begin
-  Hide;
+  Close;
 end;
 
 end.

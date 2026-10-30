@@ -445,8 +445,7 @@ type
     procedure FileGameSelected(Sender: TObject; Entry: TGameFileEntry);
     function PlayerNameOrFallback(const AName, AFallback: string): string;
     function PostGuiEvent(AEvent: TObject): Boolean;
-    procedure PreferencesAccepted(Sender: TObject;
-      const APreferences: TGuiPreferences);
+    procedure GamePreferencesAccepted(Sender:TObject;const Edits:TGamePreferencesEdits);
     procedure PreferencesClick(Sender: TObject);
     procedure PlayHumanMove(const AMove: string;
       ASource: TGameTreeMoveSource = gmsHuman);
@@ -3279,24 +3278,35 @@ begin
   end;
 end;
 
-procedure TMainForm.PreferencesAccepted(Sender: TObject;
-  const APreferences: TGuiPreferences);
+procedure TMainForm.GamePreferencesAccepted(Sender:TObject;const Edits:TGamePreferencesEdits);
+var I,J:Integer;C:TGameUiContext;
 begin
-  FPreferences := APreferences;
-  if RegisteredGameCount>1 then SaveGuiPreferences(FPreferences,GameVariantId(CurrentVariant))
-  else SaveGuiPreferences(FPreferences);
-  ApplyPreferences;
+  SaveGamePreferences(Edits);
+  for I:=0 to High(Edits) do
+    for J:=0 to FGameContexts.Count-1 do begin
+      C:=TGameUiContext(FGameContexts[J]);
+      if GameVariantId(C.Variant)<>Edits[I].GameId then Continue;
+      C.FPreferences:=Edits[I].Preferences;
+      if C=FActiveContext then begin FPreferences:=C.FPreferences;ApplyPreferences;end;
+    end;
 end;
 
 procedure TMainForm.PreferencesClick(Sender: TObject);
+var Edits:TGamePreferencesEdits;I:Integer;C:TGameUiContext;
 begin
-  if FPreferencesForm = nil then
-  begin
-    FPreferencesForm := TPreferencesForm.Create(Self);
-    FPreferencesForm.OnAccepted := @PreferencesAccepted;
+  if FPreferencesForm=nil then begin
+    FPreferencesForm:=TPreferencesForm.Create(Self);
+    FPreferencesForm.OnGamesAccepted:=@GamePreferencesAccepted;
   end;
-  FPreferencesForm.StartEdit(FPreferences);
-  ShowFormCenteredOnOwner(FPreferencesForm, Self);
+  if FPreferencesForm.Visible then begin FPreferencesForm.BringToFront;Exit;end;
+  CaptureGameContext;
+  SetLength(Edits,FGameContexts.Count);
+  for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);Edits[I].GameId:=GameVariantId(C.Variant);
+    Edits[I].Preferences:=C.FPreferences;
+  end;
+  FPreferencesForm.StartGameEdits(Edits,GameVariantId(CurrentVariant));
+  ShowFormCenteredOnOwner(FPreferencesForm,Self);
 end;
 
 function TMainForm.RecordAnalyzerSnapshotInGameTree(ASnapshot: TPvSnapshot): TGameTree;

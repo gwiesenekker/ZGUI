@@ -80,3 +80,8 @@ echo "==> multi_game_gui_check (GTK2, concurrent chess/draughts contexts)"
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/multi" \
   "$ROOT_DIR/tests/multi_game_gui_check.lpi" > "$OUT_DIR/multi-build.log" 2>&1
 "$OUT_DIR/multi/multi_game_gui_check"
+
+echo "==> game_preferences_check (GTK2, per-game appearance and U22)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/game-prefs" \
+  "$ROOT_DIR/tests/game_preferences_check.lpi" > "$OUT_DIR/game-prefs-build.log" 2>&1
+"$OUT_DIR/game-prefs/game_preferences_check"

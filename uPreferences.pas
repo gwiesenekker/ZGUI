@@ -37,6 +37,14 @@ function PreferencesJsonFileName: string;
 function DefaultGuiPreferences: TGuiPreferences;
 procedure LoadGuiPreferences(var APrefs: TGuiPreferences;const GameId:string='');
 procedure SaveGuiPreferences(const APrefs: TGuiPreferences;const GameId:string='');
+type
+  TGamePreferencesEdit = record
+    GameId: string;
+    Preferences: TGuiPreferences;
+  end;
+  TGamePreferencesEdits = array of TGamePreferencesEdit;
+function SameGuiPreferences(const A,B:TGuiPreferences):Boolean;
+procedure SaveGamePreferences(const Edits: TGamePreferencesEdits);
 function LastGamePreference:string;
 procedure RememberGamePreference(const GameId:string);
 
@@ -241,6 +249,20 @@ begin
           Value:=TJSONObject(Value).Find(GameId);
           if (Value<>nil) and (Value.JSONType=jtObject) then begin
             Layer:=TJSONObject(Value);
+            Value := Layer.Find('notation_font_name');
+            if (Value<>nil) and (Value.JSONType=jtString) and (Trim(Value.AsString)<>'') then
+              APrefs.NotationFontName:=Trim(Value.AsString);
+            Value:=Layer.Find('notation_font_size');
+            if (Value<>nil) and (Value.JSONType=jtNumber) and
+              TryStrToInt(Value.AsJSON,FontSize) and (FontSize>0) then APrefs.NotationFontSize:=FontSize;
+            for S:=Low(S) to High(S) do begin
+              Key:='notation_'+IntToStr(Ord(S));
+              LoadColor(Layer,Key+'_color',APrefs.NotationStyles[S].Color);
+              LoadBoolean(Layer,Key+'_bold',APrefs.NotationStyles[S].Bold);
+              LoadBoolean(Layer,Key+'_italic',APrefs.NotationStyles[S].Italic);
+            end;
+            for C:=Low(C) to High(C) do
+              LoadColor(Layer,ScoreColorKeys[C],APrefs.ScoreHistoryColors[C]);
             LoadColor(Layer,'main_board_light',APrefs.MainBoardLightColor);
             LoadColor(Layer,'main_board_dark',APrefs.MainBoardDarkColor);
             LoadColor(Layer,'analysis_board_light',APrefs.AnalysisBoardLightColor);
@@ -263,69 +285,81 @@ begin
   end;
 end;
 
-procedure SaveGuiPreferences(const APrefs: TGuiPreferences;const GameId:string);
-var
-  Data,Old,Games,Layer:TJSONObject;
-  Legacy:TGuiPreferences;
-  Value:TJSONData;
-  Lines: TStringList;
-  C: TScoreHistoryColor;
-  S: TNotationStyle; Key: string;
+function PreferencesObject(const P:TGuiPreferences):TJSONObject;
+var S:TNotationStyle;C:TScoreHistoryColor;Key:string;
 begin
-  if GameId<>'' then LoadGuiPreferences(Legacy) else Legacy:=APrefs;
-  Old:=ReadPreferenceObject;
-  Data := TJSONObject.Create;
-  Lines := TStringList.Create;
+  Result:=TJSONObject.Create;
+  for S:=Low(S) to High(S) do begin
+    Key:='notation_'+IntToStr(Ord(S));
+    Result.Add(Key+'_color',ColorToJsonText(P.NotationStyles[S].Color));
+    Result.Add(Key+'_bold',P.NotationStyles[S].Bold);
+    Result.Add(Key+'_italic',P.NotationStyles[S].Italic);
+  end;
+  Result.Add('notation_font_name',P.NotationFontName);
+  Result.Add('notation_font_size',P.NotationFontSize);
+  for C:=Low(C) to High(C) do Result.Add(ScoreColorKeys[C],ColorToJsonText(P.ScoreHistoryColors[C]));
+  Result.Add('main_board_light',ColorToJsonText(P.MainBoardLightColor));
+  Result.Add('main_board_dark',ColorToJsonText(P.MainBoardDarkColor));
+  Result.Add('analysis_board_light',ColorToJsonText(P.AnalysisBoardLightColor));
+  Result.Add('analysis_board_dark',ColorToJsonText(P.AnalysisBoardDarkColor));
+  Result.Add('target_square',ColorToJsonText(P.TargetSquareColor));
+  Result.Add('last_move',ColorToJsonText(P.LastMoveColor));
+  Result.Add('pv_move',ColorToJsonText(P.PvMoveColor));
+  Result.Add('hint_move',ColorToJsonText(P.HintMoveColor));
+  Result.Add('evaluation_max_score',P.EvaluationMaxScore);
+  if P.EvaluationScale=ssLinear then Result.Add('evaluation_scale','linear')
+  else Result.Add('evaluation_scale','logarithmic');
+end;
+
+function SameGuiPreferences(const A,B:TGuiPreferences):Boolean;
+var X,Y:TJSONObject;
+begin
+  X:=PreferencesObject(A);Y:=PreferencesObject(B);
+  try Result:=X.AsJSON=Y.AsJSON;finally X.Free;Y.Free;end;
+end;
+
+procedure MergePreferences(Target:TJSONObject;const P:TGuiPreferences);
+var Values:TJSONObject;I:Integer;Key:string;
+begin
+  Values:=PreferencesObject(P);
   try
-    for S := Low(S) to High(S) do
-    begin
-      Key := 'notation_' + IntToStr(Ord(S));
-      Data.Add(Key+'_color', ColorToJsonText(APrefs.NotationStyles[S].Color));
-      Data.Add(Key+'_bold', APrefs.NotationStyles[S].Bold);
-      Data.Add(Key+'_italic', APrefs.NotationStyles[S].Italic);
+    for I:=0 to Values.Count-1 do begin
+      Key:=Values.Names[I];Target.Delete(Key);Target.Add(Key,Values.Items[I].Clone);
     end;
-    Data.Add('notation_font_name', APrefs.NotationFontName);
-    Data.Add('notation_font_size', APrefs.NotationFontSize);
-    for C:=Low(C) to High(C) do
-      Data.Add(ScoreColorKeys[C],ColorToJsonText(APrefs.ScoreHistoryColors[C]));
-    Data.Add('main_board_light', ColorToJsonText(Legacy.MainBoardLightColor));
-    Data.Add('main_board_dark', ColorToJsonText(Legacy.MainBoardDarkColor));
-    Data.Add('analysis_board_light',
-      ColorToJsonText(Legacy.AnalysisBoardLightColor));
-    Data.Add('analysis_board_dark',
-      ColorToJsonText(Legacy.AnalysisBoardDarkColor));
-    Data.Add('target_square', ColorToJsonText(Legacy.TargetSquareColor));
-    Data.Add('last_move', ColorToJsonText(Legacy.LastMoveColor));
-    Data.Add('pv_move', ColorToJsonText(Legacy.PvMoveColor));
-    Data.Add('hint_move', ColorToJsonText(Legacy.HintMoveColor));
-    Data.Add('evaluation_max_score', Legacy.EvaluationMaxScore);
-    if Legacy.EvaluationScale = ssLinear then
-      Data.Add('evaluation_scale', 'linear')
-    else
-      Data.Add('evaluation_scale', 'logarithmic');
-    Value:=Old.Find('game_preferences');
-    if (Value<>nil) and (Value.JSONType=jtObject) then Games:=TJSONObject(Value.Clone) else Games:=TJSONObject.Create;
-    if GameId<>'' then begin
-      Games.Delete(GameId);Layer:=TJSONObject.Create;
-      Layer.Add('main_board_light',ColorToJsonText(APrefs.MainBoardLightColor));
-      Layer.Add('main_board_dark',ColorToJsonText(APrefs.MainBoardDarkColor));
-      Layer.Add('analysis_board_light',ColorToJsonText(APrefs.AnalysisBoardLightColor));
-      Layer.Add('analysis_board_dark',ColorToJsonText(APrefs.AnalysisBoardDarkColor));
-      Layer.Add('target_square',ColorToJsonText(APrefs.TargetSquareColor));
-      Layer.Add('last_move',ColorToJsonText(APrefs.LastMoveColor));
-      Layer.Add('pv_move',ColorToJsonText(APrefs.PvMoveColor));
-      Layer.Add('hint_move',ColorToJsonText(APrefs.HintMoveColor));
-      Layer.Add('evaluation_max_score',APrefs.EvaluationMaxScore);
-      if APrefs.EvaluationScale=ssLinear then Layer.Add('evaluation_scale','linear') else Layer.Add('evaluation_scale','logarithmic');
-      Games.Add(GameId,Layer);
+  finally Values.Free;end;
+end;
+
+procedure SaveGamePreferences(const Edits:TGamePreferencesEdits);
+var Data,Games,Layer:TJSONObject;Value:TJSONData;I:Integer;
+begin
+  if Length(Edits)=0 then Exit;
+  Data:=ReadPreferenceObject;
+  try
+    Value:=Data.Find('game_preferences');
+    if (Value<>nil) and (Value.JSONType=jtObject) then Games:=TJSONObject(Value)
+    else begin Data.Delete('game_preferences');Games:=TJSONObject.Create;Data.Add('game_preferences',Games);end;
+    for I:=0 to High(Edits) do begin
+      if Trim(Edits[I].GameId)='' then raise EConvertError.Create('Missing preferences game identity');
+      Value:=Games.Find(Edits[I].GameId);
+      if (Value<>nil) and (Value.JSONType=jtObject) then Layer:=TJSONObject(Value)
+      else begin Games.Delete(Edits[I].GameId);Layer:=TJSONObject.Create;Games.Add(Edits[I].GameId,Layer);end;
+      MergePreferences(Layer,Edits[I].Preferences);
     end;
-    Data.Add('game_preferences',Games);
-    Value:=Old.Find('last_game');if Value<>nil then Data.Add('last_game',Value.Clone);
-    Lines.Text := Data.FormatJSON([], 2);
-    WriteTextFileAtomically(PreferencesJsonFileName,Lines.Text);
-  finally
-    Lines.Free;
-    Data.Free;Old.Free;
+    WriteTextFileAtomically(PreferencesJsonFileName,Data.FormatJSON([],2));
+  finally Data.Free;end;
+end;
+
+procedure SaveGuiPreferences(const APrefs:TGuiPreferences;const GameId:string);
+var Edits:TGamePreferencesEdits;Data:TJSONObject;
+begin
+  if GameId<>'' then begin
+    SetLength(Edits,1);Edits[0].GameId:=GameId;Edits[0].Preferences:=APrefs;
+    SaveGamePreferences(Edits);
+  end else begin
+    Data:=ReadPreferenceObject;
+    try MergePreferences(Data,APrefs);
+      WriteTextFileAtomically(PreferencesJsonFileName,Data.FormatJSON([],2));
+    finally Data.Free;end;
   end;
 end;
 

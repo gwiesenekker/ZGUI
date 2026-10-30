@@ -4,7 +4,30 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Separate chess and draughts preferences — 2026-10-30
+
+- Implement Claude's approved preferences proposal with a flat game selector and
+  the existing Appearance, Evaluation, Notation and Score history pages. Keep an
+  independent draft per game, save all edited sections in one atomic publication,
+  and ask Discard / Cancel before closing with unsaved changes. Defaults affects
+  only the selected game.
+- Fix U22: saving uses the explicit game identity from the edit session, including
+  when the main window has since switched games. Refresh the active context and
+  retain inactive settings for its next activation.
+- Both chess and draughts now have independent notation fonts/styles and
+  score-history colours, alongside their existing board/highlight colours and
+  evaluation settings. Preserve legacy root values, unknown keys and the other
+  game's layer; old files keep their appearance until changed.
+- Add migration, draft switching, multi-section Save, close confirmation and U22
+  regression checks, including inactive-popout activation; update the manual.
+- Validation: application compilation, all eleven GUI suites (including 87 mixed
+  checks) and the full headless regression suite pass. The preferences-only source
+  snapshot also compiles independently of the unfinished engine feature flags.
+  Native Windows interaction remains untested.
+
 ### Address Claude review T5 and C6 — 2026-10-30
+
+Commit: `8368778`.
 
 - T5: tournament callbacks start games through the existing runner path without
   selecting them. Preserve the visible document, annotator, dialogs and last-game
