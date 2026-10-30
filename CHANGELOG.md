@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Measured text sizes and quieter Auto Play notation — 2026-10-30
 
+Commit: `2ea8d5d`.
+
 - Apply the user's approved font-based sizing: a reusable text/font measurement
   helper accepts CRLF, CR and LF, including a trailing empty line. Reserve two
   text lines plus native borders/scrollbar space for annotator status, and size
