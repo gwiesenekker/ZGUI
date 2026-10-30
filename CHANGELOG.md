@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Review the multi-game proposal and prepare two Scan engines — 2026-10-30
 
+Record: `7f29ccf` (documentation; local review and engine assets are ignored).
+
 - Review Claude's `MULTI_GAME_PROPOSAL.md` against the current source. Record six
   findings and revised staging in `chatgpt/MULTI_GAME_PROPOSAL_REVIEW.md`: atomic
   mixed-game enablement, annotator event ownership, tournament owner routing,
