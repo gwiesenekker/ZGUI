@@ -336,6 +336,10 @@ python3 tests/build_lazarus_check.py gtk2 /tmp/zgui-multi tests/multi_game_gui_c
 DISPLAY=:1 /tmp/zgui-multi/multi_game_gui_check
 ```
 
+The mixed test uses the database suite's range-checking configuration. It leaves
+integer overflow checking off because the existing database hashes deliberately
+use modular integer arithmetic; their algorithms are unchanged.
+
 For the same acceptance with real engines, pass four absolute executable paths:
 Stockfish, Arasan (or another UCI engine), Scan engine6, Scan engine7. The test
 writes registrations and preferences beside its executable, so build it in a
@@ -348,3 +352,24 @@ engine check, not a required suite dependency. Compile it with FPC using `-Fu.`
 and `-FU/tmp/zgui-scan-units -FE/tmp`, then run its executable with the project
 root as its working directory. It expects the locally installed engine6/engine7
 packages and exercises initialization, scored PVs, clocked moves and forced wins.
+
+## Engine contract scenarios
+
+The headless sweep keeps protocol expectations separate: `uci_engine_check`,
+`uci_game_check` and `uci_ponder_check` cover UCI start/stop, finite analysis time,
+clocked searches, stale replies, timeouts and ponder transitions. Hub retains
+`analyzer_position_check`, `hub_search_fence_check` and `hub_worker_trace_check`
+for the corresponding analysis budget, clock wire trace, stop/late-reply fences
+and timeout behavior. Existing wire fixtures are unchanged.
+
+`hub_ponder_check` adds advertised support and explicit opt-in, tournament
+permission, legal predictions, live hits, misses, changed clocks, early completion,
+hidden speculative scores and autonomous output draining. Hub's allowed early
+completion is intentionally different from UCI. No protocol policy was moved into
+the shared process worker.
+
+To run its optional real Scan check, compile `tests/hub_ponder_check.pas` with
+`fpc -Fu. -FU/tmp/zgui-scan-units -FE/tmp` (create the unit directory first), then
+pass one absolute Scan executable path. It temporarily enables `ponder` in that
+executable's parameter file and restores the exact original file in a finally
+block. Run one check at a time, with that engine idle. Repeat for engine6/engine7.

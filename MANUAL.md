@@ -1,7 +1,7 @@
 # ZGUI User Manual
 
-The executable currently opens an 8×8 chess board in the existing GWDGUI layout
-for standalone exploration. Click a source and destination, or click a move in
+ZGUI restores the last selected game in the existing GWDGUI layout. On the
+8×8 chess board, click a source and destination, or click a move in
 **Legal moves**. Promotion choices use the existing move-choice dialog. Notation
 uses SAN; the legal-moves list uses UCI coordinates. **F** flips the board.
 
@@ -196,6 +196,15 @@ Each game has one annotator slot. Switching games pauses the hidden slot's live
 search without closing its engine; returning resumes analysis of the selected
 position. Auto Play stops on navigation. Loaded hidden annotators still reserve
 their engines. DXP is for playing games and cannot be an annotator.
+
+For Hub engines that advertise a `ponder` Boolean option, enable that option in
+the existing engine parameters dialog to allow pondering. ZGUI uses `go ponder`
+and `ponder-hit` through the existing game engine hooks. A prediction is never
+played as a move. A miss stops and drains the old search; Hub may also finish
+early, in which case its result is held until the actual position matches.
+Speculative evaluations do not enter game history. Engines that do not advertise
+the option continue with ordinary clocked searches. UCI retains its existing
+Ponder option and protocol-specific handling.
 
 Each game also has its own tournament window. Its Game choice opens the other
 window; scheduling and standings stay within one game. Both tournaments can run

@@ -12,6 +12,15 @@ uses
 type
   THubEngine = class(TDraughtsEngine)
   private
+    FSupportsPonder,FForcePonderOff,FGameMode,FPonderActive,FHasPending,FHasClock:Boolean;
+    FClock,FPonderClock:TEngineGameClockState;
+    FPendingRoot,FSearchRoot,FSearchMoves,FBestMove,FNextReply:string;
+    FPonderPv,FPonderScore,FPonderDepth,FPonderTime:string;
+    FPendingMoves:TStringList;
+    procedure Idle;
+    procedure Accepted(const Root:string;Moves:TStrings;const Clock:TEngineGameClockState);
+    procedure StoreClock(const Clock:TEngineGameClockState);
+  private
     FEngine: TExternalEngineDefinition;
     FLevelCommand: string;
     FLastWaitFailure: string;
@@ -60,6 +69,10 @@ type
     procedure BeginGame(const AStartingFEN: string; ASide: TGameSide;
       AGameMinutes: Double; AGameMoves: Integer;
       AIncrementSeconds: Double = 0.0); override;
+    procedure SetGameClockState(const Clock:TEngineGameClockState); override;
+    procedure SetGamePonderAllowed(Allowed:Boolean); override;
+    procedure GameMoveAccepted(const RootFEN:string;ActualMoves:TStrings;
+      const NextOwnClock:TEngineGameClockState); override;
     function LaunchAndInit: Boolean; override;
     function ProtocolName: string; override;
     function ReceiveMessage(const AMessage: string): string; override;
@@ -91,6 +104,8 @@ type
     hwcBeginGame,
     hwcSetGamePosition,
     hwcSetClockInfo,
+    hwcGameClock,
+    hwcAccepted,
     hwcStartThinking,
     hwcStartAnalyzing,
     hwcStartMcts,
@@ -102,6 +117,7 @@ type
 
   THubWorkerCommand = class(TProcessEngineCommand)
   private
+    FClock:TEngineGameClockState;
     FGameMinutes: Double;
     FGameMoves: Integer;
     FCommandKind: THubWorkerCommandKind;
@@ -115,6 +131,7 @@ type
   public
     constructor Create(AKind: THubWorkerCommandKind); reintroduce;
     destructor Destroy; override;
+    property Clock:TEngineGameClockState read FClock write FClock;
     property GameMinutes: Double read FGameMinutes write FGameMinutes;
     property GameMoves: Integer read FGameMoves write FGameMoves;
     property CommandKind: THubWorkerCommandKind read FCommandKind;
@@ -186,6 +203,8 @@ const
     'hub-begin-game',
     'hub-set-game-position',
     'hub-set-clock-info',
+    'hub-game-clock',
+    'hub-accepted',
     'hub-start-thinking',
     'hub-start-analyzing',
     'hub-start-mcts',
@@ -215,7 +234,8 @@ begin
   EngineName := FEngine.IdText;
   if EngineName = '' then
     EngineName := ChangeFileExt(FEngine.ExecutableName, '');
-  FWorker:=TProcessEngineWorker.Create(@ExecuteWorkerCommand,@Log,@WorkerStopping,'Hub');
+  FPendingMoves:=TStringList.Create;
+  FWorker:=TProcessEngineWorker.Create(@ExecuteWorkerCommand,@Log,@WorkerStopping,'Hub',@Idle);
   FProcess:=FWorker.Process;
   FProcess.OnData:=@ProcessData;
   FStopping := False;
@@ -227,6 +247,7 @@ destructor THubEngine.Destroy;
 begin
   Stop;
   FWorker.Free;
+  FPendingMoves.Free;
   FEngine.Free;
   inherited Destroy;
 end;
@@ -263,6 +284,8 @@ begin
       Line:=Lines[Index];
       if Line <> '' then
       begin
+        if (Pos('param ',LowerCase(Line))=1) and SameText(ExtractHubArgument(Line,'name'),'ponder') and
+          SameText(ExtractHubArgument(Line,'type'),'bool') then FSupportsPonder:=True;
         if (Pos('info ', LowerCase(Line)) <> 1) and
           (Pos('info=', LowerCase(Line)) <> 1) then
         begin
@@ -306,7 +329,12 @@ begin
   if LoggedScoreText<>'' then ScoreText:=LoggedScoreText;
   if LoggedDepthText<>'' then DepthText:=LoggedDepthText;
   if LoggedTimeText<>'' then TimeText:=LoggedTimeText;
-  PublishSearchInfo(PvText,ScoreText,DepthText,TimeText);
+  if FPonderActive then begin
+    if LoggedPvText<>'' then FPonderPv:=LoggedPvText;
+    if LoggedScoreText<>'' then FPonderScore:=LoggedScoreText;
+    if LoggedDepthText<>'' then FPonderDepth:=LoggedDepthText;
+    if LoggedTimeText<>'' then FPonderTime:=LoggedTimeText;
+  end else PublishSearchInfo(PvText,ScoreText,DepthText,TimeText);
   // Log observers can publish throttled live snapshots. Parse the complete
   // chunk first so stdout cannot publish the previous info and consume the slot.
   Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
@@ -345,16 +373,24 @@ begin
     hwcLaunchAndInit:
       HubCommand.BoolResult := DoLaunchAndInit;
     hwcBeginGame:
-      inherited BeginGame(HubCommand.StartingFEN, DraughtsSideToGameSide(HubCommand.Side),
-        HubCommand.GameMinutes, HubCommand.GameMoves);
+      begin
+        if FPonderActive then DoStopSearch;
+        FGameMode:=True;FHasClock:=False;FHasPending:=False;FNextReply:='';
+        inherited BeginGame(HubCommand.StartingFEN, DraughtsSideToGameSide(HubCommand.Side),
+          HubCommand.GameMinutes, HubCommand.GameMoves);
+      end;
     hwcSetGamePosition:
       begin
         RequireSearchSynchronization;
-        inherited SetGamePosition(HubCommand.StartingFEN, HubCommand.Moves);
+        if FPonderActive then begin
+          FPendingRoot:=HubCommand.StartingFEN;FPendingMoves.Assign(HubCommand.Moves);FHasPending:=True;
+        end else inherited SetGamePosition(HubCommand.StartingFEN, HubCommand.Moves);
       end;
     hwcSetClockInfo:
       DoSetClockInfo(HubCommand.MovesRemaining, HubCommand.RemainingSeconds,
         HubCommand.TotalUsedSeconds);
+    hwcGameClock:StoreClock(HubCommand.Clock);
+    hwcAccepted:Accepted(HubCommand.StartingFEN,HubCommand.Moves,HubCommand.Clock);
     hwcStartThinking:
       begin
         RequireSearchSynchronization;
@@ -442,7 +478,8 @@ begin
     MoveText := ExtractDoneMove(Line);
     if MoveText <> '' then
     begin
-      AMove := MoveText;
+      AMove := NormalizeMoveText(MoveText);
+      FNextReply:=NormalizeMoveText(ExtractHubArgument(Line,'ponder'));
       Exit(True);
     end;
 
@@ -674,35 +711,89 @@ begin
   Result := ExtractHubArgument(ALine, 'move');
 end;
 
-function THubEngine.DoStartThinking: string;
-var
-  Failure: string;
+procedure THubEngine.Idle;
 begin
-  SendLine(BuildHubPositionCommand);
-  if FLevelCommand <> '' then
-    SendLine(FLevelCommand);
-  DiscardDoneLinesBeforeNewSearch('before go think');
-  SendLine('go think');
-  ChangeState(esWaitingForDone, 'search started; waiting for done');
+  if not FPonderActive or WorkerStopping then Exit;
+  DoPollOutput;
+end;
 
-  if not WaitForDoneMove(MoveTimeLimitMs, Result) then
-  begin
-    Failure := FLastWaitFailure;
-    if Failure = 'timeout' then
-    begin
-      MarkMoveTimedOut;
-      // Fence the timed-out search before another game can reuse this engine.
-      try
-        DoStopSearch;
-      except
-        on E: Exception do
-          Log('timed-out search could not be stopped; message=' + E.Message);
+procedure THubEngine.StoreClock(const Clock:TEngineGameClockState);
+begin
+  FClock:=Clock;FHasClock:=True;
+  DoSetClockInfo(Clock.MovesRemaining,Clock.Remaining[Clock.SideToMove],Clock.Used[Clock.SideToMove]);
+  if Clock.Increment[Clock.SideToMove]>0 then FLevelCommand+=' inc='+HubSeconds(Clock.Increment[Clock.SideToMove]);
+end;
+
+procedure THubEngine.Accepted(const Root:string;Moves:TStrings;const Clock:TEngineGameClockState);
+var Trial:TGamePosition;I:Integer;Reply:string;
+begin
+  if WorkerStopping or FStopFailed or FForcePonderOff or not FGameMode or not FSupportsPonder or
+    not ParamBool('ponder',False) or (FNextReply='') then Exit;
+  if (Root<>FSearchRoot) or (Moves.Text<>FSearchMoves+FBestMove+LineEnding) then Exit;
+  Trial:=TDraughtsPosition.Create;
+  try
+    Trial.LoadFromFEN(Root);for I:=0 to Moves.Count-1 do Trial.PlayMoveText(Moves[I]);
+    Reply:=FNextReply;FNextReply:='';if not Trial.IsLegal(Reply) then Exit;
+    Trial.PlayMoveText(Reply);if Trial.LegalMoveCount=0 then Exit;
+    inherited SetGamePosition(Root,Moves);MovesPlayed.Add(Reply);
+    FSearchRoot:=Root;FSearchMoves:=MovesPlayed.Text;FPonderClock:=Clock;FHasPending:=False;FHasClock:=False;
+    StoreClock(Clock);FHasClock:=False;
+    SendLine(BuildHubPositionCommand);SendLine(FLevelCommand);
+    DiscardDoneLinesBeforeNewSearch('before go ponder');
+    FPonderPv:='';FPonderScore:='';FPonderDepth:='';FPonderTime:='';
+    FPonderActive:=True;SendLine('go ponder');ChangeState(esThinking,'ponder started');
+  finally Trial.Free;end;
+end;
+
+function THubEngine.DoStartThinking: string;
+var Failure:string;Hit:Boolean;Own:TGameSide;Started,Elapsed:QWord;Budget:Integer;
+begin
+  Started:=GetTickCount64;Budget:=MoveTimeLimitMs;Hit:=False;
+  if FPonderActive then begin
+    if not FHasPending or not FHasClock then raise EInvalidOperation.Create('Fresh actual position and clocks required after Hub pondering');
+    Own:=FPonderClock.SideToMove;
+    Hit:=(FPendingRoot=FSearchRoot) and (FPendingMoves.Text=FSearchMoves) and
+      (FClock.SideToMove=Own) and (FClock.Remaining[Own]=FPonderClock.Remaining[Own]) and
+      (FClock.Increment[Own]=FPonderClock.Increment[Own]) and (FClock.MovesRemaining=FPonderClock.MovesRemaining);
+    // Hub may finish early. Its queued done is reusable only for the exact prediction.
+    DoPollOutput;
+    if Hit then begin
+      inherited SetGamePosition(FPendingRoot,FPendingMoves);
+      if WaitForDoneMove(1,Result) then begin
+        FPonderActive:=False;FHasPending:=False;FBestMove:=Result;
+        Log('ponder early result reused');
+        PublishSearchInfo(FPonderPv,FPonderScore,FPonderDepth,FPonderTime);Exit;
       end;
+      FPonderActive:=False;SendLine('ponder-hit');Log('ponder hit');
+    end else begin
+      // Keep the adapter's existing stop/acknowledgement fence on misses.
+      DoStopSearch;
+      inherited SetGamePosition(FPendingRoot,FPendingMoves);Log('ponder miss; previous result discarded');
+      Elapsed:=GetTickCount64-Started;
+      if Elapsed>=QWord(Budget) then begin MarkMoveTimedOut;Exit('');end;
+      Dec(Budget,Integer(Elapsed));
+      FClock.Remaining[Own]:=FClock.Remaining[Own]-Elapsed/1000;
+      if FClock.Remaining[Own]<0 then FClock.Remaining[Own]:=0;StoreClock(FClock);
     end;
-    ChangeState(esError, 'waiting for done move failed; reason=' +
-      Failure);
-    Result := '';
   end;
+  FHasPending:=False;FHasClock:=False;FNextReply:='';
+  PublishSearchInfo('','','','');
+  FSearchRoot:=StartingFEN;FSearchMoves:=MovesPlayed.Text;
+  if not Hit then begin
+    SendLine(BuildHubPositionCommand);
+    if FLevelCommand<>'' then SendLine(FLevelCommand);
+    DiscardDoneLinesBeforeNewSearch('before go think');SendLine('go think');
+  end;
+  ChangeState(esWaitingForDone,'search started; waiting for done');
+  if not WaitForDoneMove(Budget,Result) then begin
+    Failure:=FLastWaitFailure;
+    if Failure='timeout' then begin
+      MarkMoveTimedOut;
+      try DoStopSearch;except on E:Exception do Log('timed-out search could not be stopped; message='+E.Message);end;
+    end;
+    ChangeState(esError,'waiting for done move failed; reason='+Failure);Result:='';
+  end;
+  FBestMove:=Result;
 end;
 
 procedure THubEngine.DoStopSearch;
@@ -710,7 +801,7 @@ var
   SearchWasActive: Boolean;
 begin
   RequireSearchSynchronization;
-  SearchWasActive := CurrentState in [esThinking, esWaitingForDone, esStopping];
+  SearchWasActive := FPonderActive or (CurrentState in [esThinking, esWaitingForDone, esStopping]);
   try
     SendLine('stop');
     if SearchWasActive and (CurrentState <> esStopping) then
@@ -726,12 +817,14 @@ begin
       raise;
     end;
   end;
+  FPonderActive:=False;FNextReply:='';
   if SearchWasActive and (CurrentState <> esError) then
     ChangeState(esReady, 'search stopped');
 end;
 
 procedure THubEngine.DoStartAnalyzing;
 begin
+  FGameMode:=False;
   RequireSearchSynchronization;
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
@@ -746,6 +839,7 @@ end;
 
 procedure THubEngine.DoStartMcts;
 begin
+  FGameMode:=False;
   RequireSearchSynchronization;
   DoStopSearch;
   SendLine(BuildHubPositionCommand);
@@ -811,6 +905,19 @@ begin
   SetClockInfo(AMovesRemaining, ARemainingSeconds, ATotalUsedSeconds);
   if AIncrementSeconds > 0 then
     ReceiveMessage(FLevelCommand + ' inc=' + HubSeconds(AIncrementSeconds));
+end;
+
+procedure THubEngine.SetGameClockState(const Clock:TEngineGameClockState);
+var Command:THubWorkerCommand;
+begin Command:=THubWorkerCommand.Create(hwcGameClock);Command.Clock:=Clock;QueueProcedureCommand(Command);end;
+procedure THubEngine.SetGamePonderAllowed(Allowed:Boolean);
+begin FForcePonderOff:=not Allowed;end;
+procedure THubEngine.GameMoveAccepted(const RootFEN:string;ActualMoves:TStrings;
+  const NextOwnClock:TEngineGameClockState);
+var Command:THubWorkerCommand;
+begin
+  Command:=THubWorkerCommand.Create(hwcAccepted);Command.StartingFEN:=RootFEN;
+  Command.Moves.Assign(ActualMoves);Command.Clock:=NextOwnClock;QueueProcedureCommand(Command);
 end;
 
 procedure THubEngine.SetGamePosition(const AStartingFEN: string; AMoves: TStrings);

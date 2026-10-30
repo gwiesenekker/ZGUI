@@ -4,7 +4,22 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Hub pondering through existing engine hooks — 2026-10-30
+
+- Implement Hub `go ponder` / `ponder-hit` only when the engine advertises a
+  Boolean ponder option, that option is enabled, and the game permits it.
+  Validate predictions against the full actual history and own clock budget.
+- Drain output on the existing process worker's idle hook. Keep speculative
+  scores private; reuse an early result only on a hit, retaining its evaluation.
+  On a miss, retain the Hub adapter's stop/acknowledgement fence and charge its
+  elapsed time. Keep protocol commands, completion rules and fences in adapters.
+- Add the failing-first Hub ponder contract suite: 69 checks pass, plus four
+  real-engine checks for each Scan installation. Existing Hub wire fixtures and
+  headless regression pass; UCI and DXP implementations are unchanged.
+
 ### Require explicit game contexts — 2026-10-30
+
+Commit: `d2164a7`.
 
 - Remove the migration constructors and nil-to-startup fallbacks from trees,
   actors, analysis bases, setups, boards and game-specific dialogs. Startup

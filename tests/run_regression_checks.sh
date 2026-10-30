@@ -19,6 +19,7 @@ CHECKS=(
   analyzer_runner_shutdown_check.pas
   analyzer_position_check.pas
   hub_search_fence_check.pas
+  hub_ponder_check.pas
   uci_game_check.pas
   uci_ponder_check.pas
   uci_engine_check.pas
