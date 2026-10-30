@@ -81,6 +81,31 @@ begin
     SecondsCaption(AModelNode.BlackUsedSeconds));
 end;
 
+function AutoPlayOriginCaption(const AOrigin: string): string;
+var
+  Identity: string;
+  Separator: SizeInt;
+begin
+  Result := AOrigin;
+  Identity := Trim(Copy(AOrigin, 11, MaxInt));
+  // Older Auto Play records stored a registry key. Display its executable name,
+  // preserving the original metadata for lossless save/load.
+  Separator := Pos('|', Identity);
+  if (Separator = 0) or not ((Copy(Identity, 1, Separator - 1) = 'uci') or
+    (Copy(Identity, 1, Separator - 1) = 'hub') or
+    (Copy(Identity, 1, Separator - 1) = 'dxp')) then Exit;
+  Delete(Identity, 1, Separator);
+  Separator := Pos('|', Identity);
+  if Separator = 0 then Exit('Auto Play');
+  Delete(Identity, 1, Separator);
+  Separator := Pos('|', Identity);
+  if Separator > 0 then Identity := Copy(Identity, 1, Separator - 1);
+  Identity := StringReplace(Identity, '\', '/', [rfReplaceAll]);
+  Identity := ChangeFileExt(ExtractFileName(Identity), '');
+  Result := 'Auto Play';
+  if Identity <> '' then Result += ': ' + Identity;
+end;
+
 procedure AddAnalysisChildren(ATreeView: TTreeView; ATreeParent: TTreeNode;
   AModelNode: TGameTreePlyNode);
 begin
@@ -88,7 +113,7 @@ begin
     Exit;
 
   if Copy(AModelNode.OriginText,1,10)='Auto Play:' then
-    ATreeView.Items.AddChild(ATreeParent,AModelNode.OriginText);
+    ATreeView.Items.AddChild(ATreeParent,AutoPlayOriginCaption(AModelNode.OriginText));
 
   if AModelNode.EngineScore <> '' then
     ATreeView.Items.AddChild(ATreeParent, 'Engine score: ' +

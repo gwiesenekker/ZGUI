@@ -5,7 +5,7 @@ unit uGuiDialogs;
 interface
 
 uses
-  Classes, Forms, Types, Dialogs;
+  Classes, Forms, Types, Dialogs, Graphics;
 
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
 var GuiTestConfirmationResult: Integer = 0;
@@ -16,6 +16,9 @@ var GuiTestConfirmationResult: Integer = 0;
     GuiTestFileName, GuiTestFileTitle, GuiTestFileFilter, GuiTestFileExtension: string;
 {$ENDIF}
 
+// Measures explicit lines with the supplied font. CRLF, CR and LF are accepted;
+// a trailing newline contributes one empty line. No automatic wrapping is applied.
+function MeasureGuiText(const AText:string; AFont:TFont):TSize;
 function ExecuteGuiFileDialog(Dialog: TOpenDialog): Boolean;
 function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
   AText: string; AChoices: TStrings): Integer;
@@ -38,7 +41,32 @@ procedure ShowFormCenteredOnOwner(AForm, AOwner: TCustomForm);
 implementation
 
 uses
-  Controls, ExtCtrls, Graphics, Math, Process, StdCtrls, SysUtils, uPlatformProcess;
+  Controls, ExtCtrls, Math, Process, StdCtrls, SysUtils, uPlatformProcess;
+
+function MeasureGuiText(const AText:string; AFont:TFont):TSize;
+var Bitmap:TBitmap;Text,Line:string;I,Start,LineHeight:Integer;Extent:TSize;
+  procedure AddLine(const Value:string);
+  begin
+    Extent:=Bitmap.Canvas.TextExtent(Value);
+    if Extent.cx>Result.cx then Result.cx:=Extent.cx;
+    Inc(Result.cy,Max(LineHeight,Extent.cy));
+  end;
+begin
+  Result.cx:=0;Result.cy:=0;
+  if AText='' then Exit;
+  Bitmap:=TBitmap.Create;
+  try
+    if AFont<>nil then Bitmap.Canvas.Font.Assign(AFont);
+    LineHeight:=Bitmap.Canvas.TextHeight('Ag');
+    Text:=StringReplace(AText,#13#10,#10,[rfReplaceAll]);
+    Text:=StringReplace(Text,#13,#10,[rfReplaceAll]);
+    Start:=1;
+    for I:=1 to Length(Text) do if Text[I]=#10 then begin
+      Line:=Copy(Text,Start,I-Start);AddLine(Line);Start:=I+1;
+    end;
+    AddLine(Copy(Text,Start,MaxInt));
+  finally Bitmap.Free;end;
+end;
 
 function ExecuteGuiFileDialog(Dialog: TOpenDialog): Boolean;
 begin

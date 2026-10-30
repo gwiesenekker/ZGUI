@@ -536,6 +536,9 @@ Right-click the MCTS analysis area to open or close an MCTS annotator. The
 selection lists Hub engines whose `gui-engine-supports-mcts` parameter is true.
 Statistics reported by that engine are displayed in the MCTS panel.
 
+The annotator status and PV areas reserve space using the active font. Engine
+parameter name columns fit the longest name plus a margin and remain resizable.
+
 ### 5.5 Auto Play
 
 **Auto Play** is enabled only when:
@@ -547,8 +550,9 @@ Auto Play starts from the currently selected real position and asks the annotato
 for one move at a time, using the configured analysis seconds. For both chess and
 draughts it adds real moves at the mainline tip. Elsewhere it follows an existing
 matching child, or adds a variation, preserving the existing continuations.
-Created nodes are labelled **Auto Play** with the annotator identity in the moves
-and tree views. Existing nodes retain their origin.
+Created nodes retain **Auto Play** origin metadata with the annotator name,
+visible in the tree details. Move notation shows the analysis without repeating
+that origin label. Existing nodes retain their origin.
 
 Each searched source position receives the final annotator PV, score, depth and
 time, unless it already has annotator analysis of greater depth. Unknown incoming

@@ -213,10 +213,6 @@ begin
   end;
   if Trim(ANode.CommentText) <> '' then
     Result := Trim(ANode.CommentText);
-  if not AForFile and (Copy(ANode.OriginText,1,10)='Auto Play:') then begin
-    if Result<>'' then Result+='; ';
-    Result+=ANode.OriginText;
-  end;
   if AOptions.ShowEngineScore and (Trim(ANode.EngineScore) <> '') then
   begin
     if Result <> '' then

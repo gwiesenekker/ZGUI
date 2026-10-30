@@ -4,7 +4,30 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Measured text sizes and quieter Auto Play notation — 2026-10-30
+
+- Apply the user's approved font-based sizing: a reusable text/font measurement
+  helper accepts CRLF, CR and LF, including a trailing empty line. Reserve two
+  text lines plus native borders/scrollbar space for annotator status, and size
+  the existing PV/header area accordingly. Preserve the existing control layout.
+- Fit the engine parameter name column to its widest name/header plus a margin;
+  retain manual resizing.
+- Remove repeated Auto Play origin labels from move notation, keeping evaluations
+  and PVs. Keep provenance in node metadata and tree details. New nodes use the
+  registered readable engine name; old registry-key origins display an executable
+  name in the tree without changing their saved metadata.
+- UCI as the new-engine default remains a separate tested review candidate in
+  `chatgpt/UCI_DEFAULT_ENGINE_PROPOSAL.md`.
+- Validation: application build, full headless regression and all nine GTK2 GUI
+  suites pass (UCI 95 checks; setup/preferences 223; database 127). The database
+  suite's earlier intermittent font-width assertion passes on the final run.
+  Windows build-script replacement checks pass all 12 cases; native Windows
+  compilation is unavailable because the cross-target FPC units are absent.
+
+
 ### Restore real-move Auto Play and its Stop button — 2026-10-30
+
+Commit: `bba007b`.
 
 - Implement Claude's approved restoration for both chess and draughts, as
   confirmed by the user. Auto Play appends real mainline moves at the tip;

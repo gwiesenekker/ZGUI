@@ -30,6 +30,7 @@ type
   private
     FAnalyzerCloseMenuItem: TMenuItem;
     FAnalyzerEngineKey: string;
+    FAnalyzerEngineName: string;
     FAnnotatorSecondsEdit: TEdit;
     FAnalyzerMiniBoardControl: TGameBoardControl;
     FAnalyzerMiniBoardForm: TForm;
@@ -408,6 +409,7 @@ type
     procedure UpdateGameMoveHighlight;
     procedure UpdateAutoPlayButtonState;
     function AutoPlayAtDisplayedNode(ATree:TGameTree):Boolean;
+    procedure UpdateAnalyzerTextSizes(Sender:TObject);
     procedure StartAutoPlay;
     procedure StartNextAutoPlaySearch;
     procedure StopAutoPlay(const AReason: string = '');
@@ -493,7 +495,7 @@ var
 
 implementation
 
-uses uGameTreeNodeData;
+uses uGameTreeNodeData, LCLIntf;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
@@ -1276,6 +1278,7 @@ begin
   LBoardPopup.Items.Add(LMenuItem);
   FBoardControl.PopupMenu := LBoardPopup;
 
+  OnResize:=@UpdateAnalyzerTextSizes;
   ApplyPreferences;
   RefreshDisplayFromGameTree(FGameTree, True);
 end;
@@ -1403,6 +1406,7 @@ begin
   if FScoreHistoryControl<>nil then FScoreHistoryControl.ScoreColors:=FPreferences.ScoreHistoryColors;
   if FScoreHistoryForm<>nil then FScoreHistoryForm.ApplyScoreColors(FPreferences.ScoreHistoryColors);
   UpdateScoreHistory(ActiveGameTree);
+  UpdateAnalyzerTextSizes(Self);
 end;
 
 procedure TMainForm.ApplyBoardFlipped;
@@ -2089,6 +2093,29 @@ begin
     (FDisplayedPosition.PreviewMoves='') and (StateForTree(ATree)=gosStopped);
 end;
 
+procedure TMainForm.UpdateAnalyzerTextSizes(Sender:TObject);
+var HeaderHeight,PvHeight,LogHeight,MctsHeight,Edges,Padding,Required:Integer;
+    Panel:TControl;
+begin
+  if FClosing or (FAnalyzerMemo=nil) or (FAnalyzerPvMemo=nil) or (FMctsMemo=nil) then Exit;
+  Edges:=2*GetSystemMetrics(SM_CYEDGE);
+  Padding:=MeasureGuiText('Ag',FAnalyzerPvInfoLabel.Font).cy div 4;
+  HeaderHeight:=MeasureGuiText('PV: no info',FAnalyzerPvInfoLabel.Font).cy+Padding;
+  PvHeight:=MeasureGuiText('No PV'+LineEnding,FAnalyzerPvMemo.Font).cy+Edges+Padding;
+  LogHeight:=MeasureGuiText('Annotator closed'+LineEnding,FAnalyzerMemo.Font).cy+
+    Edges+Padding+GetSystemMetrics(SM_CYHSCROLL);
+  MctsHeight:=MeasureGuiText('MCTS annotator closed'+LineEnding,FMctsMemo.Font).cy+
+    Edges+Padding+GetSystemMetrics(SM_CYHSCROLL);
+  FAnalyzerPvInfoLabel.Height:=HeaderHeight;
+  FAnalyzerPvMemo.Height:=PvHeight;
+  FAnalyzerMemo.Constraints.MinHeight:=LogHeight;
+  FMctsMemo.Height:=MctsHeight;
+  Panel:=FAnalyzerMemo.Parent.Parent;
+  Required:=HeaderHeight+PvHeight+LogHeight+MctsHeight+FMctsMemo.BorderSpacing.Top;
+  Panel.Constraints.MinHeight:=Required;
+  if Panel.Height<Required then Panel.Height:=Required;
+end;
+
 procedure TMainForm.StartAutoPlay;
 var
   LGameTree: TGameTree;
@@ -2230,7 +2257,7 @@ begin
     FAutoPlay.MoveStored(Command);
     Node:=Tree.FindNodeById(Command.CreatedNodeId);
     if Created and (Node<>nil) then begin
-      Data:=Node.NodeData;Data.OriginText:='Auto Play: '+FAnalyzerEngineKey;
+      Data:=Node.NodeData;Data.OriginText:='Auto Play: '+FAnalyzerEngineName;
       OriginCommand:=Actor.CreateRestoreNodeDataCommand(Node.NodeId,Data);
       try Result:=ExecuteGameTreeCommand(Actor,OriginCommand,AErrorText);
       finally OriginCommand.Free;end;
@@ -2586,6 +2613,7 @@ begin
     if FAnalyzerPvBrowser <> nil then
       FAnalyzerPvBrowser.Clear;
     FAnalyzerEngineKey := EngineKey;
+    FAnalyzerEngineName := GameTitleEngineName(Engine);
     InvalidateAnalyzerPositionSignature;
     FAnalyzerRunner := TAnalyzerRunnerThread.Create(Engine, @AnalyzerLog,
       @AnalyzerSnapshot, @AnalyzerFinished, armAnalyze, @AnalyzerMove);
@@ -2609,6 +2637,7 @@ begin
     FAnalyzerRunner.PostShutdown;
   end;
   FAnalyzerEngineKey := '';
+  FAnalyzerEngineName := '';
   UpdateAutoPlayButtonState;
   InvalidateAnalyzerPositionSignature;
   if FAnalyzerPvBrowser <> nil then
@@ -5474,6 +5503,7 @@ begin
           if FAnalyzerRunner = TAnalyzerFinishedGuiMessage(EventObject).Runner then
             FreeAndNil(FAnalyzerRunner);
           FAnalyzerEngineKey := '';
+          FAnalyzerEngineName := '';
           UpdateAutoPlayButtonState;
           InvalidateAnalyzerPositionSignature;
         end

@@ -999,6 +999,8 @@ begin
     FParamsGrid.Cells[1, FParamsGrid.RowCount - 1] := FCapturedParams[I].ParamType;
     FParamsGrid.Cells[2, FParamsGrid.RowCount - 1] := FCapturedParams[I].Value;
   end;
+  FParamsGrid.ColWidths[0]:=MeasureGuiText(FParamsGrid.Cols[0].Text,FParamsGrid.Font).cx+
+    MeasureGuiText('MM',FParamsGrid.Font).cx+FParamsGrid.GridLineWidth;
 end;
 
 procedure TEngineEditForm.UpdateFieldsFromParams;

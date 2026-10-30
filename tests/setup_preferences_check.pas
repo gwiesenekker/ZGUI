@@ -5,7 +5,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,StdCtrls,ExtCtrls,
  uGamePosition,uChessPosition,uGameGuiProfile,uPositionSetupAdapter,
  uChessPositionSetupAdapter,uDraughtsPositionSetupForm,uGameBoardControl,
  uChessBoardControl,uPreferences,uPreferencesForm,uScoreHistoryControl,uScoreHistoryForm,
- uPvBrowser,uMainForm,uGuiDialogs;
+ uPvBrowser,uMainForm,uGuiDialogs,Grids,uEngineEditForm,uEngineRegistry,uEngineParamsJson;
 type
  TChooser=class(TPreferencesForm)
  public Chosen:TColor;AcceptChoice:Boolean;
@@ -233,12 +233,52 @@ begin
   for C:=Low(C) to High(C) do Check(Pop.ScoreColors[C]=P.ScoreHistoryColors[C],'New popout inherits saved palette');
  finally M.Free;end;
 end;
+procedure MeasuredDialogSizes;
+var Font:TFont;Bitmap:TBitmap;One,Two,Multi:TSize;I,J:Integer;
+    Main:TMainForm;Log:TMemo;Editor:TEngineEditForm;Grid:TStringGrid;
+    Definition:TExternalEngineDefinition;Params:TEngineParamArray;Name,ParamFile,LongName:string;
+begin
+  Font:=TFont.Create;Bitmap:=TBitmap.Create;Main:=nil;Editor:=nil;
+  Definition:=TExternalEngineDefinition.Create;
+  Name:=GetTempFileName(GetTempDir,'zsz');ParamFile:=EngineParamsFileName(Name);
+  try
+    Font.Name:='DejaVu Sans';Font.Size:=11;Bitmap.Canvas.Font.Assign(Font);
+    One:=MeasureGuiText('Ag',Font);Two:=MeasureGuiText('Ag'+#10,Font);
+    Check((One.cx=Bitmap.Canvas.TextWidth('Ag')) and
+      (Two.cy=2*Bitmap.Canvas.TextHeight('Ag')),'Text/font helper includes a trailing empty line');
+    Multi:=MeasureGuiText('Long option name'+#13#10+'i',Font);
+    Check((Multi.cx=Bitmap.Canvas.TextWidth('Long option name')) and
+      (Multi.cy=Two.cy),'Text/font helper uses longest explicit line and accepts CRLF');
+    Multi:=MeasureGuiText('Ag'+#13+'Ag',Font);Check(Multi.cy=Two.cy,'Text/font helper accepts CR-only lines');
+    Multi:=MeasureGuiText('',Font);Check((Multi.cx=0) and (Multi.cy=0),'Empty text has zero extent');
+    Main:=TMainForm.Create(nil);Main.Show;Pump;Log:=nil;
+    for I:=0 to Main.ComponentCount-1 do if Main.Components[I] is TMemo then
+      if Pos('Annotator closed',TMemo(Main.Components[I]).Text)>0 then Log:=TMemo(Main.Components[I]);
+    Check(Log<>nil,'Annotator status memo exists');
+    for J:=0 to 2 do begin
+      Main.Font.Size:=8+5*J;Main.Width:=Main.Width+1;Pump;
+      Bitmap.Canvas.Font.Assign(Log.Font);
+      Check(Log.ClientHeight>=2*Bitmap.Canvas.TextHeight('Ag'),'Annotator log retains two readable text lines');
+      Check(Log.Height>=TMemo(Main.FindComponent('AnnotatorPvMemo')).Height,'Annotator log is at least the No PV height');
+      Check(Log.Top+Log.Height<=Log.Parent.ClientHeight,'Annotator log stays inside its allocated panel');
+    end;
+    Definition.Kind:=eekUci;Definition.ExePath:=Name;
+    LongName:='An unusually long engine parameter name used to check measured column width';
+    Params:=nil;AddOrUpdateParam(Params,LongName,'string','value',False);
+    SaveEngineParamsToJson(ParamFile,'uci',Params);Editor:=TEngineEditForm.Create(nil);
+    Editor.Font.Size:=16;Editor.LoadEngine(Definition);Grid:=nil;
+    for I:=0 to Editor.ComponentCount-1 do if Editor.Components[I] is TStringGrid then Grid:=TStringGrid(Editor.Components[I]);
+    Check(Grid<>nil,'Engine parameter grid exists');Bitmap.Canvas.Font.Assign(Grid.Font);
+    Check(Grid.ColWidths[0]>Bitmap.Canvas.TextWidth(LongName),'Parameter name column measures longest value plus margin');
+  finally Editor.Free;Main.Free;Definition.Free;Bitmap.Free;Font.Free;DeleteFile(ParamFile);DeleteFile(Name);end;
+end;
+
 begin
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  SavedPrefs:=TMemoryStream.Create;HadPrefs:=FileExists(PreferencesJsonFileName);
  if HadPrefs then SavedPrefs.LoadFromFile(PreferencesJsonFileName);
  V:=TChessVariant.Create;RegisterDefaultGameVariant(V);RegisterGameGuiProfile(V,ChessGuiProfile);
- try Adapters;DraftDialog;PreferenceEditor;MainIntegration;
+ try Adapters;DraftDialog;PreferenceEditor;MainIntegration;MeasuredDialogSizes;
   WriteLn('Setup and score preferences checks passed (',Checks,' checks)');
  finally
   RegisterDefaultGameVariant(nil);V.Free;

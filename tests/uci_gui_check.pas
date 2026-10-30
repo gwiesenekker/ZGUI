@@ -2,7 +2,7 @@ program uci_gui_check;
 {$mode objfpc}{$H+}
 {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}{$FATAL Build with LPI}{$ENDIF}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Controls, Classes, SysUtils,
-  StdCtrls, Menus, Grids, ExtCtrls, uEngineEditForm, uEngineRegistry,
+  StdCtrls, Menus, Grids, ExtCtrls, ComCtrls, uGameTreeView, uEngineEditForm, uEngineRegistry,
   uEngineParamsJson, uMainForm, uChessPosition, uChessUciEngine, uGamePosition,
   uGameGuiProfile, uGameTree, uGuiDialogs, uGameTreeSearchRef,
   uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uRunningGame, uGameBoardControl, Types, Math, uChessPgn, uGameTreePdn, uGameTreeActor, uGameTreeNodeData, uGameNotationView, uPvSnapshot, uGameGuiMessages, uGameFileReader, LCLType;
@@ -205,7 +205,35 @@ var F:TMainForm;Engines:TExternalEngineList;D:TExternalEngineDefinition;
   Expected,Found,Wire,Trace,BeforeResult:string;Lines:TStringList;
   OldSearch:TGameTreeSearchRef;Changed:Boolean;A:TGameTreeActor;C:TGameTreeCommand;Data:TGameTreeNodeData;
   Memo:TGameNotationView;BeforeCount:Integer;Late:TGameTreeSearchRef;Snapshot:TPvSnapshot;CanClose:Boolean;
-  Options:TGameTreePdnRenderOptions;Exported:string;
+  Options:TGameTreePdnRenderOptions;Exported:string;Render:TGameTreePdnRenderResult;
+  procedure CheckOriginDisplay;
+  var View:TTreeView;I:Integer;Text,Original:string;
+  begin
+    View:=TTreeView.Create(nil);A:=TGameTreeActor.Create(F.ActiveGameTree,False);
+    Original:=F.ActiveGameTree.MainlineNode[1].OriginText;
+    try
+      PopulateGameTreeView(View,F.ActiveGameTree);Text:='';
+      for I:=0 to View.Items.Count-1 do Text+=View.Items[I].Text+LineEnding;
+      Check(Pos('Auto Play: Auto Play UCI',Text)>0,'Tree details show readable annotator name');
+      Data:=F.ActiveGameTree.MainlineNode[1].NodeData;
+      Data.OriginText:='Auto Play: uci|c:\engines\stockfish.exe|stockfish.exe|cfg2:old';
+      C:=A.CreateRestoreNodeDataCommand(F.ActiveGameTree.MainlineNode[1].NodeId,Data);
+      try A.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);finally C.Free;end;
+      PopulateGameTreeView(View,F.ActiveGameTree);Text:='';
+      for I:=0 to View.Items.Count-1 do Text+=View.Items[I].Text+LineEnding;
+      Check((Pos('Auto Play: stockfish',Text)>0) and (Pos('cfg2:',Text)=0) and
+        (Pos('c:\engines',Text)=0),'Legacy origin displays engine filename without registry details');
+      Options:=DefaultGameTreePdnRenderOptions;
+      RenderGameTreeMovesToPdn(F.ActiveGameTree,Options,Render);
+      Check(Pos('Auto Play:',Render.Text)=0,
+        'Legacy origins also stay out of move notation');
+      Check(F.ActiveGameTree.MainlineNode[1].OriginText=Data.OriginText,
+        'Rendering preserves original legacy provenance');
+      Data.OriginText:=Original;
+      C:=A.CreateRestoreNodeDataCommand(F.ActiveGameTree.MainlineNode[1].NodeId,Data);
+      try A.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);finally C.Free;end;
+    finally A.Free;View.Free;end;
+  end;
   procedure StartStopped(const Fen:string);
   var Setup:TGameSetup;Game:TRunningGame;Started:QWord;
   begin
@@ -259,7 +287,12 @@ begin
       (F.ActiveGameTree.MainlineNode[1].AnnotatorPVDepth='3'),'Auto Play protects deeper stored analysis and stores new source analysis');
     Check((F.ActiveGameTree.Root.EngineScore='0.80') and
       (F.ActiveGameTree.MainlineNode[1].AnnotatorScore='-0.45'),'Game-engine fields stay intact and post-bestmove info is ignored');
-    Check(Pos('Auto Play:',F.ActiveGameTree.MainlineNode[1].OriginText)=1,'New nodes carry Auto Play provenance');
+    Check(F.ActiveGameTree.MainlineNode[1].OriginText='Auto Play: Auto Play UCI',
+      'New nodes carry readable Auto Play provenance');
+    Options:=DefaultGameTreePdnRenderOptions;
+    RenderGameTreeMovesToPdn(F.ActiveGameTree,Options,Render);
+    Check((Pos('Auto Play:',Render.Text)=0) and (Pos('A: ',Render.Text)>0),
+      'Move notation retains evaluation without repeated Auto Play origin');
     Lines.Clear;F.ActiveGameTree.CopyMainlineMovesTo(Lines);P.LoadFromFEN(ChessStartingFEN);
     for K:=0 to Lines.Count-1 do P.PlayMove(Lines[K]);
     Check(TGameBoardControl(F.FindComponent('MainBoard')).Position.ToFEN=P.ToFEN,
@@ -277,6 +310,7 @@ begin
     Check(Button(F,'Auto Play').Enabled,'Stop restores chess Auto Play button');
     Check(F.ActiveGameTree.FindNodeById(Late.NodeId).AnnotatorScore<>'9.99',
       'A cancelled Auto Play snapshot cannot overwrite any node');
+    CheckOriginDisplay;
     BeforeCount:=F.ActiveGameTree.MainlineCount;A:=TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
     try
       Options:=DefaultGameTreePdnRenderOptions;Options.FileFormat:=gffPgn;Options.LosslessPgn:=True;
