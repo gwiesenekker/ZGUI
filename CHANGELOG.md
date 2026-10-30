@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Default new chess engines to UCI — 2026-10-30
 
+Commit: `b1ea570`.
+
 - Apply the requested engine-editor default, previously left as a review
   candidate: use UCI with no Hub `init` command for new registrations when the
   current game profile supports only UCI. This is shared Windows/Linux code.
