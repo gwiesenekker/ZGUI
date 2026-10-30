@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Fit the Engines dialog columns — 2026-10-30
 
+Commit: `ef2e9ca`.
+
 - Size executable and protocol-ID columns to their longest header/value plus a
   font-based margin. Let the path column fill the remaining client width using
   the grid's existing automatic filling, so long paths do not force a wide window.
