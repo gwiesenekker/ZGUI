@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Include grid titles in measured engine-column widths — 2026-10-30
 
+Commit: `616724d`.
+
 - Fix clipped DXP headers: column titles are stored separately from cell text, so
   measuring `Cols[].Text` missed them. Use the existing grid's native autosizing,
   which includes header/cell fonts and native cell padding, then add the margin.
