@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Mate scores in score history and displayed-position evaluation — 2026-10-30
 
+Commit: `e1a4e8a`.
+
 - Apply the shared score-display candidate approved in Claude's review of
   `93795c2`, including the condition to retain the browsed PV's own score.
 - Recognize signed mate scores in the existing history control: positive mates
