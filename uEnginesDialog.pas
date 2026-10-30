@@ -27,6 +27,9 @@ type
       var AAccepted: Boolean);
     procedure OpenEngineEditor(AIndex: Integer);
     procedure RefreshGrid;
+    procedure MeasureColumns;
+  protected
+    procedure FontChanged(Sender: TObject); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -39,6 +42,7 @@ constructor TEnginesDialog.Create(AOwner: TComponent);
 var
   LItem: TMenuItem;
   LPopup: TPopupMenu;
+  Col: Integer;
 begin
   inherited Create(AOwner);
 
@@ -62,14 +66,15 @@ begin
   FGrid.RowCount := 1;
   FGrid.Options := FGrid.Options + [goRowSelect] - [goEditing];
   FGrid.OnDblClick := @EditEngineClick;
-  FGrid.Cells[0, 0] := 'Exe path';
-  FGrid.Cells[1, 0] := 'Executable';
-  FGrid.Cells[2, 0] := 'Hub / UCI id';
-  FGrid.Cells[3, 0] := 'DXP id';
-  FGrid.ColWidths[0] := 360;
-  FGrid.ColWidths[1] := 160;
-  FGrid.ColWidths[2] := 130;
-  FGrid.ColWidths[3] := 130;
+  FGrid.Columns.Add.Title.Caption := 'Exe path';
+  FGrid.Columns.Add.Title.Caption := 'Executable';
+  FGrid.Columns.Add.Title.Caption := 'Hub / UCI id';
+  FGrid.Columns.Add.Title.Caption := 'DXP id';
+  for Col:=1 to 3 do FGrid.Columns[Col].SizePriority:=0;
+  FGrid.Columns[0].SizePriority:=1;
+  FGrid.AutoFillColumns:=True;
+  FGrid.Options:=FGrid.Options+[goColSizing,goTruncCellHints];
+  FGrid.ShowHint:=True;
 
   LPopup := TPopupMenu.Create(Self);
   LItem := TMenuItem.Create(Self);
@@ -232,6 +237,21 @@ begin
   ShowFormCenteredOnOwner(FAddForm, Self);
 end;
 
+procedure TEnginesDialog.FontChanged(Sender: TObject);
+begin
+  inherited FontChanged(Sender);
+  MeasureColumns;
+end;
+
+procedure TEnginesDialog.MeasureColumns;
+var Col,Margin: Integer;
+begin
+  if (FGrid=nil) or (csDestroying in ComponentState) then Exit;
+  Margin:=MeasureGuiText('MM',FGrid.Font).cx+FGrid.GridLineWidth;
+  for Col:=1 to 3 do
+    FGrid.ColWidths[Col]:=MeasureGuiText(FGrid.Cols[Col].Text,FGrid.Font).cx+Margin;
+end;
+
 procedure TEnginesDialog.RefreshGrid;
 var
   Engine: TExternalEngineDefinition;
@@ -250,6 +270,7 @@ begin
     else FGrid.Cells[2, I + 1] := Engine.HubId;
     FGrid.Cells[3, I + 1] := Engine.DxpId;
   end;
+  MeasureColumns;
 end;
 
 end.

@@ -4,6 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Fit the Engines dialog columns — 2026-10-30
+
+- Size executable and protocol-ID columns to their longest header/value plus a
+  font-based margin. Let the path column fill the remaining client width using
+  the grid's existing automatic filling, so long paths do not force a wide window.
+- Remeasure when registrations refresh or the dialog font changes. Retain manual
+  column resizing and show full clipped cell text in hover hints. Preserve row
+  selection and the existing add/edit/delete actions.
+- Validation: application compiles and setup/preferences GUI suite passes 278
+  checks, including three
+  font sizes, long paths, 35 registrations, vertical scrolling, dialog shrink/grow
+  and complete underlying path/ID data. Native Windows execution is unverified.
+
+
 ### Fit engine parameter columns to the dialog — 2026-10-30
 
 Commit: `9621f03`.

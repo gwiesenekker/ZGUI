@@ -5,7 +5,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,StdCtrls,ExtCtrls,
  uGamePosition,uChessPosition,uGameGuiProfile,uPositionSetupAdapter,
  uChessPositionSetupAdapter,uDraughtsPositionSetupForm,uGameBoardControl,
  uChessBoardControl,uPreferences,uPreferencesForm,uScoreHistoryControl,uScoreHistoryForm,
- uPvBrowser,uMainForm,uGuiDialogs,Grids,uEngineEditForm,uEngineRegistry,uEngineParamsJson;
+ uPvBrowser,uMainForm,uGuiDialogs,Grids,uEngineEditForm,uEnginesDialog,uEngineRegistry,uEngineParamsJson;
 type
  TChooser=class(TPreferencesForm)
  public Chosen:TColor;AcceptChoice:Boolean;
@@ -233,6 +233,49 @@ begin
   for C:=Low(C) to High(C) do Check(Pop.ScoreColors[C]=P.ScoreHistoryColors[C],'New popout inherits saved palette');
  finally M.Free;end;
 end;
+procedure EnginesDialogSizes;
+var Engines:TExternalEngineList;D:TExternalEngineDefinition;Form:TEnginesDialog;
+    Grid:TStringGrid;Saved:TMemoryStream;HadRegistry:Boolean;I,J,Col,Margin,OldPathWidth:Integer;
+begin
+  Saved:=TMemoryStream.Create;Engines:=TExternalEngineList.Create;Form:=nil;
+  HadRegistry:=FileExists(EnginesJsonFileName);
+  if HadRegistry then Saved.LoadFromFile(EnginesJsonFileName);
+  try
+    for I:=1 to 35 do begin
+      D:=TExternalEngineDefinition.Create;D.Kind:=eekUci;
+      D.ExePath:='/a/very/long/directory/which/should/not/determine/the/window/width/engine'+IntToStr(I)+'.exe';
+      D.UciId:='Engine '+IntToStr(I);D.DxpId:='dxp'+IntToStr(I);Engines.Add(D);
+    end;
+    SaveExternalEngines(EnginesJsonFileName,Engines);Form:=TEnginesDialog.Create(nil);Grid:=nil;
+    for I:=0 to Form.ComponentCount-1 do if Form.Components[I] is TStringGrid then Grid:=TStringGrid(Form.Components[I]);
+    Check(Grid<>nil,'Engines list grid exists');Form.Show;Pump;
+    for J:=0 to 2 do begin
+      Form.Font.Size:=8+5*J;Pump;
+      Check((Grid.ColCount=4) and (Grid.FixedCols=0) and (Grid.RowCount=36),
+        'Engines list retains four columns and all registrations');
+      Margin:=MeasureGuiText('MM',Grid.Font).cx+Grid.GridLineWidth;
+      for Col:=1 to 3 do
+        Check(Grid.ColWidths[Col]=MeasureGuiText(Grid.Cols[Col].Text,Grid.Font).cx+Margin,
+          'Executable and engine IDs fit longest text plus margin after font change');
+      Check((Grid.ColWidths[0]>0) and (Grid.GridWidth<=Grid.ClientWidth) and
+        (Grid.ClientWidth-Grid.GridWidth<=4),'Path fills remaining width with vertical scrolling');
+      OldPathWidth:=Grid.ColWidths[0];Form.Width:=Form.Width+150;Pump;
+      Check(Grid.ColWidths[0]>OldPathWidth,'Path column expands with dialog');
+      Form.Width:=Form.Width-150;Pump;
+      Check(Grid.ColWidths[0]=OldPathWidth,'Path column shrinks with dialog');
+      Check((goRowSelect in Grid.Options) and not (goEditing in Grid.Options) and
+        (Grid.OnDblClick<>nil),'Existing row selection and edit action remain');
+      Check((goTruncCellHints in Grid.Options) and Grid.ShowHint,'Clipped paths expose full text in hints');
+      Check((Grid.Cells[0,1]=Engines[0].ExePath) and (Grid.Cells[2,1]=Engines[0].UciId),
+        'Layout keeps complete path and identity data');
+    end;
+  finally
+    Form.Free;Engines.Free;
+    if HadRegistry then Saved.SaveToFile(EnginesJsonFileName) else DeleteFile(EnginesJsonFileName);
+    Saved.Free;
+  end;
+end;
+
 procedure MeasuredDialogSizes;
 var Font:TFont;Bitmap:TBitmap;One,Two,Multi:TSize;I,J,Col,Margin,OldValueWidth:Integer;
     Main:TMainForm;Log:TMemo;Editor:TEngineEditForm;Grid:TStringGrid;
@@ -302,7 +345,7 @@ begin
  SavedPrefs:=TMemoryStream.Create;HadPrefs:=FileExists(PreferencesJsonFileName);
  if HadPrefs then SavedPrefs.LoadFromFile(PreferencesJsonFileName);
  V:=TChessVariant.Create;RegisterDefaultGameVariant(V);RegisterGameGuiProfile(V,ChessGuiProfile);
- try Adapters;DraftDialog;PreferenceEditor;MainIntegration;MeasuredDialogSizes;
+ try Adapters;DraftDialog;PreferenceEditor;MainIntegration;MeasuredDialogSizes;EnginesDialogSizes;
   WriteLn('Setup and score preferences checks passed (',Checks,' checks)');
  finally
   RegisterDefaultGameVariant(nil);V.Free;
