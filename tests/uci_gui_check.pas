@@ -4,7 +4,7 @@ program uci_gui_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Controls, Classes, SysUtils,
   StdCtrls, Menus, Grids, ExtCtrls, ComCtrls, uGameTreeView, uEngineEditForm, uEngineRegistry,
   uEngineParamsJson, uMainForm, uChessPosition, uChessUciEngine, uGamePosition,
-  uGameGuiProfile, uGameTree, uGuiDialogs, uGameTreeSearchRef,
+  uGameGuiProfile, uDraughtsPosition, uGameTree, uGuiDialogs, uGameTreeSearchRef,
   uGameSetupForm, uGameSetupTypes, uGameOrchestrator, uRunningGame, uGameBoardControl, Types, Math, uChessPgn, uGameTreePdn, uGameTreeActor, uGameTreeNodeData, uGameNotationView, uPvSnapshot, uGameGuiMessages, uGameFileReader, LCLType;
 type TErrors=class
   procedure Report(Sender: TObject; E: Exception);
@@ -100,6 +100,31 @@ begin
   for Result:=1 to Grid.RowCount-1 do if SameText(Grid.Cells[0,Result],Name) then Exit;
   Result:=-1;
 end;
+procedure EditorDefaults;
+var F:TEngineEditForm;D:TExternalEngineDefinition;V:TGameVariant;I:Integer;Kind:TComboBox;Init:TMemo;
+begin
+  V:=DefaultGameVariant;F:=TEngineEditForm.Create(nil);D:=TExternalEngineDefinition.Create;
+  try
+    Kind:=nil;Init:=nil;
+    for I:=0 to F.ComponentCount-1 do if F.Components[I] is TComboBox then
+      if TComboBox(F.Components[I]).Items.IndexOf('UCI')>=0 then Kind:=TComboBox(F.Components[I]);
+    for I:=0 to F.ComponentCount-1 do if F.Components[I] is TMemo then
+      if (TMemo(F.Components[I]).Parent=F) and not TMemo(F.Components[I]).Visible then Init:=TMemo(F.Components[I]);
+    Check((Kind<>nil) and (Init<>nil),'Engine protocol and init controls exist');
+    F.LoadEngine(nil);
+    Check(Kind.Text='UCI','New chess engine defaults to UCI');
+    Check(Trim(Init.Text)='','New UCI engine has no Hub init command');
+    D.Kind:=eekHub;D.InitText:='init';F.LoadEngine(D);
+    Check(SameText(Kind.Text,'hub'),'Existing Hub engine keeps its selected protocol');
+    D.Kind:=eekDxp;F.LoadEngine(D);Check(Kind.Text='DXP','Existing DXP engine keeps its selected protocol');
+    D.Kind:=eekUci;F.LoadEngine(D);Check(Kind.Text='UCI','Existing UCI engine keeps its selected protocol');
+    RegisterDefaultGameVariant(DraughtsVariant);F.LoadEngine(nil);
+    Check(SameText(Kind.Text,'hub'),'New draughts engine retains Hub default');
+    Check(Trim(Init.Text)='init','New Hub engine retains init command');
+    RegisterDefaultGameVariant(V);F.LoadEngine(nil);
+    Check(Kind.Text='UCI','Reused editor resets a new chess engine to UCI');
+  finally RegisterDefaultGameVariant(V);D.Free;F.Free;end;
+end;
 procedure Editor(const Exe: string);
 var F: TEngineEditForm; D: TExternalEngineDefinition; P,Q: TEngineParamArray;
   G: TStringGrid; Tick: QWord; Name,IniName: string; Lines: TStringList;Index:Integer;Failed:Boolean;
@@ -142,11 +167,13 @@ begin
     Check(Pos('hAsH',GuiTestLastConfirmationText)>0,'Invalid spin is reported');
     LoadEngineParamsFromJson(Name,'uci',P); Check(EngineParamValue(P,'hash','')='64','Invalid spin cannot overwrite saved configuration');
     DeleteFile(Name);D.Arguments:='--fake-uci exit-init';F.LoadEngine(D);Button(F,'Launch engine').Click;
-    Tick:=GetTickCount64;
-    repeat Pump;until (GetTickCount64-Tick>700);
-    Failed:=False;for Index:=0 to F.ComponentCount-1 do
-      if (F.Components[Index] is TMemo) and
-        (Pos('UCI discovery failed',TMemo(F.Components[Index]).Text)>0) then Failed:=True;
+    Tick:=GetTickCount64;Failed:=False;
+    repeat
+      Pump;
+      for Index:=0 to F.ComponentCount-1 do
+        if (F.Components[Index] is TMemo) and
+          (Pos('UCI discovery failed',TMemo(F.Components[Index]).Text)>0) then Failed:=True;
+    until Failed or (GetTickCount64-Tick>5000);
     Check(Failed and (F.Caption='Edit engine'),'Editor reports failed engine discovery and remains usable');
     D.Arguments:='--fake-uci';F.LoadEngine(D);Button(F,'Launch engine').Click;
     Tick:=GetTickCount64;repeat Pump;until (Row(G,'Clear Hash')>0) or (GetTickCount64-Tick>5000);
@@ -502,7 +529,7 @@ begin
   if ParamStr(1)='--fake-uci' then begin Fake; Halt; end;
   Application.Initialize; Application.ShowMainForm:=False; Errors:=TErrors.Create; Application.OnException:=@Errors.Report; V:=TChessVariant.Create;
   RegisterDefaultGameVariant(V); RegisterGameGuiProfile(V,ChessGuiProfile);
-  try Editor(ExpandFileName(ParamStr(0))); Analysis(ExpandFileName(ParamStr(0)));
+  try EditorDefaults;Editor(ExpandFileName(ParamStr(0))); Analysis(ExpandFileName(ParamStr(0)));
     AutoPlay(ExpandFileName(ParamStr(0)));Games(ExpandFileName(ParamStr(0)));
     if ParamStr(1)<>'' then begin RealAnalysis(ParamStr(1)); Games(ExpandFileName(ParamStr(1)),True); end;
     WriteLn('UCI GUI checks passed (',Checks,' checks)');

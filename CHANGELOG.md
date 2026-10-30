@@ -4,6 +4,18 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Default new chess engines to UCI — 2026-10-30
+
+- Apply the requested engine-editor default, previously left as a review
+  candidate: use UCI with no Hub `init` command for new registrations when the
+  current game profile supports only UCI. This is shared Windows/Linux code.
+- Preserve the protocol when editing any existing engine and retain Hub as the
+  new-engine default for draughts. No changes to game functionality or GUI layout.
+- Validation: application compiles and the UCI GUI suite passes 104 checks,
+  including new defaults, existing Hub/DXP/UCI registrations, profile switching,
+  discovery, analysis and clocked games. Replace the failed-discovery test's fixed
+  700 ms delay with a bounded wait for its result. Native Windows remains untested.
+
 ### Measured text sizes and quieter Auto Play notation — 2026-10-30
 
 Commit: `2ea8d5d`.

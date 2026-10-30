@@ -98,7 +98,7 @@ type
 implementation
 
 uses
-  LCLType, uGuiDialogs;
+  LCLType, uGuiDialogs, uGameGuiProfile, uGamePosition;
 type TUciEditorLog=class(TThreadMessage)
   Text: string;
 end;
@@ -467,6 +467,9 @@ begin
     FHubArgsEdit.Text := '';
     FDxpArgsEdit.Text := '';
     FInitMemo.Text := 'init';
+    if GameGuiProfileFor(DefaultGameVariant).EngineKinds=[eekUci] then begin
+      FKindCombo.ItemIndex:=2;FInitMemo.Clear;
+    end;
   end
   else
   begin
