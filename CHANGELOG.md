@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Separate chess and draughts preferences — 2026-10-30
 
+Commit: `b801cd1`.
+
 - Implement Claude's approved preferences proposal with a flat game selector and
   the existing Appearance, Evaluation, Notation and Score history pages. Keep an
   independent draft per game, save all edited sections in one atomic publication,
@@ -22,7 +24,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
   regression checks, including inactive-popout activation; update the manual.
 - Validation: application compilation, all eleven GUI suites (including 87 mixed
   checks) and the full headless regression suite pass. The preferences-only source
-  snapshot also compiles independently of the unfinished engine feature flags.
+  snapshot also compiles and passes all eleven GUI suites independently of the
+  unfinished engine feature flags.
   Native Windows interaction remains untested.
 
 ### Address Claude review T5 and C6 — 2026-10-30
