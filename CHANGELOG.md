@@ -4,6 +4,28 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Review the multi-game proposal and prepare two Scan engines — 2026-10-30
+
+- Review Claude's `MULTI_GAME_PROPOSAL.md` against the current source. Record six
+  findings and revised staging in `chatgpt/MULTI_GAME_PROPOSAL_REVIEW.md`: atomic
+  mixed-game enablement, annotator event ownership, tournament owner routing,
+  corrected Hub parity assumptions, strict file classification and lifetime/close
+  boundaries. No multi-game application code is implemented by this review.
+- At the user's request, install the official Scan 3.1 archive independently in
+  `engine6` and `engine7`, retaining Linux/Windows binaries, source, GPLv3 license,
+  checksums and per-directory notes. Register both via the existing registry API
+  as distinct Hub engines, preserving all prior registrations.
+- Configure international draughts, one thread and 64 MiB hash per engine; disable
+  book and unavailable bitbases for testing. No shared configuration or symlinks.
+- Validation: 50 real-engine checks through existing factories, Hub adapter and
+  orchestrator pass: simultaneous initialization, scored PVs, eight clocked plies,
+  two forced wins with swapped registrations, independent options and registry
+  round-trip. Range/overflow/heap checks enabled. Native Windows is untested;
+  Hub selection in the game GUI awaits the proposed draughts entry point.
+- Engine assets and machine-local registrations remain ignored. Application source
+  and the existing GUI are unchanged; no application rebuild is required.
+
+
 ### Fix engine-game Save format and long annotator budgets — 2026-10-30
 
 Commit: `1be52cb`.
