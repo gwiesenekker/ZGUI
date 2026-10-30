@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Start the DXP launch-test listener before its client — 2026-10-30
 
-Commit: pending.
+Commit: `961ae95`.
 
 - In the engine editor's DXP listen role, start the existing socket-test thread
   and wait for its successful Listen signal before launching the client process.
