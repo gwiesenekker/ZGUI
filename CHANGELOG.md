@@ -4,6 +4,21 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Multi-game foundation: registration and explicit contexts — 2026-10-30
+
+- Implement revised proposal stages 1–2 under the user's authorization to proceed
+  without intermediate review gates. Register both application-owned game variants
+  with disjoint protocol mappings; release them after windows and runners.
+- Pass variant identity through setups, validation, runners, running trees, replay
+  copies and tournament setups. Give existing dialogs explicit target-game
+  constructors; engine defaults now follow that context. Preserve legacy wrappers
+  while mixed-game views are prepared. No mixed selection is exposed at this step.
+- Add multi-game registry/context checks and retain existing GUI layouts and shared
+  game, engine and tournament infrastructure. Real GWD DXP testing remains deferred.
+- Validation: new context checks pass (8), all nine existing GUI suites pass;
+  headless regression and application build are also run for this foundation.
+
+
 ### Include grid titles in measured engine-column widths — 2026-10-30
 
 Commit: `616724d`.

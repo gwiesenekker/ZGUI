@@ -85,7 +85,9 @@ type
   protected
     procedure DoShow; override;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent); override; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure CreateDatabase(const AFileName: string);
@@ -118,7 +120,10 @@ begin
     Result := Format('%dh %02dm', [Seconds div 3600, (Seconds mod 3600) div 60]);
 end;
 
-constructor TDatabaseForm.Create(AOwner: TComponent);
+constructor TDatabaseForm.Create(AOwner:TComponent);
+begin Create(AOwner,DefaultGameVariant);end;
+
+constructor TDatabaseForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
   LBoardPanel: TPanel;
   LBoardPopup: TPopupMenu;
@@ -131,6 +136,8 @@ var
   LTopPanel: TPanel;
 begin
   inherited Create(AOwner);
+  if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
+  FVariant:=AVariant;
 
   Caption := 'Database';
   Position := poDesigned;
@@ -140,7 +147,7 @@ begin
   Constraints.MinHeight := 420;
   OnClose := @FormCloseHandler;
 
-  FVariant:=DefaultGameVariant;FProfile:=GameGuiProfileFor(FVariant);
+  FProfile:=GameGuiProfileFor(FVariant);
   FDatabase := TGameDatabase.Create(FProfile.FileFormat);
   FBoard := FVariant.CreatePosition;
   FPreferences := DefaultGuiPreferences;

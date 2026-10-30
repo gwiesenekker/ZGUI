@@ -120,8 +120,8 @@ begin
     D.Kind:=eekDxp;F.LoadEngine(D);Check(Kind.Text='DXP','Existing DXP engine keeps its selected protocol');
     D.Kind:=eekUci;F.LoadEngine(D);Check(Kind.Text='UCI','Existing UCI engine keeps its selected protocol');
     RegisterDefaultGameVariant(DraughtsVariant);F.LoadEngine(nil);
-    Check(SameText(Kind.Text,'hub'),'New draughts engine retains Hub default');
-    Check(Trim(Init.Text)='init','New Hub engine retains init command');
+    Check(Kind.Text='UCI','Editor target game is independent of process default');
+    Check(Trim(Init.Text)='','Chess editor retains empty UCI init across default changes');
     RegisterDefaultGameVariant(V);F.LoadEngine(nil);
     Check(Kind.Text='UCI','Reused editor resets a new chess engine to UCI');
   finally RegisterDefaultGameVariant(V);D.Free;F.Free;end;

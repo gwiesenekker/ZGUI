@@ -44,7 +44,9 @@ type
     procedure UpdatePiecePalette;
     procedure UpdatePiecePaletteLayout;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent); override; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure StartSetup(const AFEN: string);
@@ -57,7 +59,10 @@ implementation
 uses
   Math,uGameGuiProfile;
 
-constructor TPositionSetupForm.Create(AOwner: TComponent);
+constructor TPositionSetupForm.Create(AOwner:TComponent);
+begin Create(AOwner,DefaultGameVariant);end;
+
+constructor TPositionSetupForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
   LApplyButton: TButton;
   LBottomPanel: TPanel;
@@ -66,6 +71,8 @@ var
   I: Integer;
 begin
   inherited Create(AOwner);
+  if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
+  FVariant:=AVariant;
 
   Caption := 'Setup position';
   Position := poDesigned;
@@ -75,7 +82,7 @@ begin
   Constraints.MinWidth := 520;
   Constraints.MinHeight := 420;
 
-  FVariant:=DefaultGameVariant;
+
   FAdapter:=GameGuiProfileFor(FVariant).SetupAdapterClass.Create;
   FSelectedPiece:=FAdapter.PalettePiece(0);
   SetLength(FPiecePaintBoxes,FAdapter.PaletteCount);

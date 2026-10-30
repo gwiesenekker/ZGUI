@@ -23,8 +23,9 @@ begin
   // Linked draughts adapters stay available to their existing legacy consumers.
   PreviousVariant := DefaultGameVariant;
   Chess := TChessVariant.Create;
+  RegisterGame(Chess,ChessGuiProfile);
+  RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
   RegisterDefaultGameVariant(Chess);
-  RegisterGameGuiProfile(Chess,ChessGuiProfile);
   try
     Application.Scaled := True;
     Application.Initialize;
@@ -35,7 +36,6 @@ begin
     if Application.MainForm <> nil then Application.MainForm.Free;
     MainForm := nil;
     RegisterDefaultGameVariant(PreviousVariant);
-    RegisterGameGuiProfile(nil,DraughtsGuiProfile);
-    Chess.Free;
+    ClearRegisteredGames;
   end;
 end.

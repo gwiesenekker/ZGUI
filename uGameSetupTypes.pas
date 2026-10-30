@@ -10,6 +10,7 @@ type
   TPlayerKind = (pkHuman, pkRegistered);
 
   TGameSetup = record
+    Variant:TGameVariant; // Application-owned, outlives this setup and its runner.
     ForcePonderOff: Boolean;
     StartingFEN: string;
     WhitePlayer: TPlayerKind;
@@ -21,9 +22,15 @@ type
 
   TGameSetupAcceptedEvent = procedure(Sender: TObject; const ASetup: TGameSetup) of object;
 
+function GameSetupVariant(const Setup:TGameSetup):TGameVariant;
 procedure ValidateGameSetup(const Setup: TGameSetup; Variant: TGameVariant; Allowed: TExternalEngineKinds);
 implementation
 uses SysUtils, Math;
+function GameSetupVariant(const Setup:TGameSetup):TGameVariant;
+begin
+  Result:=Setup.Variant;
+  if Result=nil then Result:=DefaultGameVariant; // Legacy callers during migration.
+end;
 procedure ValidateGameSetup(const Setup: TGameSetup; Variant: TGameVariant; Allowed: TExternalEngineKinds);
 var P: TGamePosition;
   procedure Player(Kind: TPlayerKind; Engine: TExternalEngineDefinition);
@@ -33,6 +40,7 @@ var P: TGamePosition;
     if EngineExecutableProblem(Engine)<>'' then raise EConvertError.Create(EngineExecutableProblem(Engine));
   end;
 begin
+  if (Setup.Variant<>nil) and (Setup.Variant<>Variant) then raise EConvertError.Create('Game setup variant mismatch');
   if (Setup.TimeControl.MovesPerPeriod<0) or IsNan(Setup.TimeControl.MinutesPerPeriod) or
     IsInfinite(Setup.TimeControl.MinutesPerPeriod) or (Setup.TimeControl.MinutesPerPeriod<=0) or
     (Setup.TimeControl.MinutesPerPeriod>MaxDouble/60) or IsNan(Setup.TimeControl.IncrementSeconds) or

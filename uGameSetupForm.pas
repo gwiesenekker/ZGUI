@@ -11,6 +11,7 @@ uses
 type
   TGameSetupForm = class(TForm)
   private
+    FVariant:TGameVariant;
     FBlackPlayerCombo: TComboBox;
     FBusyEngineKeys: TStringList;
     FDefaultTimeControl: TTimeControl;
@@ -42,7 +43,9 @@ type
     function SelectedEngineKey(ACombo: TComboBox): string;
     function SelectedPlayer(ACombo: TComboBox): TPlayerKind;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent); override; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure SetBusyEngineKeys(AKeys: TStrings);
@@ -51,13 +54,18 @@ type
 
 implementation
 
-constructor TGameSetupForm.Create(AOwner: TComponent);
+constructor TGameSetupForm.Create(AOwner:TComponent);
+begin Create(AOwner,DefaultGameVariant);end;
+
+constructor TGameSetupForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
   LButtonPanel, LContentPanel: TPanel;
   LCancelButton, LOkButton: TButton;
   LTop: Integer;
 begin
   inherited Create(AOwner);
+  if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
+  FVariant:=AVariant;
 
   Caption := 'New game';
   Position := poDesigned;
@@ -69,7 +77,7 @@ begin
   FBusyEngineKeys := TStringList.Create;
   FBusyEngineKeys.Sorted := True;
   FBusyEngineKeys.Duplicates := dupIgnore;
-  FDefaultTimeControl := GameGuiProfileFor(DefaultGameVariant).DefaultClock;
+  FDefaultTimeControl := GameGuiProfileFor(FVariant).DefaultClock;
   FRegisteredEngines := TExternalEngineList.Create;
   LoadExternalEngines(EnginesJsonFileName, FRegisteredEngines);
 
@@ -82,7 +90,7 @@ begin
   LTop := 0;
 
   FStartingFENEdit := TEdit.Create(Self);
-  FStartingFENEdit.Text := DefaultGameVariant.DefaultStartingFEN;
+  FStartingFENEdit.Text := FVariant.DefaultStartingFEN;
   AddLabelledEdit(LContentPanel, 'Starting position (FEN)', FStartingFENEdit, LTop);
 
   FWhitePlayerCombo := TComboBox.Create(Self);
@@ -149,7 +157,7 @@ end;
 
 procedure TGameSetupForm.ApplyPreferences(const APreferences: TGuiPreferences);
 begin
-  FDefaultTimeControl := GameGuiProfileFor(DefaultGameVariant).DefaultClock;
+  FDefaultTimeControl := GameGuiProfileFor(FVariant).DefaultClock;
   if FMinutesEdit <> nil then
     FMinutesEdit.Text := FormatFloat('0.###',
       FDefaultTimeControl.MinutesPerPeriod);
@@ -258,7 +266,7 @@ begin
   for I := 0 to FRegisteredEngines.Count - 1 do
   begin
     EngineKey := EngineIdentityKey(FRegisteredEngines[I]);
-    if (FRegisteredEngines[I].Kind in GameGuiProfileFor(DefaultGameVariant).EngineKinds) and (not IsEngineBusy(FRegisteredEngines[I])) and
+    if (FRegisteredEngines[I].Kind in GameGuiProfileFor(FVariant).EngineKinds) and (not IsEngineBusy(FRegisteredEngines[I])) and
       ((AExcludeEngineKey = '') or (EngineKey <> AExcludeEngineKey)) then
       ACombo.Items.AddObject(EnginePickerDisplayName(FRegisteredEngines[I],
         ASlotIndex), FRegisteredEngines[I]);
@@ -334,7 +342,7 @@ procedure TGameSetupForm.OkClick(Sender: TObject);
 var
   LSetup: TGameSetup;
 begin
-  LSetup:=Default(TGameSetup);
+  LSetup:=Default(TGameSetup);LSetup.Variant:=FVariant;
   try
     try
       LSetup.StartingFEN:=Trim(FStartingFENEdit.Text);
@@ -346,7 +354,7 @@ begin
         raise EConvertError.Create('Enter valid numbers for moves, minutes and increment');
       if FIncrementModeCombo.ItemIndex=1 then LSetup.TimeControl.IncrementMode:=cimAfterMoveLimit
       else LSetup.TimeControl.IncrementMode:=cimFromStart;
-      ValidateGameSetup(LSetup,DefaultGameVariant,GameGuiProfileFor(DefaultGameVariant).EngineKinds);
+      ValidateGameSetup(LSetup,FVariant,GameGuiProfileFor(FVariant).EngineKinds);
       if Assigned(FOnAccepted) then FOnAccepted(Self,LSetup);
       Close;
     except on E:Exception do ShowGuiOkDialog(Self,'New game',E.Message); end;

@@ -130,7 +130,9 @@ type
     property SaveFileName: string read FFileName;
     property StorageError: string read FStorageError;
     procedure BeginShutdown;
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent); override; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure GameStopped(AGame: TObject);
     procedure GameRemoved(AGame: TObject);
@@ -215,7 +217,10 @@ begin
       Result[I] := '_';
 end;
 
-constructor TTournamentDialog.Create(AOwner: TComponent);
+constructor TTournamentDialog.Create(AOwner:TComponent);
+begin Create(AOwner,DefaultGameVariant);end;
+
+constructor TTournamentDialog.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
   ButtonPanel: TPanel;
   ContentPanel: TPanel;
@@ -237,7 +242,9 @@ var
   Id: TGUID;
 begin
   inherited Create(AOwner);
-  FVariant:=DefaultGameVariant;FProfile:=GameGuiProfileFor(FVariant);
+  if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
+  FVariant:=AVariant;
+  FProfile:=GameGuiProfileFor(FVariant);
   if CreateGUID(Id) <> 0 then
     raise EInOutError.Create('Could not create a tournament identity');
   FTournamentId := GUIDToString(Id);
@@ -599,7 +606,7 @@ begin
     raise EConvertError.Create('Increment must be a nonnegative finite number');
   if FIncrementModeCombo.ItemIndex=1 then Result.IncrementMode:=cimAfterMoveLimit
   else Result.IncrementMode:=cimFromStart;
-  Setup:=Default(TGameSetup);Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
+  Setup:=Default(TGameSetup);Setup.Variant:=FVariant;Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
   Setup.TimeControl:=Result;Setup.StartingFEN:=Trim(FStartingFENEdit.Text);
   if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
   ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
@@ -1572,7 +1579,7 @@ begin
     Exit;
   Data := ReadTournamentDocument(AFileName,FProfile.FileFormat);
   try
-    Setup:=Default(TGameSetup);Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
+    Setup:=Default(TGameSetup);Setup.Variant:=FVariant;Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
     Setup.StartingFEN:=Data.Get('starting_fen',FVariant.DefaultStartingFEN);
     Setup.TimeControl:=FProfile.DefaultClock;
     Setup.TimeControl.MovesPerPeriod:=Data.Get('moves_per_period',Setup.TimeControl.MovesPerPeriod);
@@ -1796,7 +1803,7 @@ function TTournamentDialog.GameSetupForRow(ARow: Integer;
   out ASetup: TGameSetup): Boolean;
 begin
   Result := False;
-  ASetup:=Default(TGameSetup);
+  ASetup:=Default(TGameSetup);ASetup.Variant:=FVariant;
   ASetup.WhitePlayer:=pkRegistered;ASetup.BlackPlayer:=pkRegistered;
   if not TournamentGridHasPairingAtRow(FGrid,ARow) then Exit;
   ASetup.WhiteEngine:=EngineForRow(ARow,True);ASetup.BlackEngine:=EngineForRow(ARow,False);

@@ -5,12 +5,13 @@ unit uEnginesDialog;
 interface
 
 uses
-  Classes, Controls, Dialogs, Forms, Grids, Menus, SysUtils,
+  uGamePosition, Classes, Controls, Dialogs, Forms, Grids, Menus, SysUtils,
   uEngineEditForm, uEngineRegistry, uGuiDialogs;
 
 type
   TEnginesDialog = class(TForm)
   private
+    FVariant:TGameVariant;
     FAddForm: TEngineEditForm;
     FEditingIndex: Integer;
     FEngines: TExternalEngineList;
@@ -31,20 +32,27 @@ type
   protected
     procedure FontChanged(Sender: TObject); override;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent); override; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     property Engines: TExternalEngineList read FEngines;
   end;
 
 implementation
 
-constructor TEnginesDialog.Create(AOwner: TComponent);
+constructor TEnginesDialog.Create(AOwner:TComponent);
+begin Create(AOwner,DefaultGameVariant);end;
+
+constructor TEnginesDialog.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
   LItem: TMenuItem;
   LPopup: TPopupMenu;
   Col: Integer;
 begin
   inherited Create(AOwner);
+  if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
+  FVariant:=AVariant;
 
   Caption := 'Engines';
   Position := poDesigned;
@@ -102,7 +110,7 @@ begin
   FEditingIndex := -1;
   if FAddForm = nil then
   begin
-    FAddForm := TEngineEditForm.Create(Self);
+    FAddForm := TEngineEditForm.Create(Self,FVariant);
     FAddForm.OnAccepted := @EngineAccepted;
   end;
   FAddForm.LoadEngine(nil);
@@ -230,7 +238,7 @@ begin
   FEditingIndex := AIndex;
   if FAddForm = nil then
   begin
-    FAddForm := TEngineEditForm.Create(Self);
+    FAddForm := TEngineEditForm.Create(Self,FVariant);
     FAddForm.OnAccepted := @EngineAccepted;
   end;
   FAddForm.LoadEngine(FEngines[AIndex]);

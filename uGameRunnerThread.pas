@@ -304,10 +304,12 @@ begin
   inherited Create(True);
   FreeOnTerminate := False;
   FVariant := AVariant;
+  if FVariant=nil then FVariant:=GameSetupVariant(ASetup);
   FGameId := AGameId;
   FOnSnapshot := ASnapshotEvent;
   FOnFinished := AFinishedEvent;
   FSetup := ASetup;
+  FSetup.Variant:=FVariant;
   FSetup.WhiteEngine := nil;
   FSetup.BlackEngine := nil;
   if ASetup.WhiteEngine <> nil then

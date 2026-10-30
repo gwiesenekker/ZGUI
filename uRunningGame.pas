@@ -180,7 +180,7 @@ begin
   FReservationKeys.Duplicates := dupIgnore;
   if AReservationKeys <> nil then
     FReservationKeys.AddStrings(AReservationKeys);
-  FGameTree := TGameTree.Create;
+  FGameTree := TGameTree.Create(GameSetupVariant(ASetup));
   FGameTreeActor := TGameTreeActor.Create(FGameTree, False);
   FSnapshot := TGameRunnerSnapshot.Create;
   CopySetupFrom(ASetup);
@@ -208,6 +208,7 @@ procedure TRunningGame.CopySetupFrom(const ASetup: TGameSetup);
 begin
   ClearSetup;
   FSetup := ASetup;
+  FSetup.Variant:=FGameTree.Variant;
   FSetup.WhiteEngine := nil;
   FSetup.BlackEngine := nil;
   if ASetup.WhiteEngine <> nil then

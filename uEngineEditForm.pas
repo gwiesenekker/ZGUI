@@ -5,7 +5,7 @@ unit uEngineEditForm;
 interface
 
 uses
-  Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, Grids, StdCtrls,
+  uGamePosition, Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, Grids, StdCtrls,
   SysUtils, uDraughtsDxpTestConnection, uEngineParamsJson, uEngineRegistry,
   uPlatformProcess, SyncObjs, uChessUciEngine, uChessUciProtocol, uProcessEngineWorker, uThreadMessageQueue;
 
@@ -15,6 +15,7 @@ type
 
   TEngineEditForm = class(TForm)
   private
+    FVariant:TGameVariant;
     FUciEngine: TUciEngine;
     FUciInit,FUciButton: TProcessEngineCommand;
     FUciLogs: TThreadMessageQueue;
@@ -89,7 +90,9 @@ type
     procedure UpdateFieldsFromParams;
     procedure UpdateKindFields;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AOwner: TComponent); override; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure LoadEngine(AEngine: TExternalEngineDefinition);
     property OnAccepted: TEngineAcceptedEvent read FOnAccepted write FOnAccepted;
@@ -98,7 +101,7 @@ type
 implementation
 
 uses
-  LCLType, uGuiDialogs, uGameGuiProfile, uGamePosition;
+  LCLType, uGuiDialogs, uGameGuiProfile;
 type TUciEditorLog=class(TThreadMessage)
   Text: string;
 end;
@@ -115,7 +118,10 @@ const
     LineEnding +
     'These will be expanded into the configured host and port settings.';
 
-constructor TEngineEditForm.Create(AOwner: TComponent);
+constructor TEngineEditForm.Create(AOwner:TComponent);
+begin Create(AOwner,DefaultGameVariant);end;
+
+constructor TEngineEditForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
   LBrowseButton: TButton;
   LButtonPanel: TPanel;
@@ -133,6 +139,8 @@ var
   LTop: Integer;
 begin
   inherited Create(AOwner);
+  if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
+  FVariant:=AVariant;
 
   Caption := 'Add engine';
   Position := poDesigned;
@@ -469,7 +477,7 @@ begin
     FHubArgsEdit.Text := '';
     FDxpArgsEdit.Text := '';
     FInitMemo.Text := 'init';
-    if GameGuiProfileFor(DefaultGameVariant).EngineKinds=[eekUci] then begin
+    if GameGuiProfileFor(FVariant).EngineKinds=[eekUci] then begin
       FKindCombo.ItemIndex:=2;FInitMemo.Clear;
     end;
   end

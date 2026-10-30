@@ -1350,14 +1350,14 @@ begin
   begin
     TMenuItem(AComponent).Enabled := GameSupports(AFeature);
     if not GameSupports(AFeature) then
-      TMenuItem(AComponent).Hint := 'Not yet available for chess';
+      TMenuItem(AComponent).Hint := 'Not available for '+DefaultGameVariant.Name;
   end
   else if AComponent is TControl then
   begin
     TControl(AComponent).Enabled := GameSupports(AFeature);
     if not GameSupports(AFeature) then
     begin
-      TControl(AComponent).Hint := 'Not yet available for chess';
+      TControl(AComponent).Hint := 'Not available for '+DefaultGameVariant.Name;
       TControl(AComponent).ShowHint := True;
     end;
   end;
@@ -2933,7 +2933,7 @@ begin
   if not GameSupports(gfPositionSetup) then Exit;
   if FPositionSetupForm = nil then
   begin
-    FPositionSetupForm := TPositionSetupForm.Create(Self);
+    FPositionSetupForm := TPositionSetupForm.Create(Self,DefaultGameVariant);
     FPositionSetupForm.OnAccepted := @SetupPositionAccepted;
     FPositionSetupForm.ApplyPreferences(FPreferences);
   end;
@@ -4914,7 +4914,7 @@ begin
   if not GameSupports(gfNewGame) then Exit;
   if FSetupForm = nil then
   begin
-    FSetupForm := TGameSetupForm.Create(Self);
+    FSetupForm := TGameSetupForm.Create(Self,DefaultGameVariant);
     FSetupForm.OnAccepted := @GameSetupAccepted;
   end;
   FSetupForm.ApplyPreferences(FPreferences);
@@ -4932,7 +4932,7 @@ procedure TMainForm.EnginesClick(Sender: TObject);
 begin
   if not GameSupports(gfEngines) then Exit;
   if FEnginesDialog = nil then
-    FEnginesDialog := TEnginesDialog.Create(Self);
+    FEnginesDialog := TEnginesDialog.Create(Self,DefaultGameVariant);
   ShowFormCenteredOnOwner(FEnginesDialog, Self);
 end;
 
@@ -4952,7 +4952,7 @@ begin
       Exit;
 
     if FDatabaseForm = nil then
-      FDatabaseForm := TDatabaseForm.Create(Self);
+      FDatabaseForm := TDatabaseForm.Create(Self,DefaultGameVariant);
     try
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.OnFileGameSelected := @FileGameSelected;
@@ -4988,7 +4988,7 @@ begin
       Exit;
 
     if FDatabaseForm = nil then
-      FDatabaseForm := TDatabaseForm.Create(Self);
+      FDatabaseForm := TDatabaseForm.Create(Self,DefaultGameVariant);
     try
       FDatabaseForm.OnGameSelected := @PdnGameSelected;
       FDatabaseForm.OnFileGameSelected := @FileGameSelected;
@@ -5167,6 +5167,7 @@ function TMainForm.StartGameFromSetup(const ASetup: TGameSetup;
   const ATitlePrefix: string): TRunningGame;
 var
   LBoard: TGamePosition;
+  LVariant:TGameVariant;
   LBlackEngineKey: string;
   LBlackName: string;
   LGameId: Integer;
@@ -5176,9 +5177,10 @@ var
   LWhiteEngineKey: string;
   LWhiteName: string;
 begin
-  if not GameSupports(gfNewGame) then
-    raise EInvalidOperation.Create('Clocked chess games are not yet enabled');
-  ValidateGameSetup(ASetup,DefaultGameVariant,GameGuiProfileFor(DefaultGameVariant).EngineKinds);
+  LVariant:=GameSetupVariant(ASetup);
+  if not (gfNewGame in GameGuiProfileFor(LVariant).Features) then
+    raise EInvalidOperation.Create('Clocked games are not enabled for '+LVariant.Name);
+  ValidateGameSetup(ASetup,LVariant,GameGuiProfileFor(LVariant).EngineKinds);
   LWhiteName := PlayerSetupDisplayName(ASetup.WhitePlayer, ASetup.WhiteEngine);
   LBlackName := PlayerSetupDisplayName(ASetup.BlackPlayer, ASetup.BlackEngine);
   LTitle := Trim(ATitlePrefix);
@@ -5205,7 +5207,7 @@ begin
   Inc(FNextGameId);
   LGameId := FNextGameId;
   LRunner := TGameRunnerThread.Create(ASetup, LGameId, @GameSnapshot,
-    @GameFinished);
+    @GameFinished,LVariant);
   Result := TRunningGame.Create(LGameId, LTitle, LRunner,
       ASetup.WhitePlayer, ASetup.BlackPlayer, LWhiteEngineKey,
       LBlackEngineKey, LWhiteName, LBlackName, LReservationKeys, ASetup);
@@ -5581,7 +5583,7 @@ begin
   if not GameSupports(gfTournament) then Exit;
   if FTournamentDialog = nil then
   begin
-    FTournamentDialog := TTournamentDialog.Create(Self);
+    FTournamentDialog := TTournamentDialog.Create(Self,DefaultGameVariant);
     FTournamentDialog.OnSelectGame := @TournamentSelectGame;
     FTournamentDialog.OnStartGame := @TournamentStartGame;
   end;
