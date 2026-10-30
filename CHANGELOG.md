@@ -4,6 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Auto Play restoration review candidate — 2026-10-30
+
+- Investigate the user's earlier GWDGUI behaviour: an enabled Stop button and
+  real mainline/variation moves. Confirm the current disabled button and typed
+  Auto Play PV storage were inherited from the imported 3.4 baseline; older
+  toolbar history contains the remembered behaviour. No local 2.3 tag exists.
+- Prepare a narrow Stop-button patch in an isolated copy using the existing
+  cancellation handler; its GUI suite passes 77 checks. Document a separate
+  proposal to restore real moves with per-position PVs/evaluations through
+  existing actor and analysis interfaces, for Claude's shared-code review.
+- Production Auto Play remains unchanged pending that review. Escape stops the
+  current Auto Play loop.
+
 ### Mate scores in score history and displayed-position evaluation — 2026-10-30
 
 Commit: `e1a4e8a`.
