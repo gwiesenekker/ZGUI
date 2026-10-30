@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Respect the annotator seconds setting — 2026-10-30
 
+Commit: `f61dec0`.
+
 - Replace indefinite UCI annotation with `go movetime` using the seconds field
   beside Auto Play, through the existing analysis interface. Completed searches
   leave the annotator loaded and retain their final score and PV; changing the
