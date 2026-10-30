@@ -77,7 +77,10 @@ begin
     if TempHandle = INVALID_HANDLE_VALUE then RaiseLastOSError;
     Stream := THandleStream.Create(TempHandle);
     {$ELSE}
-    Stream := TFileStream.Create(TempName, fmCreate);
+    // A process started by another thread can inherit this descriptor before
+    // publication. A shared lock lets readers open the published inode even
+    // while that child holds it; the unique temporary name isolates the writer.
+    Stream := TFileStream.Create(TempName, fmCreate or fmShareDenyNone);
     {$ENDIF}
     try
       if Length(AText) > 0 then

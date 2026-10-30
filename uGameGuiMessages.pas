@@ -32,9 +32,12 @@ type
   // Immutable identity is copied at posting time; dispatch never dereferences a
   // retired runner or chooses its destination from the currently visible game.
   TAnalysisGuiMessage=class(TThreadMessage)
+  private
+    FSessionId:Int64;
+    FSlotId:string;
   public
-    SessionId:Int64;
-    SlotId:string;
+    property SessionId:Int64 read FSessionId;
+    property SlotId:string read FSlotId;
     constructor Create(const AKind:string;Source:TAnalyzerRunnerThread=nil);reintroduce;
   end;
 
@@ -97,7 +100,7 @@ uses SysUtils;
 constructor TAnalysisGuiMessage.Create(const AKind:string;Source:TAnalyzerRunnerThread);
 begin
   inherited Create(AKind);
-  if Source<>nil then begin SessionId:=Source.SessionId;SlotId:=Source.SlotId;end;
+  if Source<>nil then begin FSessionId:=Source.SessionId;FSlotId:=Source.SlotId;end;
 end;
 
 constructor TRunnerSnapshotGuiMessage.Create(AGameId: Integer;

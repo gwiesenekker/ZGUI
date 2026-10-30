@@ -331,7 +331,7 @@ begin
     Button(F,'Stop').Click;Found:=IntToStr(F.ActiveGameTree.MainlineCount);Tick:=GetTickCount64;
     Snapshot:=TPvSnapshot.Create;Snapshot.SetDataWithSearch(P,F.ActiveGameTree.MainlineCount,P.LegalMove(0),
       '9.99','99','1',Late,True);
-    F.TestGuiEventQueue.Post(TAnalyzerSnapshotGuiMessage.Create(Snapshot));
+    F.TestGuiEventQueue.Post(TAnalyzerSnapshotGuiMessage.Create(Snapshot,F.TestAnalyzerRunner));
     repeat Pump(F);until (not SameGameTreeSearchRef(OldSearch,F.TestAnalysis.Search)) or (GetTickCount64-Tick>5000);
     for K:=1 to 70 do Pump(F);
     Check(IntToStr(F.ActiveGameTree.MainlineCount)=Found,'Late cancelled reply cannot extend stopped Auto Play');

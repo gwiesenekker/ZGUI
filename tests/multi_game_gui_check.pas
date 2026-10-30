@@ -7,7 +7,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,
   uChessUciEngine,uDraughtsHubEngine,uDraughtsDxpEngine,uDraughtsEngine,uEngineBase,
   uGameGuiMessages,uAnalyzerRunnerThread,uGuiDialogs,uGameTree,uGameTreeActor,uGameTreePdn,
   uChessPgn,uGameDocumentContext,uGameDatabase,uPreferences,Graphics,Grids,ExtCtrls,
-  uTournamentDialog,uTournamentGridModel;
+  uTournamentDialog,uTournamentGridModel,uDatabaseForm,SQLite3Conn,SQLDB;
 var Chess,Draughts:TGameVariant;Checks:Integer=0;RealEngines:Boolean=False;
 procedure Check(Value:Boolean;const Msg:string);
 begin Inc(Checks);if not Value then raise Exception.Create(Msg);end;
@@ -111,15 +111,18 @@ procedure Pump;
 begin Application.ProcessMessages;Sleep(10);end;
 procedure MixedViews;
 var Main:TMainForm;ChessTree,DraughtsTree:Pointer;Setup:TGameSetup;A,B:TRunningGame;
-    History:TListBox;Tick:QWord;I:Integer;
+    History:TListBox;Tick:QWord;I:Integer;Key:Word;
 begin
   Main:=TMainForm.Create(nil);
   try
     Main.Show;Pump;ChessTree:=Main.ActiveGameTree;
     Check(Main.FindComponent('MainBoard') is TChessBoardControl,'Initial chess board');
+    Check(not Menu(Main,'Open MCTS annotator').Enabled,'Chess starts with its own feature profile');
     Main.LoadStandaloneFen('4k3/8/8/8/8/8/8/R3K3 b - - 0 37');
     Main.SelectGameVariant(Draughts);Pump;DraughtsTree:=Main.ActiveGameTree;
     Check(Main.FindComponent('MainBoard') is TDraughtsBoardControl,'Draughts board replaces chess view');
+    Check(Menu(Main,'Open MCTS annotator').Enabled and (Menu(Main,'Open MCTS annotator').Hint=''),
+      'Switch enables draughts features and removes the unavailable hint');
     Main.LoadStandaloneFen('W:W32:B27');
     Main.SelectGameVariant(Chess);Pump;
     Check((Pointer(Main.ActiveGameTree)=ChessTree) and (Main.ActiveGameTree.StartingFEN='4k3/8/8/8/8/8/8/R3K3 b - - 0 37'),
@@ -127,6 +130,10 @@ begin
     Main.SelectGameVariant(Draughts);Pump;
     Check((Pointer(Main.ActiveGameTree)=DraughtsTree) and (Main.ActiveGameTree.StartingFEN='W:W32:B27'),
       'Draughts standalone survives switching');
+    Key:=Ord('F');Main.OnKeyDown(Main,Key,[]);Main.SelectGameVariant(Chess);Pump;
+    Check(TGameBoardControl(Main.FindComponent('MainBoard')).BoardFlipped,'Shared orientation follows a switch to chess');
+    Key:=Ord('F');Main.OnKeyDown(Main,Key,[]);Main.SelectGameVariant(Draughts);Pump;
+    Check(not TGameBoardControl(Main.FindComponent('MainBoard')).BoardFlipped,'Shared orientation follows a switch to draughts');
     Setup:=Default(TGameSetup);Setup.Variant:=Chess;Setup.StartingFEN:=Chess.DefaultStartingFEN;
     Setup.TimeControl:=ChessGuiProfile.DefaultClock;A:=Main.StartGameFromSetup(Setup);
     Setup.Variant:=Draughts;Setup.StartingFEN:=Draughts.DefaultStartingFEN;
@@ -146,6 +153,19 @@ begin
       ((A.Lifecycle=rglFinished) and (B.Lifecycle=rglFinished)) or (GetTickCount64-Tick>5000);
     Check((A.Lifecycle=rglFinished) and (B.Lifecycle=rglFinished),'Both game workers finish');
   finally Main.Free;end;
+end;
+
+procedure DraughtsStartup;
+var Main:TMainForm;History:TListBox;
+begin
+  RegisterDefaultGameVariant(Draughts);Main:=TMainForm.Create(nil);
+  try
+    Main.Show;Pump;History:=TListBox(Main.FindComponent('GameHistoryList'));
+    Check((Main.ActiveGameTree.Variant=Draughts) and (History.Items.Count=2),
+      'Draughts startup creates exactly one standalone document per game');
+    Main.SelectGameVariant(Chess);Pump;
+    Check(Main.FindComponent('MainBoard') is TChessBoardControl,'Chess can be selected after draughts startup');
+  finally Main.Free;RegisterDefaultGameVariant(Chess);end;
 end;
 
 procedure PreferencesAndFiles;
@@ -174,6 +194,66 @@ begin
     Lines.Text:='[FEN "W:W32:B27"] *';Lines.SaveToFile(Name);
     Check(GameFileCandidate(Name,Chess)=Draughts,'Draughts FEN gives file candidate');
   finally Lines.Free;DeleteFile(Name);end;
+end;
+
+procedure DatabaseContexts;
+var Main:TMainForm;Db:TGameDatabase;Names:array[0..1]of string;Input,Foreign,Before:string;
+    Lines:TStringList;FormsByGame:array[0..1]of TDatabaseForm;Grid,Moves:TStringGrid;
+    I,J:Integer;V:TGameVariant;Connection:TSQLite3Connection;Transaction:TSQLTransaction;Tree:TGameTree;
+  function Bytes(const Name:string):string;
+  var F:TFileStream;
+  begin F:=TFileStream.Create(Name,fmOpenRead);try SetLength(Result,F.Size);if F.Size>0 then F.ReadBuffer(Result[1],F.Size);finally F.Free;end;end;
+  procedure FindGrids(Form:TDatabaseForm);
+  var K:Integer;
+  begin
+    Grid:=nil;Moves:=nil;
+    for K:=0 to Form.ComponentCount-1 do if Form.Components[K] is TStringGrid then
+      if TStringGrid(Form.Components[K]).ColCount=5 then Moves:=TStringGrid(Form.Components[K])
+      else Grid:=TStringGrid(Form.Components[K]);
+  end;
+begin
+  Main:=TMainForm.Create(nil);Lines:=TStringList.Create;Foreign:=GetTempFileName(GetTempDir,'foreign');DeleteFile(Foreign);
+  Connection:=TSQLite3Connection.Create(nil);Transaction:=TSQLTransaction.Create(nil);
+  try
+    Main.Show;Pump;
+    for I:=0 to 1 do begin
+      Names[I]:=GetTempFileName(GetTempDir,'mixdb');DeleteFile(Names[I]);
+      if I=0 then begin V:=Chess;Db:=TGameDatabase.Create(gffPgn);end
+      else begin V:=Draughts;Db:=TGameDatabase.Create(gffPdn);end;
+      try Db.CreateDatabase(Names[I]);finally Db.Free;end;
+      GuiTestFileDialogResult:=1;GuiTestFileName:=Names[I];Menu(Main,'&Open database...').Click;Pump;
+      Check(Main.ActiveGameTree.Variant=V,'Database open selects its metadata-defined game');FormsByGame[I]:=nil;
+      for J:=0 to Main.ComponentCount-1 do if Main.Components[J] is TDatabaseForm then
+        if TDatabaseForm(Main.Components[J]).Variant=V then FormsByGame[I]:=TDatabaseForm(Main.Components[J]);
+      Check(FormsByGame[I]<>nil,'Each database has its own game context');
+      Input:=Names[I]+'.games';
+      try
+        if I=0 then Lines.Text:='[Event "Chess database"] 1.e4 *'
+        else Lines.Text:='[Event "Draughts database"] 1.32-28 *';
+        Lines.SaveToFile(Input);FormsByGame[I].ImportPdnFile(Input);
+        FormsByGame[I].SetSearchFEN(V.DefaultStartingFEN);FormsByGame[I].SearchCurrentPosition;FindGrids(FormsByGame[I]);
+        Check((Moves<>nil) and (Moves.Cells[1,1]='1'),'Database search/statistics stay within their game');
+      finally DeleteFile(Input);DeleteFile(ChangeFileExt(Input,'.import.log'));end;
+    end;
+    GuiTestConfirmationResult:=mrNo;
+    for I:=0 to 1 do begin
+      FindGrids(FormsByGame[I]);Grid.Row:=1;Grid.OnDblClick(Grid);Pump;
+      if I=0 then V:=Chess else V:=Draughts;
+      Check((Main.ActiveGameTree.Variant=V) and (Main.ActiveGameTree.MainlineCount=1),
+        'Selection from either database imports into its own standalone document');
+    end;
+    Connection.Transaction:=Transaction;Connection.DatabaseName:=Foreign;Connection.Open;
+    Connection.ExecuteDirect('create table notes(message text)');Connection.ExecuteDirect('insert into notes values(''keep me'')');
+    Transaction.Commit;Connection.Close;Before:=Bytes(Foreign);Tree:=Main.ActiveGameTree;
+    GuiTestConfirmationResult:=mrYes;GuiTestFileName:=Foreign;Menu(Main,'&Open database...').Click;
+    Check(Bytes(Foreign)=Before,'Foreign version-zero SQLite rejected without mutation');
+    Check(Main.ActiveGameTree=Tree,'Rejected database leaves selected document unchanged');
+    Check((FormsByGame[0].Variant=Chess) and (FormsByGame[1].Variant=Draughts),
+      'Rejected database preserves both database windows');
+  finally
+    GuiTestFileDialogResult:=-1;GuiTestConfirmationResult:=0;Main.Free;Lines.Free;Transaction.Free;Connection.Free;
+    DeleteFile(Names[0]);DeleteFile(Names[1]);DeleteFile(Foreign);
+  end;
 end;
 
 procedure EnginesAndSessions;
@@ -326,7 +406,8 @@ begin
   RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
   try WriteLn('Registry');Flush(Output);RegistryAndContexts;
     WriteLn('Preferences/files');Flush(Output);PreferencesAndFiles;
-    WriteLn('Views');Flush(Output);MixedViews;
+    WriteLn('Views');Flush(Output);MixedViews;DraughtsStartup;
+    WriteLn('Databases');Flush(Output);DatabaseContexts;
     WriteLn('Engines/sessions');Flush(Output);EnginesAndSessions;WriteLn('Multi-game checks passed (',Checks,' checks)');
   finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;end;
 end.

@@ -1343,6 +1343,7 @@ begin
   ApplyPreferences;
   RefreshDisplayFromGameTree(FGameTree, True);
   InitializeGameContexts;
+  if RegisteredGameCount>1 then UpdateContextFeatures;
 end;
 
 destructor TMainForm.Destroy;
@@ -1416,12 +1417,20 @@ begin
 end;
 
 function TMainForm.AnalysisMessageContext(Message:TAnalysisGuiMessage):TGameUiContext;
-var I:Integer;C:TGameUiContext;
+var I:Integer;C:TGameUiContext;Actor:TGameTreeActor;
   function Matches(Runner:TAnalyzerRunnerThread):Boolean;
   begin Result:=(Runner<>nil) and (Runner.SessionId=Message.SessionId) and (Runner.SlotId=Message.SlotId);end;
 begin
   Result:=nil;if Message=nil then Exit;
-  if Message.SessionId=0 then Exit(FActiveContext); // Legacy test messages.
+  if Message.SessionId=0 then begin
+    // Source-free actor snapshots carry an exact tree/search reference. Never
+    // infer their destination (or an unidentified log's destination) from the view.
+    if (Message is TAnalyzerSnapshotGuiMessage) and (TAnalyzerSnapshotGuiMessage(Message).Snapshot<>nil) then begin
+      Actor:=ActorForGameTreeId(TAnalyzerSnapshotGuiMessage(Message).Snapshot.GameTreeId);
+      if Actor<>nil then Exit(ContextForVariant(Actor.GameTree.Variant));
+    end;
+    Exit;
+  end;
   if Matches(FAnalyzerRunner) or Matches(FMctsRunner) then Exit(FActiveContext);
   if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
     C:=TGameUiContext(FGameContexts[I]);
@@ -1504,7 +1513,7 @@ begin
   C:=TGameUiContext.Create;C.Variant:=FGameTree.Variant;FGameContexts.Add(C);FActiveContext:=C;CaptureGameContext;
   if RegisteredGameCount<2 then Exit;
   FGamesListBox.Items.Objects[0]:=C;FGamesListBox.Items[0]:=C.Variant.Name+' board';
-  for I:=0 to RegisteredGameCount-1 do if RegisteredGame(I)<>C.Variant then begin
+  for I:=0 to RegisteredGameCount-1 do if RegisteredGame(I)<>FActiveContext.Variant then begin
     C:=TGameUiContext.Create;C.Variant:=RegisteredGame(I);
     C.FGameTree:=TGameTree.Create(C.Variant);C.FGameTreeActor:=TGameTreeActor.Create(C.FGameTree,False);
     C.FBoard:=C.Variant.CreatePosition;C.FAnalysis:=TAnalysisCoordinator.Create(C.Variant);
@@ -1578,6 +1587,7 @@ begin
     FPreferences:=C.FPreferences;
     FBoardControl.Name:='MainBoard';FMiniBoardControl.Name:='EnginePvBoard';
     FBoardControl.Visible:=True;FMiniBoardControl.Visible:=True;FAnalyzerMiniBoardControl.Visible:=True;
+    ApplyBoardFlipped;
     FPvBrowser.AttachViews;FAnalyzerPvBrowser.AttachViews;
     FAnalyzerMemo.Text:=C.AnalyzerLogText;FMctsMemo.Text:=C.MctsLogText;FAnnotatorSecondsEdit.Text:=C.SecondsText;
     ClearMctsStatsGrid;SetDisplayedTreeTracking('','','',0,-1);FNotation.InvalidateSignature;
@@ -1589,11 +1599,13 @@ end;
 procedure TMainForm.UseDocument(Tree:TGameTree);
 begin
   if Tree=nil then Exit;
+  if FGameTreeViewTreeId<>Tree.GameTreeId then FGameTreeBrowseMode:=False;
   ActivateGameContext(Tree.Variant);FDisplayedPosition:=DocumentDisplay(Tree);
 end;
 
 procedure TMainForm.SelectGameVariant(Variant:TGameVariant);
 begin
+  ClearHumanMoveSelection;
   ActivateGameContext(Variant);FGameActive:=False;FViewedGameId:=-1;UseDocument(FGameTree);
   FGamesListBox.ItemIndex:=FGamesListBox.Items.IndexOfObject(FActiveContext);
   RefreshDisplayFromGameTree(FGameTree,True);
@@ -1643,7 +1655,8 @@ begin
   begin
     TMenuItem(AComponent).Enabled := GameSupports(AFeature);
     if not GameSupports(AFeature) then
-      TMenuItem(AComponent).Hint := 'Not available for '+CurrentVariant.Name;
+      TMenuItem(AComponent).Hint := 'Not available for '+CurrentVariant.Name
+    else if Pos('Not available for ',TMenuItem(AComponent).Hint)=1 then TMenuItem(AComponent).Hint:='';
   end
   else if AComponent is TControl then
   begin
@@ -1652,7 +1665,8 @@ begin
     begin
       TControl(AComponent).Hint := 'Not available for '+CurrentVariant.Name;
       TControl(AComponent).ShowHint := True;
-    end;
+    end
+    else if Pos('Not available for ',TControl(AComponent).Hint)=1 then TControl(AComponent).Hint:='';
   end;
 end;
 
@@ -5733,9 +5747,15 @@ begin
       if not FGuiEventQueue.TryPop(EventObject) then Break;
       Inc(ProcessedEvents);
       try
+        // Non-snapshot events remain ordering barriers even when their session
+        // has retired or their slot is hidden.
+        if not (EventObject is TAnalyzerSnapshotGuiMessage) and
+          not (EventObject is TRunnerSnapshotGuiMessage) then begin
+          FlushPendingAnalyzerSnapshots;FlushPendingRunnerSnapshots;
+        end;
         if EventObject is TAnalysisGuiMessage then begin
           MessageContext:=AnalysisMessageContext(TAnalysisGuiMessage(EventObject));
-          if (TAnalysisGuiMessage(EventObject).SessionId<>0) and (MessageContext=nil) then Continue;
+          if MessageContext=nil then Continue;
           if (MessageContext<>nil) and (MessageContext<>FActiveContext) then begin
             if EventObject is TAnalyzerLogGuiMessage then
               MessageContext.AnalyzerLogText+=TAnalyzerLogGuiMessage(EventObject).Message+LineEnding
@@ -5765,9 +5785,6 @@ begin
           EventObject := nil;
           Continue;
         end;
-
-        FlushPendingAnalyzerSnapshots;
-        FlushPendingRunnerSnapshots;
 
         if EventObject is TAnalyzerLogGuiMessage then
           HandleAnalyzerLog(TAnalyzerLogGuiMessage(EventObject).Message)

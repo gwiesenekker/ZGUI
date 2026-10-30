@@ -4,7 +4,30 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Complete mixed-game acceptance and ownership audit — 2026-10-30
+
+- Fix startup from the remembered draughts context to create exactly two
+  standalone documents. Reapply board orientation and feature availability on
+  switches, clear obsolete unavailable hints, and refresh the selected tree view.
+- Make queued slot/session identity read-only. Route source-free actor snapshots
+  by their exact tree reference; discard unidentified logs and retired sessions.
+  Preserve snapshot ordering barriers even when an event is discarded.
+- Extend acceptance to both database formats: import, search/statistics and load
+  into the correct standalone document. Reject a real foreign version-zero
+  SQLite database unchanged, preserving both windows and the selected document.
+- Fix the reproduced Linux startup race between preference access and inherited
+  temporary-file locks: use compatible shared locks with atomic publication.
+  Preserve the existing shared file-publication helper and protocol worker.
+- Validation: all ten GUI suites pass, including 79 mixed checks; final mixed
+  acceptance passes twice with fake peers and with Stockfish, Arasan and both
+  Scan engines. Headless regression, lifecycle, tournament and atomic publication
+  checks pass. Windows build-script tests pass under Wine; Windows cross-build
+  is skipped because the target FPC libraries are unavailable. Native Windows
+  interaction and real GWD DXP interoperability remain unverified.
+
 ### Hub pondering through existing engine hooks — 2026-10-30
+
+Commit: `e008b93`.
 
 - Implement Hub `go ponder` / `ponder-hit` only when the engine advertises a
   Boolean ponder option, that option is enabled, and the game permits it.

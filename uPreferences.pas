@@ -86,13 +86,22 @@ begin
   Result.EvaluationScale := ssLogarithmic;
 end;
 
+procedure ReadPreferenceLines(Lines:TStrings);
+var Stream:TFileStream;
+begin
+  // Atomic publication provides a complete version. Use a shared read lock,
+  // compatible with handles inherited by a concurrently starting engine.
+  Stream:=TFileStream.Create(PreferencesJsonFileName,fmOpenRead or fmShareDenyNone);
+  try Lines.LoadFromStream(Stream);finally Stream.Free;end;
+end;
+
 function ReadPreferenceObject:TJSONObject;
 var Lines:TStringList;Value:TJSONData;
 begin
   Result:=TJSONObject.Create;if not FileExists(PreferencesJsonFileName) then Exit;
   Lines:=TStringList.Create;Value:=nil;
   try
-    try Lines.LoadFromFile(PreferencesJsonFileName);Value:=GetJSON(Lines.Text);
+    try ReadPreferenceLines(Lines);Value:=GetJSON(Lines.Text);
     except on E:Exception do Exit;end;
     if Value.JSONType=jtObject then begin Result.Free;Result:=TJSONObject(Value);Value:=nil;end;
   finally Value.Free;Lines.Free;end;
@@ -179,7 +188,7 @@ begin
 
   Lines := TStringList.Create;
   try
-    Lines.LoadFromFile(FileName);
+    ReadPreferenceLines(Lines);
     Data := GetJSON(Lines.Text);
   finally
     Lines.Free;

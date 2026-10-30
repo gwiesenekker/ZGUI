@@ -22,6 +22,6 @@
     <Version Value="11"/>
     <Target><Filename Value="multi_game_gui_check"/></Target>
     <SearchPaths><OtherUnitFiles Value=".."/></SearchPaths>
-    <Other><CustomOptions Value="-dGWDGUI_NONINTERACTIVE_TEST -Cr -Co -gl -gh"/></Other>
+    <Other><CustomOptions Value="-dGWDGUI_NONINTERACTIVE_TEST -Cr -gl -gh"/></Other>
   </CompilerOptions>
 </CONFIG>

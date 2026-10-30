@@ -317,7 +317,7 @@ type
   TCountedPvSnapshot = class(TPvSnapshot)
     destructor Destroy; override;
   end;
-  TCountedObject = class
+  TCountedObject = class(TAnalyzerRunnerThread)
     destructor Destroy; override;
   end;
 var RunnerSnapshotsFreed, PvSnapshotsFreed, ObjectsFreed: Integer;
@@ -396,7 +396,8 @@ begin
     Check(RunnerSnapshotsFreed = 2, 'rejected owned snapshot is freed immediately');
     Queue.Clear;
     Check(RunnerSnapshotsFreed = 3, 'pending snapshot is freed when queue drains on shutdown');
-    Borrowed := TCountedObject.Create;
+    Borrowed := TCountedObject.Create(nil,nil,nil,nil);
+    Borrowed.Start;Borrowed.WaitFor;
     try
       // Finished notifications borrow an identity only; no runner methods are used.
       TAnalyzerFinishedGuiMessage.Create(TAnalyzerRunnerThread(Borrowed)).Free;
