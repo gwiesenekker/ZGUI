@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Fit engine parameter columns to the dialog — 2026-10-30
 
+Commit: `9621f03`.
+
 - Measure the name and type column headers/values with the grid font and add a
   margin to each. Use the existing grid's automatic filling for the value column
   so it takes the remaining client width, including when vertical scrolling is
