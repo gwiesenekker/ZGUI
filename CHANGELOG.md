@@ -4,6 +4,21 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Keep the engine INI editor inside its panel — 2026-10-30
+
+- Anchor the INI/config text box explicitly to the bottom of its existing panel,
+  so the remaining text and scrollbar are accessible after Scan's `# DXP` heading.
+  This fixes the shared editor for chess and draughts while retaining the
+  surrounding dialog layout and leaving engine configuration files untouched.
+- User authorisation on 2026-10-30: “Please fix!” in response to the reproduced
+  INI clipping issue and review-gate explanation. Scope: the INI viewport fix;
+  Claude can review the resulting commit afterwards.
+- Add a self-contained GUI regression check for both games at minimum, default
+  and larger window sizes. The new check fails against the baseline and passes
+  with the fix. Application builds and all twelve chess/draughts GUI suites pass,
+  including 87 mixed-game checks, independently of unfinished feature flags.
+  Native Windows interaction remains untested.
+
 ### Separate chess and draughts preferences — 2026-10-30
 
 Commit: `b801cd1`.

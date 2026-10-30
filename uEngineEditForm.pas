@@ -374,6 +374,8 @@ begin
   FIniContentMemo.SetBounds(0, LTop, LFieldsPanel.Width,
     LFieldsPanel.Height - LTop);
   FIniContentMemo.Anchors := [akTop, akLeft, akRight, akBottom];
+  FIniContentMemo.AnchorSideBottom.Control := LFieldsPanel;
+  FIniContentMemo.AnchorSideBottom.Side := asrBottom;
   FIniContentMemo.ScrollBars := ssAutoBoth;
   FIniContentMemo.WordWrap := False;
   FIniContentMemo.Hint := EngineIniHint;

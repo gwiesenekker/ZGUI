@@ -85,3 +85,8 @@ echo "==> game_preferences_check (GTK2, per-game appearance and U22)"
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/game-prefs" \
   "$ROOT_DIR/tests/game_preferences_check.lpi" > "$OUT_DIR/game-prefs-build.log" 2>&1
 "$OUT_DIR/game-prefs/game_preferences_check"
+
+echo "==> engine_ini_viewport_check (GTK2, INI editor bounds for both games)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/ini-viewport" \
+  "$ROOT_DIR/tests/engine_ini_viewport_check.lpi" > "$OUT_DIR/ini-viewport-build.log" 2>&1
+"$OUT_DIR/ini-viewport/engine_ini_viewport_check"
