@@ -35,11 +35,12 @@ begin
         if P.LegalMoveCount>0 then Move:=P.LegalMove(0) else Move:='0000';
       end else if Copy(Line,1,3)='go ' then begin
         Active:=True;
-        if Mode='infinite' then begin
-          if Line<>'go infinite' then begin
-            WriteLn('bestmove '+Move);Active:=False;
-          end else WriteLn('info depth 12 score cp 42 pv '+Move);
-          Flush(Output);Continue;
+        if Mode='timed' then begin
+          if (Line<>'go movetime 10') and (Line<>'go movetime 20') then Halt(2);
+          if Line='go movetime 20' then WriteLn('info depth 12 score cp 43 pv '+Move)
+          else WriteLn('info depth 12 score cp 42 pv '+Move);Flush(Output);
+          Sleep(StrToInt(Copy(Line,13,MaxInt)));
+          WriteLn('bestmove '+Move);Active:=False;Flush(Output);Continue;
         end;
         if (Mode='book') and BookOn then begin
           WriteLn('info string book move');WriteLn('bestmove '+Move);Active:=False;Flush(Output);Continue;
@@ -175,26 +176,29 @@ begin
     finally E.Free; end;
   finally DeleteFile(FileName); end;
 end;
-procedure InfiniteAnalysisTests;
+procedure TimedAnalysisTests;
 var E:TUciEngine;PV,Score,Depth,TimeText,Reply:string;I:Integer;Raised:Boolean;Params:TEngineParamArray;
 begin
-  E:=NewEngine('infinite');
+  E:=NewEngine('timed');
   try
     Params:=nil;AddOrUpdateParam(Params,'gui-stop-timeout-ms','string','100',False);E.ConfigureOptions(Params);
-    Check(E.LaunchAndInit,'Infinite-analysis peer ready');
+    Check(E.LaunchAndInit,'Timed-analysis peer ready');
     E.SetGamePosition(ChessStartingFEN,nil);E.SetClockInfo(1,0.01,0);
-    E.SetMoveTimeLimit(20);E.StartAnalyzing;
-    // Exceed both the duration + stop allowance and the move watchdog.
+    E.SetMoveTimeLimit(2000);E.StartAnalyzing;
+    // Poll well after the search duration and stop allowance; completed analysis stays ready.
     for I:=1 to 30 do begin Sleep(10);E.PollOutput;end;
     E.ReadSearchInfo(PV,Score,Depth,TimeText);
-    Check((PV<>'') and (Score='0.42'),'Live analysis uses go infinite and outlives finite budgets');
-    E.StopSearch; // Must still obtain/drain bestmove before the next search.
+    Check((PV<>'') and (Score='0.42'),'Live analysis uses configured movetime and retains its final score/PV');
+    Check(E.CurrentState=esReady,'Completed live analysis stays ready without a watchdog error');
+    E.StopSearch;
     E.SetGamePosition(ChessStartingFEN,nil);E.SetClockInfo(1,0.01,0);E.SetMoveTimeLimit(2000);
-    Check(E.StartThinking<>'','One-shot request uses a finite go after infinite analysis');
+    Check(E.StartThinking<>'','One-shot request works after completed live analysis');
     E.SetGamePosition(ChessStartingFEN,nil);
-    E.SetClockInfo(1,0.01,0);E.SetMoveTimeLimit(20);E.StartAnalyzing;
+    E.SetClockInfo(1,0.02,0);E.SetMoveTimeLimit(2000);E.StartAnalyzing;
     for I:=1 to 10 do begin Sleep(10);E.PollOutput;end;
-    Check(E.PrincipalVariation<>'','Infinite analysis resumes after one-shot mode');
+    E.ReadSearchInfo(PV,Score,Depth,TimeText);
+    Check((PV<>'') and (Score='0.43') and (E.CurrentState=esReady),
+      'Live analysis resumes with the changed movetime after one-shot mode');
     E.StopSearch;
   finally E.Free;end;
   E:=NewEngine('nostop');
@@ -244,7 +248,7 @@ end;
 var E: TUciEngine; D: TExternalEngineDefinition; PV,Score,Depth,T: string; I: Integer;
 begin
   if ParamStr(1)='--fake-uci' then begin Fake; Halt; end;
-  RegistryTests; Tests;BookPolicyTests;InfiniteAnalysisTests;
+  RegistryTests; Tests;BookPolicyTests;TimedAnalysisTests;
   if ParamStr(1)<>'' then begin
     D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=ExpandFileName(ParamStr(1));
     E:=TUciEngine.Create(D);
@@ -253,7 +257,7 @@ begin
       E.SetGamePosition(ChessStartingFEN,nil); E.SetClockInfo(1,0.1,0); E.StartAnalyzing;
       for I:=1 to 200 do begin Sleep(10); E.PollOutput; end;
       E.ReadSearchInfo(PV,Score,Depth,T); Check((PV<>'') and (Score<>''),'Real engine analysis');
-      Check(E.CurrentState=esThinking,'Real annotator continues beyond its former finite budget');
+      Check(E.CurrentState=esReady,'Real annotator finishes its configured budget without losing analysis');
       E.StopSearch; E.NewGame('4k3/8/8/8/8/8/8/R3K3 b - - 0 37');
       E.SetGamePosition('4k3/8/8/8/8/8/8/R3K3 b - - 0 37',nil); Check(E.StartThinking<>'','Real Black-root finite search');
     finally E.Free; D.Free; end;

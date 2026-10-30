@@ -4,6 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Respect the annotator seconds setting — 2026-10-30
+
+- Replace indefinite UCI annotation with `go movetime` using the seconds field
+  beside Auto Play, through the existing analysis interface. Completed searches
+  leave the annotator loaded and retain their final score and PV; changing the
+  position or time setting starts another search through the existing GUI.
+- Remove the obsolete infinite-search mode and keep finite-search watchdog,
+  clocked-game and pondering behaviour. No GUI or shared infrastructure changes.
+- Correct the manual and test configured analysis durations, completion beyond
+  the watchdog allowance, retained scores/PVs and resumption after Auto Play.
+- Validation: application build and full headless regression pass; the UCI
+  adapter and GUI suites pass with Arasan v26.1 (91 and 111 checks respectively).
+
 ### Ignore local SQLite databases — 2026-10-29
 
 - Add `*.sqlite` to `.gitignore`, including the local `GW.sqlite` database.

@@ -23,9 +23,9 @@ procedure Check(Value: Boolean; const Text: string);
 begin Inc(Checks); if not Value then raise Exception.Create(Text); end;
 procedure Fake;
 var Line,Move,Fen: string; P: TChessPosition; L: TStringList; I,N: Integer;
-  Active:Boolean;Trace:TextFile;Tracing:Boolean;
+  Active,FirstSearch:Boolean;Trace:TextFile;Tracing:Boolean;
 begin
-  P:=TChessPosition.Create; L:=TStringList.Create; Move:='e2e4';Active:=False;
+  P:=TChessPosition.Create; L:=TStringList.Create; Move:='e2e4';Active:=False;FirstSearch:=True;
   Tracing:=(ParamStr(2)='autoplay') and (ParamStr(3)<>'');
   if Tracing then begin AssignFile(Trace,ParamStr(3));Rewrite(Trace);end;
   try
@@ -52,8 +52,8 @@ begin
         WriteLn('bestmove '+Move);Active:=False;
       end else if Copy(Line,1,3)='go ' then begin
         if ParamStr(2)='autoplay' then begin
-          if Line='go infinite' then begin
-            Active:=True;WriteLn('info depth 2 score cp 35 pv '+Move);
+          if FirstSearch then begin
+            FirstSearch:=False;Active:=True;WriteLn('info depth 2 score cp 35 pv '+Move);
           end else begin
             // Deliberately differ from the cancelled live search's bestmove.
             if P.LegalMoveCount>1 then Move:=P.LegalMove(1);
@@ -164,6 +164,10 @@ begin
     Info:=TLabel(F.FindComponent('AnnotatorPvInfoLabel'));
     Check((Info<>nil) and (Info.Align=alTop),'Annotator uses the existing PV information header above its moves');
     Check((Pos('score 0.35',Info.Caption)>0) and (Pos('time ',Info.Caption)>0),'Annotator score and time are visible in the header');
+    // Stay on the position beyond the default one-second search + stop allowance.
+    Tick:=GetTickCount64;repeat Pump(F);until GetTickCount64-Tick>2800;
+    Check((F.TestAnalyzerRunner<>nil) and (F.ActiveGameTree.Root.AnnotatorScore='0.35') and
+      (F.ActiveGameTree.Root.AnnotatorPV<>''),'Completed timed annotator stays loaded and retains score/PV');
     Check(F.ActiveGameTree.Root.ChildCount=0,'Analysis never adds moves or variations');
     Check(not Button(F,'Auto Play').Enabled,'Waiting game keeps Auto Play disabled');
     Check(not Menu(F,'Open MCTS annotator').Enabled,'MCTS remains disabled for chess');
@@ -243,7 +247,7 @@ begin
     Check(Button(F,'Auto Play').Enabled,'Escape restores chess Auto Play button');
     Lines.LoadFromFile(Trace);
     Check(Pos('go movetime 1000',Lines.Text)>0,'Think-once uses configured analysis time via UCI movetime');
-    Check(Pos('go infinite',Copy(Lines.Text,Length(Wire)+1,MaxInt))>0,'Infinite live UCI analysis resumes after Auto Play');
+    Check(Pos('go movetime 1000',Copy(Lines.Text,Length(Wire)+1,MaxInt))>0,'Timed live UCI analysis resumes after Auto Play');
     Escape; // Leave the Auto Play PV browsing view.
     // An already drawn position must not send a think-once request.
     Popup.OnPopup(Popup);Menu(F,'Close Annotator').Click;Tick:=GetTickCount64;
