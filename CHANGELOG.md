@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Keep the engine INI editor inside its panel — 2026-10-30
 
+Commit: `5534b2a`.
+
 - Anchor the INI/config text box explicitly to the bottom of its existing panel,
   so the remaining text and scrollbar are accessible after Scan's `# DXP` heading.
   This fixes the shared editor for chess and draughts while retaining the
