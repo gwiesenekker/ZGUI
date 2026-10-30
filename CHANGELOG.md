@@ -4,6 +4,22 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Matching Windows engine downloads — 2026-10-30
+
+- Download official Windows builds matching the five installed Linux versions
+  into `engine1/windows` through `engine5/windows`: Stockfish 19, Koivisto 9.0,
+  Arasan 26.1, RubiChess 20240817 and Igel 3.8.0. Include required networks,
+  Arasan's book, license notices, CPU guidance and per-engine download/hash records.
+- Check ZIP integrity and Windows executable headers; verify published release
+  SHA-256 digests where provided. Koivisto and RubiChess have computed hashes;
+  their matching releases do not publish GitHub digests.
+- Four engines pass UCI handshake, timed scored analysis, legal initial move and
+  clean shutdown under Wine 10.0. Stockfish's verified official Windows binary
+  exits before uciok under Wine (`std::out_of_range`, `map::at`); native Windows
+  execution remains unverified for all five. No Windows installer was run.
+- Preserve existing Linux binaries and registrations. Engine directories remain
+  local ignored assets; application code and GUI are unchanged.
+
 ### Auto Play restoration review candidate — 2026-10-30
 
 - Investigate the user's earlier GWDGUI behaviour: an enabled Stop button and
