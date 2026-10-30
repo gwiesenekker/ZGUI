@@ -323,7 +323,7 @@ begin
 end;
 function TUciEngine.SearchWaitMs: Integer;
 begin
-  if FGameMode then Result:=MoveTimeLimitMs else Result:=Min(MoveTimeLimitMs,FDurationMs+FStopMs);
+  if FGameMode then Result:=MoveTimeLimitMs else Result:=FDurationMs+FStopMs;
 end;
 procedure TUciEngine.SetAnalysisOption;
 var I: Integer; Value: string; Changed: Boolean;

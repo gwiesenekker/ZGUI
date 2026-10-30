@@ -35,6 +35,10 @@ begin
         if P.LegalMoveCount>0 then Move:=P.LegalMove(0) else Move:='0000';
       end else if Copy(Line,1,3)='go ' then begin
         Active:=True;
+        if Mode='budget' then begin
+          WriteLn('info depth 8 score cp 65 pv '+Move);Flush(Output);
+          Sleep(120);WriteLn('bestmove '+Move);Active:=False;Flush(Output);Continue;
+        end;
         if Mode='timed' then begin
           if (Line<>'go movetime 10') and (Line<>'go movetime 20') then Halt(2);
           if Line='go movetime 20' then WriteLn('info depth 12 score cp 43 pv '+Move)
@@ -210,6 +214,30 @@ begin
     Check((Reply='') and (Raised or E.MoveTimedOut),'A finite request still rejects an engine that never completes');
   finally E.Free;end;
 end;
+procedure AnalysisBudgetTests;
+var E:TUciEngine;Params:TEngineParamArray;Clock:TEngineGameClockState;
+    Tick:QWord;PV,Score,Depth,TimeText,Reply:string;
+begin
+  E:=NewEngine('budget');
+  try
+    Params:=nil;AddOrUpdateParam(Params,'gui-stop-timeout-ms','string','100',False);E.ConfigureOptions(Params);
+    Check(E.LaunchAndInit,'Analysis budget peer ready');
+    E.SetGamePosition(ChessStartingFEN,nil);E.SetClockInfo(1,0.4,0);E.SetMoveTimeLimit(20);
+    E.StartAnalyzing;Tick:=GetTickCount64;
+    repeat Sleep(10);E.PollOutput;until (E.CurrentState=esReady) or (GetTickCount64-Tick>2000);
+    E.ReadSearchInfo(PV,Score,Depth,TimeText);
+    Check((E.CurrentState=esReady) and (PV<>'') and (Score='0.65'),
+      'Annotation outlives the game watchdog cap within its requested budget');
+    E.SetGamePosition(ChessStartingFEN,nil);E.SetClockInfo(1,0.4,0);E.SetMoveTimeLimit(20);
+    Check(E.StartThinking<>'','One-shot analysis also uses its own requested budget');
+    E.BeginGame(ChessStartingFEN,gsWhite,1,0);
+    Clock:=Default(TEngineGameClockState);Clock.SideToMove:=gsWhite;
+    Clock.Remaining[gsWhite]:=1;Clock.Remaining[gsBlack]:=1;
+    E.SetGamePosition(ChessStartingFEN,nil);E.SetGameClockState(Clock);E.SetMoveTimeLimit(20);
+    Reply:=E.StartThinking;
+    Check((Reply='') and E.MoveTimedOut,'Game search still enforces its shorter watchdog cap');
+  finally E.Free;end;
+end;
 procedure BookPolicyTests;
 var E:TUciEngine;Params:TEngineParamArray;Clock:TEngineGameClockState;
   Saved:TStringList;FileName,Before,PV,Score,Depth,TimeText,Value:string;I,J:Integer;
@@ -248,7 +276,7 @@ end;
 var E: TUciEngine; D: TExternalEngineDefinition; PV,Score,Depth,T: string; I: Integer;
 begin
   if ParamStr(1)='--fake-uci' then begin Fake; Halt; end;
-  RegistryTests; Tests;BookPolicyTests;TimedAnalysisTests;
+  RegistryTests; Tests;BookPolicyTests;TimedAnalysisTests;AnalysisBudgetTests;
   if ParamStr(1)<>'' then begin
     D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=ExpandFileName(ParamStr(1));
     E:=TUciEngine.Create(D);

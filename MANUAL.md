@@ -503,6 +503,9 @@ and one-move requests such as Auto Play searches (`go movetime`). A missing,
 invalid, or non-positive value is treated as one second. When analysis finishes,
 the annotator stays loaded and its final score and PV remain visible. Changing
 the position or editing this time starts a new analysis search.
+Long analysis budgets are not capped by the game engine's move timeout: the
+annotator watchdog allows the requested duration plus its stop allowance. Clocked
+games retain their own move deadline.
 
 During UCI annotation and Auto Play, an engine's advertised `OwnBook` check
 option is temporarily disabled so it searches and reports a scored PV. Some

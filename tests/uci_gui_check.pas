@@ -52,6 +52,7 @@ begin
         // Completion of cancelled live analysis must be drained, never played.
         WriteLn('bestmove '+Move);Active:=False;
       end else if Copy(Line,1,3)='go ' then begin
+        if ParamStr(2)='mate-game' then Move:='f7g7';
         if ParamStr(2)='autoplay' then begin
           if FirstSearch then begin
             FirstSearch:=False;Active:=True;WriteLn('info depth 2 score cp 35 pv '+Move);
@@ -384,6 +385,33 @@ var F: TMainForm; Dialog: TGameSetupForm; D: TExternalEngineDefinition; Engines:
   Capture: TGameAccept; Edits: array[0..3] of TEdit; Combos: array[0..2] of TComboBox;
   I,N,M,CountBefore: Integer; Rejected: Boolean; BadDefinition: TExternalEngineDefinition; Tick: QWord; Setup: TGameSetup; B: TGameBoardControl; P: TPoint;
   WR,BR,WU,BU,Before: Double; LogInput: TRunningSnapshotLogInput; Keys: TStringList; A: TGameTreeActor; Text: string;
+  procedure SaveReloadSelected(const ExpectedResult:string;ExpectedMoves:Integer);
+  var Name,Text:string;Saved:TStringList;Actor:TGameTreeActor;J:Integer;DefaultVariant:TGameVariant;
+  begin
+    Check(F.ActiveGameTree=Capture.Game.GameTree,'Save fixture selects the engine game');
+    Name:=GetTempFileName(GetTempDir,'gpg');Saved:=TStringList.Create;
+    Actor:=TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
+    try
+      GuiTestFileDialogResult:=1;GuiTestFileName:=Name;
+      // The selected tree must choose its format even if the process default differs.
+      DefaultVariant:=DefaultGameVariant;RegisterDefaultGameVariant(DraughtsVariant);
+      try Menu(F,'&Save PGN...').Click;finally RegisterDefaultGameVariant(DefaultVariant);end;
+      Check((GuiTestFileTitle='Save PGN') and (Pos('*.pgn',GuiTestFileFilter)>0) and
+        ((GuiTestFileExtension='pgn') or (GuiTestFileExtension='.pgn')),
+        'Selected engine game Save dialog uses its tree profile');
+      Saved.LoadFromFile(Name);Text:=Saved.Text;ImportChessPgn(Text,Actor,nil);
+      Check((Actor.GameTree.MainlineCount=ExpectedMoves) and (Actor.GameTree.ResultText=ExpectedResult),
+        'Actual Save output reloads selected engine game moves and result');
+      Check(Actor.GameTree.StartingFEN=Capture.Game.GameTree.StartingFEN,
+        'Actual Save output preserves starting FEN and SetUp semantics');
+      for J:=1 to ExpectedMoves do begin
+        Check(Actor.GameTree.MainlineNode[J].MoveText=Capture.Game.GameTree.MainlineNode[J].MoveText,
+          'Actual Save preserves each engine game move');
+        Check(Actor.GameTree.MainlineNode[J].HasClockInfo=Capture.Game.GameTree.MainlineNode[J].HasClockInfo,
+          'Actual Save preserves available clock annotations');
+      end;
+    finally GuiTestFileDialogResult:=-1;GuiTestFileName:='';Actor.Free;Saved.Free;DeleteFile(Name);end;
+  end;
   function SquarePoint(Square: Integer): TPoint;
   var X,Y,Step: Integer;
   begin
@@ -439,10 +467,12 @@ begin
     WaitPlies(2); Check(Capture.Game.GameTree.MainlineNode[1].MoveText='e2e4','Human board input uses existing runner');
     Check(Capture.Game.GameTree.MainlineNode[2].HasClockInfo,'GUI game move retains clock data');
     F.CollectBusyEngineKeys(Keys); Check(Keys.Count=1,'Clocked game uses existing reservation');
+    SaveReloadSelected('*',2);
     F.MarkGameStopped(Capture.Game,'GUI acceptance stop'); Tick:=GetTickCount64;
     repeat Pump(F); until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
     Check((Capture.Game.Lifecycle=rglFinished) and (Capture.Game.GameTree.ResultText='*'),'Stop preserves unfinished GUI result');
     Keys.Clear; F.CollectBusyEngineKeys(Keys); Check(Keys.Count=0,'Finished game releases reservation');
+    SaveReloadSelected('*',2);
     Text:=F.CurrentGameTreePdnText('test'); A:=TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
     try ImportChessPgn(Text,A,nil); Check(A.GameTree.MainlineCount=2,'Clocked game PGN reloads through existing adapter'); Check(A.GameTree.MainlineNode[2].HasClockInfo,'Clock annotations survive PGN reload'); finally A.Free; end;
     // Engine-as-White exercises a different player mapping through the same path.
@@ -453,6 +483,13 @@ begin
     repeat Pump(F); until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
     Check(Capture.Game.Lifecycle=rglFinished,'Engine-as-White shuts down');
     if not RealEngine then begin
+      Engines[0].Arguments:='--fake-uci mate-game';Setup.WhiteEngine:=Engines[0];
+      Setup.StartingFEN:='7k/5Q2/6K1/8/8/8/8/8 w - - 0 37';
+      Capture.Game:=F.StartGameFromSetup(Setup);Tick:=GetTickCount64;
+      repeat Pump(F);until (Capture.Game.Lifecycle=rglFinished) or (GetTickCount64-Tick>5000);
+      Check((Capture.Game.Lifecycle=rglFinished) and (Capture.Game.GameTree.ResultText='1-0'),
+        'Save fixture finishes a won engine game by checkmate');
+      SaveReloadSelected('1-0',1);Setup.StartingFEN:=ChessStartingFEN;
       // A quiet search must count down without engine info callbacks.
       Engines[0].Arguments:='--fake-uci silent'; Setup.WhiteEngine:=Engines[0]; Capture.Game:=F.StartGameFromSetup(Setup);
       Tick:=GetTickCount64; repeat Pump(F); until ((Capture.Game.Lifecycle=rglRunning) and (Capture.Game.State=gosRunning)) or (GetTickCount64-Tick>5000);

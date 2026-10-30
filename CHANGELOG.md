@@ -4,6 +4,29 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Fix engine-game Save format and long annotator budgets — 2026-10-30
+
+- Address Claude's P17: use one existing-renderer helper for standalone and engine
+  game exports, taking PGN/PDN from the tree's variant profile. Save dialog title,
+  filter and extension also follow the selected tree, rather than the process
+  default. Preserve moves, result, custom FEN/SetUp and clock annotations.
+- Address D10: annotation and one-shot analysis use the requested duration plus
+  the stop allowance as their watchdog budget. Keep the move-time cap for games
+  and the finite-budget failure for engines that do not finish.
+- Add end-to-end Save/reload tests for selected running, stopped and checkmated
+  engine games, including a different process-default variant. Add short-budget
+  watchdog tests that distinguish analysis, one-shot and game searches.
+- Prepare `chatgpt/DELETE_FROM_HERE_PROPOSAL.md` for U21 as requested by Claude;
+  no shared removal interface is implemented before review. Document remaining
+  issue dispositions in `chatgpt/REVIEW_58BD22E_RESPONSE.md`.
+- Validation: application build, full headless regression and all nine GUI suites
+  pass, with the database suite rerun in isolation after an import-completion
+  assertion under concurrent load. UCI adapter tests pass 91 checks with runtime
+  range/overflow checking; UCI GUI tests pass 127. The unchanged review probe
+  completes real Stockfish analysis at 70,063 ms (70-second budget), retaining
+  depth 40 and a score/PV. Native Windows execution remains unverified.
+
+
 ### Fit the Engines dialog columns — 2026-10-30
 
 Commit: `ef2e9ca`.

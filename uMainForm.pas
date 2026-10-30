@@ -262,6 +262,7 @@ type
     procedure UpdateRunningGameTreeFromSnapshot(AGame: TRunningGame;
       ASnapshot: TGameRunnerSnapshot = nil;
       const AEventName: string = '');
+    function GameTreeFileText(ATree:TGameTree; const AEventName:string):string;
     function RunningGameTreePdnText(AGame: TRunningGame;
       const AEventName: string): string;
     function CanExploreVariation: Boolean;
@@ -4054,17 +4055,20 @@ begin
   end;
 end;
 
+function TMainForm.GameTreeFileText(ATree:TGameTree; const AEventName:string):string;
+var Options:TGameTreePdnRenderOptions;
+begin
+  if ATree=nil then Exit('');
+  Options:=DefaultGameTreePdnRenderOptions;
+  Options.FileFormat:=GameGuiProfileFor(ATree.Variant).FileFormat;
+  Result:=GameTreeToPdnTextEx(ATree,Options,AEventName);
+end;
+
 function TMainForm.RunningGameTreePdnText(AGame: TRunningGame;
   const AEventName: string): string;
-var
-  LOptions: TGameTreePdnRenderOptions;
 begin
-  Result := '';
-  if AGame = nil then
-    Exit;
-
-  LOptions := DefaultGameTreePdnRenderOptions;
-  Result := GameTreeToPdnTextEx(AGame.GameTree, LOptions, AEventName);
+  if AGame=nil then Exit('');
+  Result:=GameTreeFileText(AGame.GameTree,AEventName);
 end;
 
 function TMainForm.CurrentNotationSelection: TNotationSelection;
@@ -4546,7 +4550,6 @@ end;
 function TMainForm.CurrentGameTreePdnText(const AEventName: string): string;
 var
   LGameTree: TGameTree;
-  LOptions: TGameTreePdnRenderOptions;
 begin
   if not GameSupports(gfPdn) then Exit('');
   Result := '';
@@ -4554,9 +4557,7 @@ begin
   if LGameTree = nil then
     Exit;
 
-  LOptions := DefaultGameTreePdnRenderOptions;
-  LOptions.FileFormat:=GameGuiProfileFor(LGameTree.Variant).FileFormat;
-  Result := GameTreeToPdnTextEx(LGameTree, LOptions, AEventName);
+  Result:=GameTreeFileText(LGameTree,AEventName);
 end;
 
 function TMainForm.PlayerSetupDisplayName(AKind: TPlayerKind;
@@ -5081,21 +5082,20 @@ function TMainForm.SaveCurrentGameWithDialog: Boolean;
 var
   Dialog: TSaveDialog;
   LPdnText: string;
-  RunningGame: TRunningGame;
+  Tree:TGameTree;
+  Profile:TGameGuiProfile;
 begin
-  if not GameSupports(gfPdn) then Exit(False);
-  Result := False;
-  RunningGame := SelectedDisplayedGame;
-  if RunningGame <> nil then
-    LPdnText := RunningGameTreePdnText(RunningGame,
-      EventNameForTree(RunningGame.GameTree))
-  else
-    LPdnText := CurrentGameTreePdnText(EventNameForTree(FGameTree));
+  Result:=False;
+  Tree:=ActiveGameTree;
+  if Tree=nil then Exit;
+  Profile:=GameGuiProfileFor(Tree.Variant);
+  if not (gfPdn in Profile.Features) then Exit;
+  LPdnText:=GameTreeFileText(Tree,EventNameForTree(Tree));
   Dialog := TSaveDialog.Create(Self);
   try
-    Dialog.Title := 'Save '+GameGuiProfileFor(DefaultGameVariant).FormatName;
-    Dialog.Filter := GameGuiProfileFor(DefaultGameVariant).FileFilter;
-    Dialog.DefaultExt := GameGuiProfileFor(DefaultGameVariant).FileExtension;
+    Dialog.Title := 'Save '+Profile.FormatName;
+    Dialog.Filter := Profile.FileFilter;
+    Dialog.DefaultExt := Profile.FileExtension;
     Dialog.Options := Dialog.Options + [ofPathMustExist, ofEnableSizing];
     if not ExecuteGuiFileDialog(Dialog) then
       Exit;
