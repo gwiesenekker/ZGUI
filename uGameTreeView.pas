@@ -87,6 +87,9 @@ begin
   if (ATreeView = nil) or (ATreeParent = nil) or (AModelNode = nil) then
     Exit;
 
+  if Copy(AModelNode.OriginText,1,10)='Auto Play:' then
+    ATreeView.Items.AddChild(ATreeParent,AModelNode.OriginText);
+
   if AModelNode.EngineScore <> '' then
     ATreeView.Items.AddChild(ATreeParent, 'Engine score: ' +
       AModelNode.EngineScore);

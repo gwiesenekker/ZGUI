@@ -94,6 +94,8 @@ function GameTreeMoveLabelsSignature(AGameTree: TGameTree;
       if AOptions.ShowAnnotatorScore then
         AText += 'as=' + ANode.AnnotatorScore + '|';
       AText += 'ct=' + ANode.CommentText + '|';
+      if Copy(ANode.OriginText,1,10)='Auto Play:' then
+        AText += 'origin=' + ANode.OriginText + '|';
       if AOptions.ShowClocks and ANode.HasClockInfo then
         AText += 'clk=' + FormatFloat('0.000', ANode.WhiteRemainingSeconds) +
           ',' + FormatFloat('0.000', ANode.BlackRemainingSeconds) + ',' +

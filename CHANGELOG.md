@@ -4,6 +4,26 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Restore real-move Auto Play and its Stop button — 2026-10-30
+
+- Implement Claude's approved restoration for both chess and draughts, as
+  confirmed by the user. Auto Play appends real mainline moves at the tip;
+  elsewhere it follows matching children or creates variations without replacing
+  existing continuations. Preserve legacy `autopv` data unchanged.
+- Record each search's exact annotator PV, evaluation, depth and time on its
+  source node, protecting deeper stored analysis. Never change playing-engine
+  fields, results or clocks. Mark only newly created nodes with Auto Play origin
+  and display that origin through the existing notation and tree views.
+- Restore an enabled Stop button; Escape still stops. Stop on navigation away
+  from the node being extended and reject late moves and cancelled snapshots.
+- Retain chess-only rule-based stopping. Document the lack of a user-facing
+  undo/truncate command and the existing save/reload/discard workflow.
+- Validation: application build, full headless regression and all nine GUI
+  suites pass, including draughts variation insertion, snapshot protection,
+  ordinary/lossless PGN and save protection. Real Arasan GUI acceptance passes
+  122 checks. A failed engine discovery followed by retry also passes; the
+  reported intermittent Windows first-launch crash has not been reproduced.
+
 ### Matching Windows engine downloads — 2026-10-30
 
 - Download official Windows builds matching the five installed Linux versions

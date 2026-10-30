@@ -543,31 +543,44 @@ Statistics reported by that engine are displayed in the MCTS panel.
 - the selected game is stopped; and
 - an annotator engine is loaded.
 
-Auto Play starts from the currently selected position, asks the annotator for a
-best move using the configured analysis time, plays that move virtually, and
-repeats. Its moves are stored as an **Auto Play PV** attached to the source
-game-tree node. They are analysis, not new mainline game-tree nodes.
+Auto Play starts from the currently selected real position and asks the annotator
+for one move at a time, using the configured analysis seconds. For both chess and
+draughts it adds real moves at the mainline tip. Elsewhere it follows an existing
+matching child, or adds a variation, preserving the existing continuations.
+Created nodes are labelled **Auto Play** with the annotator identity in the moves
+and tree views. Existing nodes retain their origin.
 
-Press `Escape` to stop Auto Play. The moves already found remain in the Auto
-Play PV, but no later engine reply is appended. If the Auto Play PV is being
-browsed, press `Escape` again to leave variation browsing.
+Each searched source position receives the final annotator PV, score, depth and
+time, unless it already has annotator analysis of greater depth. Unknown incoming
+depth does not replace a known depth; equal-depth analysis may replace it. Playing
+engine analysis is unchanged. These real moves and position evaluations use the
+normal game tree, score history, PGN and database paths.
 
-Leave any other PV-browsing mode before starting Auto Play.
+While active, the same toolbar button reads **Stop** and remains enabled. Click
+**Stop** or press `Escape` to stop. Accepted moves remain in the tree, and late
+replies cannot add further moves. Navigating away from the node being extended
+also stops Auto Play. Leave virtual PV browsing with Escape before starting;
+starting from a real variation is supported.
 
-For chess, Auto Play checks the existing chess rules before its first move request
-and after each stored move, using the history from the root to the selected node
-(including variations). It stops on checkmate, stalemate, insufficient mating
-material, repetition and the 50/75-move rules. As in engine games, available
-threefold/50-move claims are accepted immediately, including claims by an
-intended legal move. The annotator log shows **Auto Play stopped; reason=…**.
-The played game and its result are unchanged. Live annotator analysis resumes
-when Auto Play stops. Draughts retains its existing behavior: Auto Play stops
-when no legal moves remain or the user stops it; it does not apply draw rules.
+Auto Play changes the game, so the existing save/discard prompts apply. There is
+currently no user-facing undo, delete-variation or truncate-mainline command.
+To discard an unwanted continuation, reload a previously saved game and decline
+to save the changed copy. Save a copy before Auto Play if you need to retain the
+original. Auto Play never changes the game result or creates clock records.
 
-Lossless chess PGN export retains Auto Play PVs as typed analysis on their source
-nodes. Ordinary PGN export omits analysis PVs; it does not turn them into played
-variations. Both chess database schemas retain the exported PGN representation;
-only mainline positions are indexed, so Auto Play PVs add no database positions.
+For chess, Auto Play checks the existing rules before the first search and after
+each accepted move, with the real root-to-start history (including variations).
+It stops on checkmate, stalemate, insufficient mating material, repetition and
+the 50/75-move rules. As in engine games, available threefold/50-move claims are
+accepted immediately, including claims by an intended legal move. The annotator
+log shows **Auto Play stopped; reason=…**. Annotation resumes when Auto Play stops.
+Draughts retains its previous stop policy: no legal moves or a user stop, without
+rule-based draw stopping.
+
+Older saved **Auto Play PVs** remain readable, browsable and preserved by lossless
+PGN export. New Auto Play runs do not change or extend those metadata lines.
+Real mainline moves are indexed by the database; real variations follow its
+existing mainline-only indexing policy. No separate Auto Play storage mode exists.
 
 ### 5.6 Larger analysis boards
 
@@ -620,7 +633,7 @@ The evaluation bar uses the displayed game position's score, including the root
 and real variations, preferring its annotator score and then its playing-engine
 score. It does not substitute a different position's score when none is available.
 When browsing an engine or annotator PV, it uses that PV's source score throughout
-the line. Auto Play lines have no separate stored score, so their previews show
+the line. Legacy Auto Play PV lines have no separate stored score, so their previews show
 a neutral bar. White occupies the lower part of the bar and Black the upper
 part. A large positive score makes White fill upward from below; a large
 negative score makes Black fill downward from above.
@@ -1040,6 +1053,8 @@ provide a separate annotator score.
 Stop the selected game and load an annotator (UCI for chess, Hub for draughts).
 Auto Play requires the selected game to be in the stopped state; it is unavailable
 while waiting to start, running, completed by a game result, or without an annotator.
+While Auto Play is active, its button becomes an enabled **Stop** button. Click it
+or press Escape to stop and restore the Auto Play caption.
 
 ### A tournament will not start all requested games
 
@@ -1130,7 +1145,8 @@ shortcuts are also shown beside their menu items:
 | About ZGUI | Shift+F1 |
 | Flip the main board | F |
 | Browse the focused move list, tree or PV | Left / Right Arrow |
-| Stop Auto Play or leave game/PV browsing | Escape |
+| Stop Auto Play | Stop toolbar button or Escape |
+| Leave game/PV browsing | Escape |
 | Find text in the manual | Ctrl+F |
 | Next manual match | F3 or Enter |
 | Previous manual match | Shift+F3 |

@@ -51,7 +51,6 @@ type
     FActive: Boolean;
     FBasePly, FMoveCount: Integer;
     FTreeId, FNodeId: Int64;
-    FMovesText: string;
     FSearch: TGameTreeSearchRef;
     // Optional outcome policy; the GUI enables it only for chess.
     FRules:TGameRules;
@@ -76,7 +75,6 @@ type
     property NodeId: Int64 read FNodeId;
     property BasePly: Integer read FBasePly;
     property MoveCount: Integer read FMoveCount;
-    property MovesText: string read FMovesText;
   end;
 
   TAnalysisPosition = record
@@ -127,7 +125,7 @@ type
   end;
 function PrepareAnalysisSnapshotCommand(AActor: TGameTreeActor;
   AFallbackTree: TGameTree; ASnapshot: TPvSnapshot;
-  out ATree: TGameTree): TGameTreeCommand;
+  out ATree: TGameTree; AProtectDeeper:Boolean=False): TGameTreeCommand;
 function CanDisplayTransientAnalysis(ASnapshot: TPvSnapshot;
   ACurrentBase: TGamePosition): Boolean;
 function EnginePvForTree(AGameTree: TGameTree; APly: Integer;
@@ -427,7 +425,6 @@ begin
   FBasePly := ANode.PlyNumber;
   FNodeId := ANode.NodeId;
   FMoveCount := 0;
-  FMovesText := '';
   FActive := True;
   FTreeId := ATree.GameTreeId;
   FSearch := EmptyGameTreeSearchRef;
@@ -463,7 +460,7 @@ end;
 function TAutoPlayCoordinator.CreateMoveCommand(AActor: TGameTreeActor;
   ATree: TGameTree; APosition: TGamePosition; const AMove: string;
   out AErrorText: string): TGameTreeCommand;
-var Move, Moves: string;
+var Move: string; Node:TGameTreePlyNode;
 begin
   Result := nil;
   AErrorText := '';
@@ -471,25 +468,28 @@ begin
   begin AErrorText := 'game tree is no longer active'; Exit; end;
   if (APosition = nil) or not APosition.TryParseMove(AMove, Move) then
   begin AErrorText := 'engine returned an illegal move: ' + Trim(AMove); Exit; end;
-  Moves := Trim(FMovesText);
-  if Moves <> '' then Moves += ' ';
-  Moves += Move;
-  Result := AActor.CreateRecordAutoPlayPVCommand(FNodeId, Moves);
+  Node:=ATree.FindNodeById(FNodeId);
+  if Node=nil then begin AErrorText:='Auto Play node is no longer in the tree';Exit;end;
+  if (ATree.FindChildByMove(Node,Move)=nil) and
+    (((ATree.MainlineCount=0) and (Node=ATree.Root)) or
+     ((ATree.MainlineCount>0) and (Node=ATree.MainlineNode[ATree.MainlineCount]))) then
+    Result:=AActor.CreateAppendMainlineMoveCommand(Move,gmsUnknown)
+  else Result:=AActor.CreateStoreMoveVariationCommand(FNodeId,Move,gmsUnknown);
 end;
 procedure TAutoPlayCoordinator.MoveStored(ACommand: TGameTreeCommand);
 var After:TGamePosition;Move:string;
 begin
-  // The form applies actor results before advancing the preview, as before.
+  // Advance only after the existing actor has accepted a real move.
   if (ACommand = nil) or not ACommand.Accepted then Exit;
   if FRules<>nil then begin
-    Move:=Trim(Copy(ACommand.PvText,Length(FMovesText)+1,MaxInt));
+    Move:=ACommand.MoveText;
     After:=FLinePosition.Clone;
     try
       After.PlayMove(Move);FRules.MovePlayed(FLinePosition,Move,After);
       FLinePosition.AssignFrom(After);
     finally After.Free;end;
   end;
-  FMovesText := ACommand.PvText;
+  FNodeId:=ACommand.CreatedNodeId;
   Inc(FMoveCount);
 end;
 
@@ -769,8 +769,8 @@ begin
 end;
 function PrepareAnalysisSnapshotCommand(AActor: TGameTreeActor;
   AFallbackTree: TGameTree; ASnapshot: TPvSnapshot;
-  out ATree: TGameTree): TGameTreeCommand;
-var Node: TGameTreePlyNode;
+  out ATree: TGameTree; AProtectDeeper:Boolean=False): TGameTreeCommand;
+var Node: TGameTreePlyNode;StoredDepth,NewDepth:Int64;
 begin
   Result := nil;
   ATree := nil;
@@ -784,6 +784,11 @@ begin
   else ATree := AFallbackTree;
   if (ATree = nil) or (AActor = nil) then Exit;
   if (Node = nil) and not TryResolveAnalyzerSnapshotNode(ATree, ASnapshot, Node) then Exit;
+  if AProtectDeeper then begin
+    if not TryStrToInt64(ASnapshot.Depth,NewDepth) or (NewDepth<0) then NewDepth:=-1;
+    if TryStrToInt64(Node.AnnotatorPVDepth,StoredDepth) and (StoredDepth>=0) and
+      (StoredDepth>NewDepth) then Exit;
+  end;
   Result := AActor.CreateRecordAnnotatorPVCommand(Node.NodeId, ASnapshot.Score,
     ASnapshot.PrincipalVariation, ASnapshot.Depth, ASnapshot.TimeText);
 end;

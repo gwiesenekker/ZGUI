@@ -448,7 +448,7 @@ begin
     finally
       LCommand.Free;
     end;
-    Check(LAutoPlay.MovesText = '+2', 'auto play stores the canonical move, got ' + LAutoPlay.MovesText);
+    Check(LTree.FindNodeById(LAutoPlay.NodeId).MoveText='+2','Auto Play follows the actual canonical move');
     LCommand := LAutoPlay.CreateMoveCommand(LActor, LTree, LPosition, '32-28', LError);
     Check((LCommand = nil) and (Pos('illegal move', LError) > 0), 'draughts move rejected in auto play');
   finally

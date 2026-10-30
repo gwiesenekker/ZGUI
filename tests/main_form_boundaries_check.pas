@@ -311,6 +311,14 @@ var Form: TMainForm; Engines: TExternalEngineList; Definition: TExternalEngineDe
   NodeId: Int64; AutoText, Config, ParamFile: string; HadConfig, HadParams: Boolean;
   SavedConfig, SavedParams: TStringList; Key: Word; Button: TButton;
   OldRunner, CurrentRunner: TAnalyzerRunnerThread; Search: TGameTreeSearchRef;
+  function StructureText:string;
+  var Options:TGameTreePdnRenderOptions;
+  begin
+    Options:=DefaultGameTreePdnRenderOptions;Options.HideAnnotations:=True;
+    Options.ShowEnginePVMove:=False;Options.ShowEngineFullPV:=False;
+    Options.ShowAnnotatorPVMove:=False;Options.ShowAnnotatorFullPV:=False;
+    Result:=GameTreeToPdnTextEx(Form.ActiveGameTree,Options);
+  end;
 begin
   Config := EnginesJsonFileName; ParamFile := EngineParamsFileName(ExpandFileName(ParamStr(0)));
   HadConfig := FileExists(Config); HadParams := FileExists(ParamFile);
@@ -365,16 +373,18 @@ begin
     Check(Button.Enabled, 'opening annotator enables Auto Play'); Button.Click;
     Tick := GetTickCount64;
     repeat Pump(Form); Sleep(5);
-    until (Form.ActiveGameTree.FindNodeById(NodeId).AutoPlayPV <> '') or (GetTickCount64 - Tick > 5000);
-    Check(Form.ActiveGameTree.FindNodeById(NodeId).AutoPlayPV <> '', 'Auto Play attaches to the selected historical node');
+    until (Form.ActiveGameTree.FindNodeById(NodeId).ChildCount>1) or (GetTickCount64 - Tick > 5000);
+    Check(Form.ActiveGameTree.FindNodeById(NodeId).ChildCount>1,'Auto Play adds a real variation at the selected historical node');
+    Check(Pos('Auto Play:',Form.ActiveGameTree.FindNodeById(NodeId).Children[1].OriginText)=1,
+      'Draughts Auto Play marks created variation moves');
     Check(Form.ActiveGameTree.Root.AutoPlayPV = '', 'Auto Play does not attach to root');
     Check((Form.ActiveGameTree.MainlineCount = 2) and
       (Form.ActiveGameTree.MainlineNode[2].MoveText = '18-23'), 'Auto Play preserves the official continuation');
     Key := VK_ESCAPE; Form.OnKeyDown(Form, Key, []);
-    AutoText := Form.ActiveGameTree.FindNodeById(NodeId).AutoPlayPV;
+    AutoText := StructureText;
     Tick := GetTickCount64;
     repeat Pump(Form); Sleep(5); until GetTickCount64 - Tick > 600;
-    Check(Form.ActiveGameTree.FindNodeById(NodeId).AutoPlayPV = AutoText, 'late reply after Stop cannot extend Auto Play');
+    Check(StructureText=AutoText,'Late reply after Escape cannot extend Auto Play');
     Check(Button.Caption = 'Auto Play', 'Escape stops Auto Play');
     Item := Menu(Form, 'Close Annotator');
     TPopupMenu(Item.GetParentMenu).OnPopup(Item.GetParentMenu); Item.Click;

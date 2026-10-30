@@ -79,9 +79,16 @@ begin
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('18-23', gmsHuman));
     Node := Actor.GameTree.MainlineNode[1];
     Check(Actor.GameTree.TryBuildPositionAtNode(Node, Board), 'historical Auto Play board');
+    AutoPlay.BeginLine(Actor.GameTree,Node);
+    Command:=AutoPlay.CreateMoveCommand(Actor,Actor.GameTree,Board,'18-23',ErrorText);
+    Check(Command<>nil,ErrorText);
+    try Actor.ExecuteCommand(Command);Check(Command.Accepted,Command.ErrorText);AutoPlay.MoveStored(Command);
+    finally Command.Free;end;
+    Check((AutoPlay.NodeId=Actor.GameTree.MainlineNode[2].NodeId) and
+      (Actor.GameTree.MainlineCount=2),'Matching existing child is followed without duplication');
     AutoPlay.BeginLine(Actor.GameTree, Node);
     Check(AutoPlay.Active and (AutoPlay.BasePly = 1) and (AutoPlay.NodeId = Node.NodeId) and
-      (AutoPlay.MoveCount = 0) and (AutoPlay.MovesText = ''), 'start resets temporary line at selected node');
+      (AutoPlay.MoveCount = 0), 'start resets temporary line at selected node');
     Check(AutoPlay.CanContinue(Actor.GameTree, gosStopped), 'same stopped tree can continue');
     Check(not AutoPlay.CanContinue(Other.GameTree, gosStopped), 'different selected game cannot continue');
     Check(not AutoPlay.CanContinue(Actor.GameTree, gosRunning), 'resumed game cannot continue');
@@ -95,8 +102,8 @@ begin
       Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText);
       AutoPlay.MoveStored(Command);
     finally Command.Free; end;
-    Check((AutoPlay.MovesText = '20-24') and (AutoPlay.MoveCount = 1) and
-      (Node.AutoPlayPV = '20-24'), 'accepted move advances preview and selected-node PV');
+    Check((AutoPlay.MoveCount = 1) and
+      (Actor.GameTree.FindNodeById(AutoPlay.NodeId).MoveText='20-24') and (Node.AutoPlayPV=''), 'accepted move follows an actual variation node without changing legacy PV');
     Check((Actor.GameTree.MainlineCount = 2) and
       (Actor.GameTree.MainlineNode[2].MoveText = '18-23'), 'official continuation preserved');
     Board.PlayMove('20-24');
@@ -106,7 +113,7 @@ begin
       Actor.ExecuteCommand(Command); Check(Command.Accepted, Command.ErrorText);
       AutoPlay.MoveStored(Command);
     finally Command.Free; end;
-    Check((AutoPlay.MovesText = '20-24 38-32') and (AutoPlay.MoveCount = 2), 'subsequent move extends PV in order');
+    Check((AutoPlay.MoveCount = 2) and (Actor.GameTree.FindNodeById(AutoPlay.NodeId).MoveText='38-32'), 'subsequent move extends PV in order');
     Command := AutoPlay.CreateMoveCommand(Actor, Actor.GameTree, Board, '1-50', ErrorText);
     Check((Command = nil) and (Pos('illegal move', ErrorText) > 0), 'illegal engine move creates no command');
     Check(AutoPlay.MoveCount = 2, 'illegal engine move does not advance preview');
@@ -119,14 +126,14 @@ begin
       Actor.ExecuteCommand(Command); Check(not Command.Accepted, 'actor rejects a missing PV target');
       AutoPlay.MoveStored(Command);
     finally Command.Free; end;
-    Check((AutoPlay.MoveCount = 2) and (Node.AutoPlayPV = '20-24 38-32'), 'rejected actor command preserves state and PV');
+    Check((AutoPlay.MoveCount = 2) and (Node.AutoPlayPV = ''), 'rejected actor command preserves state and PV');
     AutoPlay.ClearSearch;
     Check(not AutoPlay.SearchMatches(Search), 'consumed search cannot match again');
     AutoPlay.TrackSearch(Search); AutoPlay.Stop;
     Check(not AutoPlay.Active and not AutoPlay.SearchMatches(Search) and
       (AutoPlay.TreeId = 0) and (AutoPlay.NodeId = 0), 'stopping fences late results');
     AutoPlay.BeginLine(Actor.GameTree, Actor.GameTree.Root);
-    Check((AutoPlay.MoveCount = 0) and (AutoPlay.MovesText = ''), 'new run discards previous temporary line');
+    Check((AutoPlay.MoveCount = 0), 'new run discards previous temporary line');
   finally Board.Free; AutoPlay.Free; Other.Free; Actor.Free; end;
 end;
 
@@ -177,9 +184,9 @@ begin
       else Check(AutoPlay.TerminalReason(Reason) and (Pos('intended threefold',Reason)>0),
         'Stored Auto Play moves update repetition history: '+Reason);
     end;
-    Check((AutoPlay.MoveCount=7) and (Actor.GameTree.MainlineCount=0) and
-      (Actor.GameTree.Root.ChildCount=0) and (Actor.GameTree.ResultText='*'),
-      'Rule stopping leaves moves as analysis only');
+    Check((AutoPlay.MoveCount=7) and (Actor.GameTree.MainlineCount=7) and
+      (Actor.GameTree.Root.ChildCount=1) and (Actor.GameTree.ResultText='*'),
+      'Rule stopping retains real analysis moves without setting the result');
     AutoPlay.Stop;Check(not AutoPlay.TerminalReason(Reason),'Stopped line releases rules');
     ImportChessPgn('[SetUp "1"] [FEN "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1"] *',Actor,nil);
     AutoPlay.BeginLine(Actor.GameTree,Actor.GameTree.Root,True);
@@ -189,7 +196,8 @@ begin
     Check(C<>nil,Reason);
     try Actor.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);AutoPlay.MoveStored(C);finally C.Free;end;
     Check(AutoPlay.TerminalReason(Reason) and (Reason='checkmate'),'Stored mating move stops Auto Play');
-    Check((Actor.GameTree.Root.AutoPlayPV='f7g7') and (Actor.GameTree.Root.ChildCount=0) and
+    Check((Actor.GameTree.Root.AutoPlayPV='') and (Actor.GameTree.MainlineCount=1) and
+      (Actor.GameTree.MainlineNode[1].MoveText='f7g7') and
       (Actor.GameTree.ResultText='*'),'Mating analysis move preserves the played tree and result');
 
   finally P.Free;Words.Free;AutoPlay.Free;Actor.Free;V.Free;end;
@@ -271,6 +279,21 @@ begin
     Command := PrepareAnalysisSnapshotCommand(Actor, Actor.GameTree, Snapshot, Tree);
     Check((Command <> nil) and (Command.NodeId = Actor.GameTree.Root.NodeId), 'legacy unscoped snapshot retains base-ply fallback');
     Command.Free;
+    Execute(Actor,Actor.CreateRecordAnnotatorPVCommand(Actor.GameTree.Root.NodeId,'0.9','32-28','40','8'));
+    Command:=PrepareAnalysisSnapshotCommand(Actor,Actor.GameTree,Snapshot,Tree,True);
+    Check(Command=nil,'Auto Play cannot overwrite deeper stored annotation');
+    Snapshot.SetDataWithSearch(Board,0,'32-28','0.2','', '',EmptyGameTreeSearchRef,True);
+    Command:=PrepareAnalysisSnapshotCommand(Actor,Actor.GameTree,Snapshot,Tree,True);
+    Check(Command=nil,'Unknown incoming depth cannot overwrite known deeper annotation');
+    Snapshot.SetDataWithSearch(Board,0,'32-28','0.2','40','1',EmptyGameTreeSearchRef,True);
+    Command:=PrepareAnalysisSnapshotCommand(Actor,Actor.GameTree,Snapshot,Tree,True);
+    Check(Command<>nil,'Equal-depth exact annotation can replace the existing tuple');Command.Free;
+    Snapshot.SetDataWithSearch(Board,0,'32-28','0.2','41','1',EmptyGameTreeSearchRef,True);
+    Command:=PrepareAnalysisSnapshotCommand(Actor,Actor.GameTree,Snapshot,Tree,True);
+    Check(Command<>nil,'Deeper exact annotation can replace the existing tuple');Command.Free;
+    Snapshot.SetDataWithSearch(Board,0,'32-28','0.2','2','1',EmptyGameTreeSearchRef,True);
+    Command:=PrepareAnalysisSnapshotCommand(Actor,Actor.GameTree,Snapshot,Tree);
+    Check(Command<>nil,'Normal live annotation retains its previous depth policy');Command.Free;
   finally Snapshot.Free; OtherBoard.Free; Board.Free; Display.Free;
     Coordinator.Free; Previous.Free; Actor.Free; end;
 end;
