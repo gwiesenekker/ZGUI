@@ -23,6 +23,8 @@ type
 
   TAnalyzerRunnerThread = class(TThread)
   private
+    FSessionId:Int64;
+    FSlotId:string;
     FCommandQueue: TThreadMessageQueue;
     FEngine: TGameEngine;
     FLastGameTreeId: Int64;
@@ -60,7 +62,7 @@ type
       ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
       AFinishedEvent: TAnalyzerRunnerFinishedEvent;
       ARunMode: TAnalyzerRunMode = armAnalyze;
-      AMoveEvent: TAnalyzerRunnerMoveEvent = nil);
+      AMoveEvent: TAnalyzerRunnerMoveEvent = nil;const ASlotId:string = '');
     destructor Destroy; override;
 
     procedure PostAnalyze(const AStartingFEN, AMovesText: string;
@@ -74,12 +76,16 @@ type
     procedure PostShutdown;
     // Why the engine could not be started or stopped working ('' after a
     // normal close). Set before the finished event; read it from that event.
+    property SessionId:Int64 read FSessionId;
+    property SlotId:string read FSlotId;
     property FailureText: string read FFailureText;
     // True once the engine was ready (a later failure stopped a working engine).
     property Started: Boolean read FStarted;
   end;
 
 implementation
+
+var NextAnalyzerSession:Int64=0;
 
 const
   AnalyzerPollIntervalMs = 200;
@@ -139,9 +145,10 @@ end;
 constructor TAnalyzerRunnerThread.Create(AEngineDefinition: TExternalEngineDefinition;
   ALogEvent: TAnalyzerRunnerLogEvent; ASnapshotEvent: TAnalyzerRunnerSnapshotEvent;
   AFinishedEvent: TAnalyzerRunnerFinishedEvent; ARunMode: TAnalyzerRunMode;
-  AMoveEvent: TAnalyzerRunnerMoveEvent);
+  AMoveEvent: TAnalyzerRunnerMoveEvent;const ASlotId:string);
 begin
   inherited Create(True);
+  FSessionId:=InterlockedIncrement64(NextAnalyzerSession);FSlotId:=ASlotId;
   FreeOnTerminate := False;
   FEngineDefinition := TExternalEngineDefinition.Create;
   FEngineDefinition.Assign(AEngineDefinition);

@@ -4,7 +4,31 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Mixed chess and draughts contexts — 2026-10-30
+
+- Enable both games in one process using the existing runners, clocks, trees,
+  analysis coordinator, database and tournament implementations. Keep a standalone
+  document and board views for each game; add Game choices to New Game and tournaments.
+- Route annotator/MCTS events by game slot and session generation. Keep hidden
+  annotators loaded, pause their live searches and resume on selection. Reserve
+  engines until their workers finish. Route tournament stop/removal/completion to
+  the owning window and clear ownership when that window is destroyed.
+- Classify files through existing strict readers/preflights before replacing a
+  document or database window; ask for ambiguous game files and database creation.
+  Save by the tree's format and enumerate both documents/tournaments on close.
+  Preserve contexts on cancellation and block replacement during database imports.
+- Store board colours and evaluation range per game, retain shared preferences,
+  and restore the last selected game at startup. Preserve measured engine columns
+  when adding the derived Game column. Correct filtered tournament checkbox indices.
+- Validation: mixed GUI acceptance passes 59 checks with fake engines and again
+  with Stockfish, Arasan and Scan engine6/engine7. Existing headless regression,
+  chess board (716), UCI GUI (127), setup/preferences (284), database GUI (127),
+  and draughts/chess tournament suites pass. Native Windows and real GWD DXP remain
+  unverified; DXP interoperability will be tested later as agreed.
+
 ### Multi-game foundation: registration and explicit contexts — 2026-10-30
+
+Commit: `4e12462`.
 
 - Implement revised proposal stages 1–2 under the user's authorization to proceed
   without intermediate review gates. Register both application-owned game variants

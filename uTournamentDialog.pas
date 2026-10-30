@@ -19,11 +19,16 @@ type
     Row: Integer;
   end;
 
+  TTournamentContextEvent=procedure(Sender:TObject;Variant:TGameVariant;const FileName:string) of object;
   TTournamentStartGameEvent = procedure(Sender: TObject; const ASetup: TGameSetup;
     const ATitlePrefix: string; out AGame: TObject) of object;
   TTournamentSelectGameEvent = procedure(Sender: TObject; AGame: TObject) of object;
 
   TTournamentDialog = class(TForm)
+  private
+    FOnContextRequested:TTournamentContextEvent;
+    FGameCombo:TComboBox;
+    procedure GameContextChanged(Sender:TObject);
   private
     FVariant:TGameVariant;
     FProfile:TGameGuiProfile;
@@ -140,6 +145,7 @@ type
     function HasTournamentData: Boolean;
     function IsRunning: Boolean;
     function SaveTournamentWithDialog: Boolean;
+    property OnContextRequested:TTournamentContextEvent read FOnContextRequested write FOnContextRequested;
     property OnSelectGame: TTournamentSelectGameEvent read FOnSelectGame write FOnSelectGame;
     property OnStartGame: TTournamentStartGameEvent read FOnStartGame write FOnStartGame;
   end;
@@ -147,7 +153,7 @@ type
 implementation
 
 uses
-  Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils,
+  uGameDocumentContext, Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
   uAtomicFile, uGameTreePdn, uDraughtsPdn, LazLoggerBase;
@@ -240,6 +246,7 @@ var
   Splitter: TSplitter;
   TopPos: Integer;
   Id: TGUID;
+  GameIndex:Integer;
 begin
   inherited Create(AOwner);
   if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
@@ -372,6 +379,16 @@ begin
   LoadButton.SetBounds(834, 52, 56, 28);
   LoadButton.Caption := 'Load...';
   LoadButton.OnClick := @LoadClick;
+  if RegisteredGameCount>1 then begin
+    FGameCombo:=TComboBox.Create(Self);FGameCombo.Parent:=ButtonPanel;FGameCombo.Name:='TournamentVariant';
+    FGameCombo.SetBounds(640,110,250,28);FGameCombo.Style:=csDropDownList;
+    for GameIndex:=0 to RegisteredGameCount-1 do begin
+      FGameCombo.Items.AddObject(RegisteredGame(GameIndex).Name,RegisteredGame(GameIndex));
+      if RegisteredGame(GameIndex)=FVariant then FGameCombo.ItemIndex:=GameIndex;
+    end;
+    FGameCombo.OnChange:=@GameContextChanged;
+  end;
+
 
   FInvalidationPanel := TPanel.Create(Self);
   FInvalidationPanel.Name := 'TournamentSettingsChanged';
@@ -937,7 +954,7 @@ begin
     if not (FEngines[I].Kind in FProfile.EngineKinds) then Continue;
     FEngineCheckList.Items.AddObject(DisplayNameForEngine(FEngines[I]),
       FEngines[I]);
-    FEngineCheckList.Checked[I] := True;
+    FEngineCheckList.Checked[FEngineCheckList.Items.Count-1] := True;
   end;
 end;
 
@@ -1387,9 +1404,19 @@ begin
   SaveTournamentWithDialog;
 end;
 
+procedure TTournamentDialog.GameContextChanged(Sender:TObject);
+var TargetVariant:TGameVariant;I:Integer;
+begin
+  if (FGameCombo=nil) or (FGameCombo.ItemIndex<0) then Exit;
+  TargetVariant:=TGameVariant(FGameCombo.Items.Objects[FGameCombo.ItemIndex]);
+  for I:=0 to FGameCombo.Items.Count-1 do if FGameCombo.Items.Objects[I]=FVariant then FGameCombo.ItemIndex:=I;
+  if (TargetVariant<>FVariant) and Assigned(FOnContextRequested) then FOnContextRequested(Self,TargetVariant,'');
+end;
+
 procedure TTournamentDialog.LoadClick(Sender: TObject);
 var
   Dialog: TOpenDialog;
+  TargetVariant:TGameVariant;
 begin
   if IsRunning then
     Exit;
@@ -1404,10 +1431,12 @@ begin
       Dialog.InitialDir := IncludeTrailingPathDelimiter(GetAppConfigDir(False)) + 'tournaments';
     Dialog.Filter := 'Tournament files (*.json)|*.json|All files (*.*)|*.*';
     Dialog.Options := Dialog.Options + [ofFileMustExist];
-    if Dialog.Execute then
-    begin
-      LoadTournamentFromFile(Dialog.FileName);
-    end;
+    if ExecuteGuiFileDialog(Dialog) then
+    try
+      TargetVariant:=TournamentFileVariant(Dialog.FileName,FVariant);
+      if (TargetVariant<>FVariant) and Assigned(FOnContextRequested) then FOnContextRequested(Self,TargetVariant,Dialog.FileName)
+      else LoadTournamentFromFile(Dialog.FileName);
+    except on E:Exception do ShowGuiOkDialog(Self,'Load tournament',E.Message);end;
   finally
     Dialog.Free;
   end;
@@ -1996,6 +2025,7 @@ begin
   RunningGame.Active := True;
   RunningGame.Row := ARow;
   RunningGame.GameId := TRunningGame(AGame).Id;
+  TRunningGame(AGame).TournamentOwner := Self;
   if FProfile.FileFormat=gffPgn then GameRecord(ARow).StartDate:=FormatDateTime('yyyy.mm.dd',TRunningGame(AGame).StartedAt);
   FRunningGames.Add(RunningGame);
   FGrid.Cells[TournamentColReason, ARow] := 'Running';
@@ -2171,6 +2201,7 @@ begin
         ((PairingActions[I] = 'LoadTournament') or (FStorageError = ''));
   end;
   Caption := 'Tournament';
+  if RegisteredGameCount>1 then Caption:=Caption+' - '+FVariant.Name;
   FailedCaptures := 0;
   for I := 0 to FGameRecords.Count - 1 do
     if TTournamentGameRecord(FGameRecords[I]).CaptureError <> '' then Inc(FailedCaptures);

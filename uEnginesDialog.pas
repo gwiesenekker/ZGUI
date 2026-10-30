@@ -6,7 +6,7 @@ interface
 
 uses
   uGamePosition, Classes, Controls, Dialogs, Forms, Grids, Menus, SysUtils,
-  uEngineEditForm, uEngineRegistry, uGuiDialogs;
+  uEngineEditForm, uEngineRegistry, uGuiDialogs, uGameGuiProfile;
 
 type
   TEnginesDialog = class(TForm)
@@ -78,7 +78,8 @@ begin
   FGrid.Columns.Add.Title.Caption := 'Executable';
   FGrid.Columns.Add.Title.Caption := 'Hub / UCI id';
   FGrid.Columns.Add.Title.Caption := 'DXP id';
-  for Col:=1 to 3 do FGrid.Columns[Col].SizePriority:=0;
+  if RegisteredGameCount>1 then FGrid.Columns.Add.Title.Caption:='Game';
+  for Col:=1 to FGrid.ColCount-1 do FGrid.Columns[Col].SizePriority:=0;
   FGrid.Columns[0].SizePriority:=1;
   FGrid.AutoFillColumns:=True;
   FGrid.Options:=FGrid.Options+[goColSizing,goTruncCellHints];
@@ -256,7 +257,7 @@ var Col,Margin: Integer;
 begin
   if (FGrid=nil) or (csDestroying in ComponentState) then Exit;
   Margin:=MeasureGuiText('MM',FGrid.Font).cx;
-  for Col:=1 to 3 do begin
+  for Col:=1 to FGrid.ColCount-1 do begin
     // Native sizing includes column titles, their own fonts and cell padding.
     FGrid.AutoSizeColumn(Col);
     FGrid.ColWidths[Col]:=FGrid.ColWidths[Col]+Margin;
@@ -280,6 +281,7 @@ begin
     if Engine.Kind=eekUci then FGrid.Cells[2, I + 1] := Engine.UciId
     else FGrid.Cells[2, I + 1] := Engine.HubId;
     FGrid.Cells[3, I + 1] := Engine.DxpId;
+    if FGrid.ColCount>4 then FGrid.Cells[4,I+1]:=GameForEngineKind(Engine.Kind).Name;
   end;
   MeasureColumns;
 end;

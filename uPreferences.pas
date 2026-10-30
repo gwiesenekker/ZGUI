@@ -35,8 +35,10 @@ type
 function DefaultScoreHistoryColors: TScoreHistoryColors;
 function PreferencesJsonFileName: string;
 function DefaultGuiPreferences: TGuiPreferences;
-procedure LoadGuiPreferences(var APrefs: TGuiPreferences);
-procedure SaveGuiPreferences(const APrefs: TGuiPreferences);
+procedure LoadGuiPreferences(var APrefs: TGuiPreferences;const GameId:string='');
+procedure SaveGuiPreferences(const APrefs: TGuiPreferences;const GameId:string='');
+function LastGamePreference:string;
+procedure RememberGamePreference(const GameId:string);
 
 implementation
 
@@ -82,6 +84,31 @@ begin
   Result.HintMoveColor := clRed;
   Result.EvaluationMaxScore := 10.0;
   Result.EvaluationScale := ssLogarithmic;
+end;
+
+function ReadPreferenceObject:TJSONObject;
+var Lines:TStringList;Value:TJSONData;
+begin
+  Result:=TJSONObject.Create;if not FileExists(PreferencesJsonFileName) then Exit;
+  Lines:=TStringList.Create;Value:=nil;
+  try
+    try Lines.LoadFromFile(PreferencesJsonFileName);Value:=GetJSON(Lines.Text);
+    except on E:Exception do Exit;end;
+    if Value.JSONType=jtObject then begin Result.Free;Result:=TJSONObject(Value);Value:=nil;end;
+  finally Value.Free;Lines.Free;end;
+end;
+function LastGamePreference:string;
+var Data:TJSONObject;
+begin Data:=ReadPreferenceObject;try
+  Result:='chess';if (Data.Find('last_game')<>nil) and (Data.Find('last_game').JSONType=jtString) then
+    Result:=Data.Get('last_game','chess');
+finally Data.Free;end;end;
+procedure RememberGamePreference(const GameId:string);
+var Data:TJSONObject;Lines:TStringList;
+begin
+  Data:=ReadPreferenceObject;Lines:=TStringList.Create;
+  try Data.Delete('last_game');Data.Add('last_game',GameId);Lines.Text:=Data.FormatJSON([],2);Lines.SaveToFile(PreferencesJsonFileName);
+  finally Lines.Free;Data.Free;end;
 end;
 
 function ColorToJsonText(AColor: TColor): string;
@@ -134,14 +161,14 @@ begin
   if (Data <> nil) and (Data.JSONType = jtBoolean) then AValue := Data.AsBoolean;
 end;
 
-procedure LoadGuiPreferences(var APrefs: TGuiPreferences);
+procedure LoadGuiPreferences(var APrefs: TGuiPreferences;const GameId:string);
 var
   Data: TJSONData;
   FileName: string;
   Lines: TStringList;
   C: TScoreHistoryColor;
   S: TNotationStyle; Key: string; Defaults: TNotationStyles;
-  Value: TJSONData; FontSize: Integer;
+  Value: TJSONData; FontSize: Integer;Layer:TJSONObject;
 begin
   APrefs := DefaultGuiPreferences;
   Defaults := DefaultNotationStyles;
@@ -198,19 +225,45 @@ begin
         APrefs.EvaluationScale := ssLinear
       else
         APrefs.EvaluationScale := ssLogarithmic;
+      if GameId<>'' then begin
+        Value:=TJSONObject(Data).Find('game_preferences');
+        if (Value<>nil) and (Value.JSONType=jtObject) then begin
+          Value:=TJSONObject(Value).Find(GameId);
+          if (Value<>nil) and (Value.JSONType=jtObject) then begin
+            Layer:=TJSONObject(Value);
+            LoadColor(Layer,'main_board_light',APrefs.MainBoardLightColor);
+            LoadColor(Layer,'main_board_dark',APrefs.MainBoardDarkColor);
+            LoadColor(Layer,'analysis_board_light',APrefs.AnalysisBoardLightColor);
+            LoadColor(Layer,'analysis_board_dark',APrefs.AnalysisBoardDarkColor);
+            LoadColor(Layer,'target_square',APrefs.TargetSquareColor);
+            LoadColor(Layer,'last_move',APrefs.LastMoveColor);
+            LoadColor(Layer,'pv_move',APrefs.PvMoveColor);
+            LoadColor(Layer,'hint_move',APrefs.HintMoveColor);
+            APrefs.EvaluationMaxScore:=Layer.Get('evaluation_max_score',APrefs.EvaluationMaxScore);
+            if Layer.Find('evaluation_scale')<>nil then begin
+              if SameText(Layer.Get('evaluation_scale','logarithmic'),'linear') then APrefs.EvaluationScale:=ssLinear
+              else APrefs.EvaluationScale:=ssLogarithmic;
+            end;
+          end;
+        end;
+      end;
     end;
   finally
     Data.Free;
   end;
 end;
 
-procedure SaveGuiPreferences(const APrefs: TGuiPreferences);
+procedure SaveGuiPreferences(const APrefs: TGuiPreferences;const GameId:string);
 var
-  Data: TJSONObject;
+  Data,Old,Games,Layer:TJSONObject;
+  Legacy:TGuiPreferences;
+  Value:TJSONData;
   Lines: TStringList;
   C: TScoreHistoryColor;
   S: TNotationStyle; Key: string;
 begin
+  if GameId<>'' then LoadGuiPreferences(Legacy) else Legacy:=APrefs;
+  Old:=ReadPreferenceObject;
   Data := TJSONObject.Create;
   Lines := TStringList.Create;
   try
@@ -225,26 +278,44 @@ begin
     Data.Add('notation_font_size', APrefs.NotationFontSize);
     for C:=Low(C) to High(C) do
       Data.Add(ScoreColorKeys[C],ColorToJsonText(APrefs.ScoreHistoryColors[C]));
-    Data.Add('main_board_light', ColorToJsonText(APrefs.MainBoardLightColor));
-    Data.Add('main_board_dark', ColorToJsonText(APrefs.MainBoardDarkColor));
+    Data.Add('main_board_light', ColorToJsonText(Legacy.MainBoardLightColor));
+    Data.Add('main_board_dark', ColorToJsonText(Legacy.MainBoardDarkColor));
     Data.Add('analysis_board_light',
-      ColorToJsonText(APrefs.AnalysisBoardLightColor));
+      ColorToJsonText(Legacy.AnalysisBoardLightColor));
     Data.Add('analysis_board_dark',
-      ColorToJsonText(APrefs.AnalysisBoardDarkColor));
-    Data.Add('target_square', ColorToJsonText(APrefs.TargetSquareColor));
-    Data.Add('last_move', ColorToJsonText(APrefs.LastMoveColor));
-    Data.Add('pv_move', ColorToJsonText(APrefs.PvMoveColor));
-    Data.Add('hint_move', ColorToJsonText(APrefs.HintMoveColor));
-    Data.Add('evaluation_max_score', APrefs.EvaluationMaxScore);
-    if APrefs.EvaluationScale = ssLinear then
+      ColorToJsonText(Legacy.AnalysisBoardDarkColor));
+    Data.Add('target_square', ColorToJsonText(Legacy.TargetSquareColor));
+    Data.Add('last_move', ColorToJsonText(Legacy.LastMoveColor));
+    Data.Add('pv_move', ColorToJsonText(Legacy.PvMoveColor));
+    Data.Add('hint_move', ColorToJsonText(Legacy.HintMoveColor));
+    Data.Add('evaluation_max_score', Legacy.EvaluationMaxScore);
+    if Legacy.EvaluationScale = ssLinear then
       Data.Add('evaluation_scale', 'linear')
     else
       Data.Add('evaluation_scale', 'logarithmic');
+    Value:=Old.Find('game_preferences');
+    if (Value<>nil) and (Value.JSONType=jtObject) then Games:=TJSONObject(Value.Clone) else Games:=TJSONObject.Create;
+    if GameId<>'' then begin
+      Games.Delete(GameId);Layer:=TJSONObject.Create;
+      Layer.Add('main_board_light',ColorToJsonText(APrefs.MainBoardLightColor));
+      Layer.Add('main_board_dark',ColorToJsonText(APrefs.MainBoardDarkColor));
+      Layer.Add('analysis_board_light',ColorToJsonText(APrefs.AnalysisBoardLightColor));
+      Layer.Add('analysis_board_dark',ColorToJsonText(APrefs.AnalysisBoardDarkColor));
+      Layer.Add('target_square',ColorToJsonText(APrefs.TargetSquareColor));
+      Layer.Add('last_move',ColorToJsonText(APrefs.LastMoveColor));
+      Layer.Add('pv_move',ColorToJsonText(APrefs.PvMoveColor));
+      Layer.Add('hint_move',ColorToJsonText(APrefs.HintMoveColor));
+      Layer.Add('evaluation_max_score',APrefs.EvaluationMaxScore);
+      if APrefs.EvaluationScale=ssLinear then Layer.Add('evaluation_scale','linear') else Layer.Add('evaluation_scale','logarithmic');
+      Games.Add(GameId,Layer);
+    end;
+    Data.Add('game_preferences',Games);
+    Value:=Old.Find('last_game');if Value<>nil then Data.Add('last_game',Value.Clone);
     Lines.Text := Data.FormatJSON([], 2);
     Lines.SaveToFile(PreferencesJsonFileName);
   finally
     Lines.Free;
-    Data.Free;
+    Data.Free;Old.Free;
   end;
 end;
 

@@ -88,6 +88,7 @@ type
     constructor Create(AOwner: TComponent); override; overload;
     constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
     property Variant:TGameVariant read FVariant;
+    property ImportBusy:Boolean read FImportBusy;
     destructor Destroy; override;
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
     procedure CreateDatabase(const AFileName: string);

@@ -63,6 +63,7 @@ type
       AInfoLabel: TLabel; APvMemo: TMemo);
     destructor Destroy; override;
 
+    procedure AttachViews;
     procedure Clear;
     procedure SetSnapshot(ASnapshot: TPvSnapshot; const AStartingFEN: string);
     procedure SetData(ABasePosition: TGamePosition; ABasePly: Integer;
@@ -117,6 +118,12 @@ begin
   FPendingBaseBoard.Free;
   FBaseBoard.Free;
   inherited Destroy;
+end;
+
+procedure TPvBrowser.AttachViews;
+begin
+  if FPvMemo<>nil then begin FPvMemo.OnClick:=@MemoClick;FPvMemo.OnKeyDown:=@MemoKeyDown;end;
+  RenderBoard;
 end;
 
 procedure TPvBrowser.Clear;

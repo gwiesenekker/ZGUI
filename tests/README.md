@@ -321,3 +321,30 @@ New game validation/defaults, both player colours, board input, quiet clocks,
 live PVs with stdout hidden, two registrations, reservations, Stop and PGN reload.
 The clocked Hub fixture is recorded against bc177c4 independently of the new
 clock-record bridge; both old and new API paths must match its exact bytes.
+
+## Mixed chess and draughts
+
+`multi_game_gui_check` is part of the GUI sweep. It registers both games and runs
+concurrent UCI and Hub games through the existing main window and runners, then
+saves both formats. It checks separate standalone documents, preferences, strict
+file classification, loaded annotator slots, stale session rejection, cancelled
+close, simultaneous tournaments and independent publication/save ownership.
+Fake peers are built into the test executable. Build/run it alone:
+
+```sh
+python3 tests/build_lazarus_check.py gtk2 /tmp/zgui-multi tests/multi_game_gui_check.lpi
+DISPLAY=:1 /tmp/zgui-multi/multi_game_gui_check
+```
+
+For the same acceptance with real engines, pass four absolute executable paths:
+Stockfish, Arasan (or another UCI engine), Scan engine6, Scan engine7. The test
+writes registrations and preferences beside its executable, so build it in a
+temporary directory, never in the source root. Both Scan copies must retain their
+own configuration/parameter files. Real GWD DXP interoperability is deferred;
+`run_dxp_checks.sh` retains the fake protocol peers.
+
+The optional local `chatgpt/SCAN_ENGINE_ACCEPTANCE.pas` is an additional reference
+engine check, not a required suite dependency. Compile it with FPC using `-Fu.`
+and `-FU/tmp/zgui-scan-units -FE/tmp`, then run its executable with the project
+root as its working directory. It expects the locally installed engine6/engine7
+packages and exercises initialization, scored PVs, clocked moves and forced wins.

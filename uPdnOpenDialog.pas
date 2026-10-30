@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, Controls, Forms, Graphics, Grids, StdCtrls, SysUtils, uGuiDialogs,
-  uDraughtsPdn, uGameFileReader;
+  uDraughtsPdn, uGameFileReader, uGamePosition;
 
 type
   TPdnGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
@@ -16,6 +16,7 @@ type
   TPdnOpenDialog = class(TForm)
   private
     FFileName: string;
+    FVariant:TGameVariant;
     FReader: TGameFileReader;
     FOnFileGameSelected: TFileGameSelectedEvent;
     FGrid: TStringGrid;
@@ -31,7 +32,8 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure OpenPdnFile(const AFileName: string);
-    procedure OpenGameFile(const AFileName, AFormatName: string; AReader: TGameFileReader);
+    procedure OpenGameFile(const AFileName, AFormatName: string; AReader: TGameFileReader;AVariant:TGameVariant=nil);
+    property Variant:TGameVariant read FVariant;
     property OnFileGameSelected: TFileGameSelectedEvent read FOnFileGameSelected write FOnFileGameSelected;
     property OnGameSelected: TPdnGameSelectedEvent read FOnGameSelected
       write FOnGameSelected;
@@ -201,10 +203,10 @@ end;
 procedure TPdnOpenDialog.OpenPdnFile(const AFileName: string);
 begin OpenGameFile(AFileName,'PDN',TPdnFileReader.Create); end;
 
-procedure TPdnOpenDialog.OpenGameFile(const AFileName,AFormatName: string; AReader: TGameFileReader);
+procedure TPdnOpenDialog.OpenGameFile(const AFileName,AFormatName: string; AReader: TGameFileReader;AVariant:TGameVariant);
 begin
   try AReader.OpenFile(AFileName); except AReader.Free; raise; end;
-  FReader.Free; FReader:=AReader;
+  FReader.Free; FReader:=AReader;FVariant:=AVariant;
   FFileName:=AFileName; Caption:='Open '+AFormatName;
   PopulateGrid;
   {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}

@@ -13,6 +13,9 @@ type
   private
     FVariant:TGameVariant;
     FBlackPlayerCombo: TComboBox;
+    FGameCombo:TComboBox;
+    procedure GameChanged(Sender:TObject);
+  private
     FBusyEngineKeys: TStringList;
     FDefaultTimeControl: TTimeControl;
     FIncrementEdit: TEdit;
@@ -61,7 +64,7 @@ constructor TGameSetupForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
   LButtonPanel, LContentPanel: TPanel;
   LCancelButton, LOkButton: TButton;
-  LTop: Integer;
+  LTop,I: Integer;
 begin
   inherited Create(AOwner);
   if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
@@ -88,6 +91,16 @@ begin
   LContentPanel.BorderSpacing.Around := 12;
 
   LTop := 0;
+  if RegisteredGameCount>1 then begin
+    Height:=Height+38;FGameCombo:=TComboBox.Create(Self);FGameCombo.Name:='NewGameVariant';
+    FGameCombo.Style:=csDropDownList;
+    for I:=0 to RegisteredGameCount-1 do begin
+      FGameCombo.Items.AddObject(RegisteredGame(I).Name,RegisteredGame(I));
+      if RegisteredGame(I)=FVariant then FGameCombo.ItemIndex:=I;
+    end;
+    FGameCombo.OnChange:=@GameChanged;AddLabelledCombo(LContentPanel,'Game',FGameCombo,LTop);
+  end;
+
 
   FStartingFENEdit := TEdit.Create(Self);
   FStartingFENEdit.Text := FVariant.DefaultStartingFEN;
@@ -153,6 +166,17 @@ begin
   FBusyEngineKeys.Free;
   FRegisteredEngines.Free;
   inherited Destroy;
+end;
+
+procedure TGameSetupForm.GameChanged(Sender:TObject);
+begin
+  if (FGameCombo=nil) or (FGameCombo.ItemIndex<0) then Exit;
+  FVariant:=TGameVariant(FGameCombo.Items.Objects[FGameCombo.ItemIndex]);
+  FStartingFENEdit.Text:=FVariant.DefaultStartingFEN;FDefaultTimeControl:=GameGuiProfileFor(FVariant).DefaultClock;
+  FMovesEdit.Text:=IntToStr(FDefaultTimeControl.MovesPerPeriod);
+  FMinutesEdit.Text:=FloatToStr(FDefaultTimeControl.MinutesPerPeriod);
+  FIncrementEdit.Text:=FloatToStr(FDefaultTimeControl.IncrementSeconds);
+  RefillPlayerCombos(nil);
 end;
 
 procedure TGameSetupForm.ApplyPreferences(const APreferences: TGuiPreferences);

@@ -10,7 +10,7 @@ uses
   Forms,
   uMainForm,
   // The game and its engine protocols register themselves when linked.
-  uGamePosition, uChessPosition, uGameGuiProfile, uChessUciEngine,
+  uPreferences, uGamePosition, uChessPosition, uGameGuiProfile, uChessUciEngine,
   uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
 
 var
@@ -25,7 +25,8 @@ begin
   Chess := TChessVariant.Create;
   RegisterGame(Chess,ChessGuiProfile);
   RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
-  RegisterDefaultGameVariant(Chess);
+  if LastGamePreference='draughts' then RegisterDefaultGameVariant(GameVariantById('draughts'))
+  else RegisterDefaultGameVariant(Chess);
   try
     Application.Scaled := True;
     Application.Initialize;

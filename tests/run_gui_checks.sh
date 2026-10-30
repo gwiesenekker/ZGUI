@@ -75,3 +75,8 @@ echo "==> chess_database_gui_check (GTK2, shared database dialog and selection)"
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
   "$ROOT_DIR/tests/chess_database_gui_check.lpi" > "$OUT_DIR/chess-database-build.log" 2>&1
 "$OUT_DIR/chess_database_gui_check"
+
+echo "==> multi_game_gui_check (GTK2, concurrent chess/draughts contexts)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/multi" \
+  "$ROOT_DIR/tests/multi_game_gui_check.lpi" > "$OUT_DIR/multi-build.log" 2>&1
+"$OUT_DIR/multi/multi_game_gui_check"

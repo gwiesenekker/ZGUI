@@ -184,6 +184,32 @@ chess. The score-history view and shared navigation infrastructure are retained.
 Chess pieces use original GPLv3 vector artwork embedded in the source and do not
 require a chess font.
 
+## Chess and draughts in one window
+
+Use the Chess board and International Polish Draughts board entries in Game History
+to select the independent standalone documents. New Game also has a Game choice.
+Running games retain their own rules, clocks and engines while another game is
+shown. UCI registrations belong to chess; Hub and DXP registrations belong to
+draughts. The engine list shows this derived Game value.
+
+Each game has one annotator slot. Switching games pauses the hidden slot's live
+search without closing its engine; returning resumes analysis of the selected
+position. Auto Play stops on navigation. Loaded hidden annotators still reserve
+their engines. DXP is for playing games and cannot be an annotator.
+
+Each game also has its own tournament window. Its Game choice opens the other
+window; scheduling and standings stay within one game. Both tournaments can run
+at once. Set concurrency and engine thread counts with available CPU and memory
+in mind: games, annotators and tournaments can all be active together.
+
+Open accepts PGN and PDN. When a file's game is ambiguous, choose it explicitly.
+Database and tournament files are checked before changing contexts. New databases
+ask for their game. Each document saves in its own format. Closing ZGUI offers to
+save both standalone documents and tournament records; Cancel leaves them open.
+Finish or stop a database import before replacing its window or closing ZGUI.
+Board colours and evaluation ranges are per game; fonts, notation and score-history
+colours remain shared. ZGUI restores the last selected game on startup.
+
 ## 1. Getting started
 
 When ZGUI starts, the main window shows:

@@ -26,7 +26,60 @@ type
     StartingFEN: string;
   end;
 
+  TGameUiContext=class
+  public
+    Variant:TGameVariant;
+    AnalyzerLogText,MctsLogText,SecondsText:string;
+    FGameTree:TGameTree;
+    FGameTreeActor:TGameTreeActor;
+    FBoard:TGamePosition;
+    FAnalysis:TAnalysisCoordinator;
+    FBoardControl:TGameBoardControl;
+    FMiniBoardControl:TGameBoardControl;
+    FAnalyzerMiniBoardControl:TGameBoardControl;
+    FPopoutBoardControl:TGameBoardControl;
+    FAnalyzerPopoutBoardControl:TGameBoardControl;
+    FMiniBoardForm:TForm;
+    FAnalyzerMiniBoardForm:TForm;
+    FPvBrowser:TPvBrowser;
+    FAnalyzerPvBrowser:TPvBrowser;
+    FDatabaseForm:TDatabaseForm;
+    FSetupForm:TGameSetupForm;
+    FPositionSetupForm:TPositionSetupForm;
+    FEnginesDialog:TEnginesDialog;
+    FTournamentDialog:TTournamentDialog;
+    FAnalyzerRunner:TAnalyzerRunnerThread;
+    FAnalyzerEngineKey:string;
+    FAnalyzerEngineName:string;
+    FMctsRunner:TAnalyzerRunnerThread;
+    FMctsEngineKey:string;
+    FStandaloneWhitePlayerName:string;
+    FStandaloneBlackPlayerName:string;
+    FStandaloneEventName:string;
+    FPreferences:TGuiPreferences;
+  end;
+  TDocumentView=class
+  public TreeId:Int64;Display:TDisplayedPosition;end;
+  TFeatureBinding=record Component:TComponent;Feature:TGuiGameFeature;end;
+
   TMainForm = class(TForm)
+  private
+    FGameContexts,FDocumentViews:TList;
+    FActiveContext:TGameUiContext;
+    FFeatureBindings:array of TFeatureBinding;
+    FSwitchingContext:Boolean;
+    procedure InitializeGameContexts;
+    procedure CaptureGameContext;
+    procedure ActivateGameContext(Variant:TGameVariant);
+    function ContextForVariant(Variant:TGameVariant):TGameUiContext;
+    function DocumentDisplay(Tree:TGameTree):TDisplayedPosition;
+    function CurrentVariant:TGameVariant;
+    function StandaloneListIndex:Integer;
+    procedure TournamentContextRequested(Sender:TObject;Variant:TGameVariant;const FileName:string);
+    function AnalysisMessageContext(Message:TAnalysisGuiMessage):TGameUiContext;
+    procedure UseDocument(Tree:TGameTree);
+    procedure UpdateContextFeatures;
+    procedure GameChoiceClick(Sender:TObject);
   private
     FAnalyzerCloseMenuItem: TMenuItem;
     FAnalyzerEngineKey: string;
@@ -420,6 +473,9 @@ type
     function SelectedDisplayedGame: TRunningGame;
     procedure SavePdnClick(Sender: TObject);
     function SaveCurrentGameWithDialog: Boolean;
+    function SaveTreeWithDialog(Tree:TGameTree):Boolean;
+    function ConfirmReplaceTree(Tree:TGameTree):Boolean;
+    function TournamentOwnerFor(Game:TRunningGame):TTournamentDialog;
     procedure ScrollMemoToLastTextLine(AMemo: TMemo);
     procedure ScoreHistoryPopoutClick(Sender: TObject);
     procedure ScoreHistoryFormClose(Sender: TObject; var CloseAction: TCloseAction);
@@ -460,6 +516,8 @@ type
     procedure SyncGameTreeViewSelection;
     procedure UpdateMctsStatsFromLog(const AMessage: string);
     procedure TournamentClick(Sender: TObject);
+  protected
+    procedure Notification(AComponent:TComponent;Operation:TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -477,6 +535,7 @@ type
     function GetLastDisplayReplayCount: Integer;
     property LastDisplayReplayCount: Integer read GetLastDisplayReplayCount;
     {$ENDIF}
+    procedure SelectGameVariant(Variant:TGameVariant);
     function ActiveGameTree: TGameTree;
     function CurrentGameTreePdnText(const AEventName: string): string;
     procedure LoadStandaloneFen(const AFEN: string);
@@ -496,7 +555,7 @@ var
 
 implementation
 
-uses uGameTreeNodeData, LCLIntf;
+uses uGameTreeNodeData, LCLIntf, uGameDocumentContext;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
@@ -619,7 +678,7 @@ begin
   FStandaloneWhitePlayerName := 'White';
   FStandaloneBlackPlayerName := 'Black';
   FStandaloneEventName := '?';
-  LoadGuiPreferences(FPreferences);
+  LoadGuiPreferences(FPreferences,GameVariantId(FGameTree.Variant));
   Randomize;
 
   LMainMenu := TMainMenu.Create(Self);
@@ -877,6 +936,7 @@ begin
   FMctsMemo.PopupMenu := FMctsPopup;
 
   FAnalyzerMemo := TMemo.Create(Self);
+  FAnalyzerMemo.Name:='AnnotatorLogMemo';
   FAnalyzerMemo.Parent := LAnalyzerTextPanel;
   FAnalyzerMemo.Align := alClient;
   FAnalyzerMemo.ParentFont := True;
@@ -947,7 +1007,7 @@ begin
   FGamesListBox.Anchors := [akTop, akLeft, akRight, akBottom];
   FGamesListBox.OnClick := @GamesListBoxClick;
   FGamesListBox.Items.Add('Board (PDN / FEN)');
-  FGamesListBox.ItemIndex := 0;
+  FGamesListBox.ItemIndex := StandaloneListIndex;
 
   LGamesPopup := TPopupMenu.Create(Self);
   LGamesPopup.OnPopup := @GamesPopupPopup;
@@ -1282,11 +1342,17 @@ begin
   OnResize:=@UpdateAnalyzerTextSizes;
   ApplyPreferences;
   RefreshDisplayFromGameTree(FGameTree, True);
+  InitializeGameContexts;
 end;
 
 destructor TMainForm.Destroy;
+var I:Integer;C:TGameUiContext;View:TDocumentView;
 begin
   FClosing := True;
+  CaptureGameContext;
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);if C.FTournamentDialog<>nil then C.FTournamentDialog.BeginShutdown;
+  end;
   Application.RemoveAsyncCalls(Self);
   if FGuiEventTimer <> nil then
     FGuiEventTimer.Enabled := False;
@@ -1295,6 +1361,9 @@ begin
   StopAllGames;
   FreeAndNil(FMctsRunner);
   FreeAndNil(FAnalyzerRunner);
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);if C<>FActiveContext then begin FreeAndNil(C.FAnalyzerRunner);FreeAndNil(C.FMctsRunner);end;
+  end;
   if FGuiEventQueue <> nil then
     FGuiEventQueue.Close;
   FreeAndNil(FGuiEventQueue);
@@ -1319,6 +1388,23 @@ begin
   FNotation.Free;
   FDisplayedPosition.Free;
 
+  if FGameContexts<>nil then begin
+    for I:=0 to FGameContexts.Count-1 do begin
+      C:=TGameUiContext(FGameContexts[I]);
+      if C<>FActiveContext then begin
+        C.FAnalyzerRunner.Free;C.FMctsRunner.Free;C.FPvBrowser.Free;C.FAnalyzerPvBrowser.Free;
+        C.FGameTreeActor.Free;C.FGameTree.Free;C.FBoard.Free;C.FAnalysis.Free;
+      end;
+      C.Free;
+    end;
+    FGameContexts.Free;
+  end;
+  if FDocumentViews<>nil then begin
+    for I:=0 to FDocumentViews.Count-1 do begin
+      View:=TDocumentView(FDocumentViews[I]);if View.Display<>FDisplayedPosition then View.Display.Free;View.Free;
+    end;FDocumentViews.Free;
+  end;
+
   FPositionScratch.Free;
   FMoveInteraction.Free;
   FGameTreeActor.Free;
@@ -1327,6 +1413,208 @@ begin
   FGames.Free;
   FBoard.Free;
   inherited Destroy;
+end;
+
+function TMainForm.AnalysisMessageContext(Message:TAnalysisGuiMessage):TGameUiContext;
+var I:Integer;C:TGameUiContext;
+  function Matches(Runner:TAnalyzerRunnerThread):Boolean;
+  begin Result:=(Runner<>nil) and (Runner.SessionId=Message.SessionId) and (Runner.SlotId=Message.SlotId);end;
+begin
+  Result:=nil;if Message=nil then Exit;
+  if Message.SessionId=0 then Exit(FActiveContext); // Legacy test messages.
+  if Matches(FAnalyzerRunner) or Matches(FMctsRunner) then Exit(FActiveContext);
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);
+    if (C<>FActiveContext) and (Matches(C.FAnalyzerRunner) or Matches(C.FMctsRunner)) then Exit(C);
+  end;
+end;
+
+function TMainForm.StandaloneListIndex:Integer;
+begin
+  Result:=0;if (FActiveContext<>nil) and (FGameContexts<>nil) and (FGameContexts.Count>1) then
+    Result:=FGamesListBox.Items.IndexOfObject(FActiveContext);
+end;
+
+function TMainForm.CurrentVariant:TGameVariant;
+begin
+  if FActiveContext<>nil then Exit(FActiveContext.Variant);
+  if FGameTree<>nil then Exit(FGameTree.Variant);
+  Result:=DefaultGameVariant;
+end;
+
+function TMainForm.ContextForVariant(Variant:TGameVariant):TGameUiContext;
+var I:Integer;
+begin
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do
+    if TGameUiContext(FGameContexts[I]).Variant=Variant then Exit(TGameUiContext(FGameContexts[I]));
+  raise EGamePositionError.Create('No document context for '+Variant.Name);
+end;
+
+function TMainForm.DocumentDisplay(Tree:TGameTree):TDisplayedPosition;
+var I:Integer;View:TDocumentView;
+begin
+  if FDocumentViews=nil then Exit(FDisplayedPosition);
+  for I:=0 to FDocumentViews.Count-1 do begin
+    View:=TDocumentView(FDocumentViews[I]);if View.TreeId=Tree.GameTreeId then Exit(View.Display);
+  end;
+  View:=TDocumentView.Create;View.TreeId:=Tree.GameTreeId;View.Display:=TDisplayedPosition.Create;
+  FDocumentViews.Add(View);Result:=View.Display;
+end;
+
+procedure TMainForm.CaptureGameContext;
+var C:TGameUiContext;
+begin
+  C:=FActiveContext;if C=nil then Exit;
+  C.FGameTree:=FGameTree;
+  C.FGameTreeActor:=FGameTreeActor;
+  C.FBoard:=FBoard;
+  C.FAnalysis:=FAnalysis;
+  C.FBoardControl:=FBoardControl;
+  C.FMiniBoardControl:=FMiniBoardControl;
+  C.FAnalyzerMiniBoardControl:=FAnalyzerMiniBoardControl;
+  C.FPopoutBoardControl:=FPopoutBoardControl;
+  C.FAnalyzerPopoutBoardControl:=FAnalyzerPopoutBoardControl;
+  C.FMiniBoardForm:=FMiniBoardForm;
+  C.FAnalyzerMiniBoardForm:=FAnalyzerMiniBoardForm;
+  C.FPvBrowser:=FPvBrowser;
+  C.FAnalyzerPvBrowser:=FAnalyzerPvBrowser;
+  C.FDatabaseForm:=FDatabaseForm;
+  C.FSetupForm:=FSetupForm;
+  C.FPositionSetupForm:=FPositionSetupForm;
+  C.FEnginesDialog:=FEnginesDialog;
+  C.FTournamentDialog:=FTournamentDialog;
+  C.FAnalyzerRunner:=FAnalyzerRunner;
+  C.FAnalyzerEngineKey:=FAnalyzerEngineKey;
+  C.FAnalyzerEngineName:=FAnalyzerEngineName;
+  C.FMctsRunner:=FMctsRunner;
+  C.FMctsEngineKey:=FMctsEngineKey;
+  C.FStandaloneWhitePlayerName:=FStandaloneWhitePlayerName;
+  C.FStandaloneBlackPlayerName:=FStandaloneBlackPlayerName;
+  C.FStandaloneEventName:=FStandaloneEventName;
+  C.FPreferences:=FPreferences;
+  C.AnalyzerLogText:=FAnalyzerMemo.Text;C.MctsLogText:=FMctsMemo.Text;
+  C.SecondsText:=FAnnotatorSecondsEdit.Text;
+end;
+
+procedure TMainForm.InitializeGameContexts;
+var C:TGameUiContext;I:Integer;View:TDocumentView;
+begin
+  FGameContexts:=TList.Create;FDocumentViews:=TList.Create;
+  View:=TDocumentView.Create;View.TreeId:=FGameTree.GameTreeId;View.Display:=FDisplayedPosition;FDocumentViews.Add(View);
+  C:=TGameUiContext.Create;C.Variant:=FGameTree.Variant;FGameContexts.Add(C);FActiveContext:=C;CaptureGameContext;
+  if RegisteredGameCount<2 then Exit;
+  FGamesListBox.Items.Objects[0]:=C;FGamesListBox.Items[0]:=C.Variant.Name+' board';
+  for I:=0 to RegisteredGameCount-1 do if RegisteredGame(I)<>C.Variant then begin
+    C:=TGameUiContext.Create;C.Variant:=RegisteredGame(I);
+    C.FGameTree:=TGameTree.Create(C.Variant);C.FGameTreeActor:=TGameTreeActor.Create(C.FGameTree,False);
+    C.FBoard:=C.Variant.CreatePosition;C.FAnalysis:=TAnalysisCoordinator.Create;
+    C.FStandaloneWhitePlayerName:='White';C.FStandaloneBlackPlayerName:='Black';C.FStandaloneEventName:='?';
+    C.AnalyzerLogText:='Annotator closed';C.MctsLogText:='MCTS annotator closed';C.SecondsText:='1';
+    LoadGuiPreferences(C.FPreferences,GameVariantId(C.Variant));FGameContexts.Add(C);
+    FGamesListBox.Items.InsertObject(FGameContexts.Count-1,C.Variant.Name+' board',C);
+  end;
+end;
+
+procedure TMainForm.ActivateGameContext(Variant:TGameVariant);
+var C,Old:TGameUiContext;I:Integer;
+  function NewBoard(Template:TGameBoardControl):TGameBoardControl;
+  begin
+    Result:=CreateGameBoardControl(Self,Variant);Result.Visible:=False;
+    Result.Parent:=Template.Parent;Result.Align:=Template.Align;Result.BoundsRect:=Template.BoundsRect;
+    Result.ShowCoordinates:=Template.ShowCoordinates;Result.ShowSideToMoveMarker:=Template.ShowSideToMoveMarker;
+    Result.PopupMenu:=Template.PopupMenu;Result.OnMouseDown:=Template.OnMouseDown;Result.OnDblClick:=Template.OnDblClick;
+    Result.BoardFlipped:=FBoardFlipped;
+  end;
+  procedure HideBoard(Board:TGameBoardControl);
+  begin if Board<>nil then begin Board.Visible:=False;Board.Name:='';end;end;
+begin
+  if (FActiveContext=nil) or (FActiveContext.Variant=Variant) or FSwitchingContext then Exit;
+  C:=ContextForVariant(Variant);Old:=FActiveContext;FSwitchingContext:=True;
+  try
+    StopAutoPlay('game selection changed');CancelAnalyzerSearch;
+    InvalidateAnalyzerPositionSignature;InvalidateMctsPositionSignature;
+    if FAnalyzerRunner<>nil then FAnalyzerRunner.PostStopSearch;
+    if FMctsRunner<>nil then FMctsRunner.PostStopSearch;
+    CaptureGameContext;
+    HideBoard(FBoardControl);HideBoard(FMiniBoardControl);HideBoard(FAnalyzerMiniBoardControl);
+    if FPositionSetupForm<>nil then FPositionSetupForm.Hide;
+    if FSetupForm<>nil then FSetupForm.Hide;if FEnginesDialog<>nil then FEnginesDialog.Hide;
+    if FMiniBoardForm<>nil then FMiniBoardForm.Hide;if FAnalyzerMiniBoardForm<>nil then FAnalyzerMiniBoardForm.Hide;
+    if C.FBoardControl=nil then begin
+      C.FBoardControl:=NewBoard(FBoardControl);C.FMiniBoardControl:=NewBoard(FMiniBoardControl);
+      C.FAnalyzerMiniBoardControl:=NewBoard(FAnalyzerMiniBoardControl);
+      C.FPvBrowser:=TPvBrowser.Create(Variant,C.FMiniBoardControl,FPvInfoLabel,FPvMemo);
+      C.FPvBrowser.OnBoardChanged:=@PvBoardChanged;
+      C.FAnalyzerPvBrowser:=TPvBrowser.Create(Variant,C.FAnalyzerMiniBoardControl,FAnalyzerPvInfoLabel,FAnalyzerPvMemo);
+      C.FAnalyzerPvBrowser.OnBoardChanged:=@AnalyzerPvBoardChanged;
+    end;
+    FActiveContext:=C;
+    FGameTree:=C.FGameTree;
+    FGameTreeActor:=C.FGameTreeActor;
+    FBoard:=C.FBoard;
+    FAnalysis:=C.FAnalysis;
+    FBoardControl:=C.FBoardControl;
+    FMiniBoardControl:=C.FMiniBoardControl;
+    FAnalyzerMiniBoardControl:=C.FAnalyzerMiniBoardControl;
+    FPopoutBoardControl:=C.FPopoutBoardControl;
+    FAnalyzerPopoutBoardControl:=C.FAnalyzerPopoutBoardControl;
+    FMiniBoardForm:=C.FMiniBoardForm;
+    FAnalyzerMiniBoardForm:=C.FAnalyzerMiniBoardForm;
+    FPvBrowser:=C.FPvBrowser;
+    FAnalyzerPvBrowser:=C.FAnalyzerPvBrowser;
+    FDatabaseForm:=C.FDatabaseForm;
+    FSetupForm:=C.FSetupForm;
+    FPositionSetupForm:=C.FPositionSetupForm;
+    FEnginesDialog:=C.FEnginesDialog;
+    FTournamentDialog:=C.FTournamentDialog;
+    FAnalyzerRunner:=C.FAnalyzerRunner;
+    FAnalyzerEngineKey:=C.FAnalyzerEngineKey;
+    FAnalyzerEngineName:=C.FAnalyzerEngineName;
+    FMctsRunner:=C.FMctsRunner;
+    FMctsEngineKey:=C.FMctsEngineKey;
+    FStandaloneWhitePlayerName:=C.FStandaloneWhitePlayerName;
+    FStandaloneBlackPlayerName:=C.FStandaloneBlackPlayerName;
+    FStandaloneEventName:=C.FStandaloneEventName;
+    FPreferences:=C.FPreferences;
+    FBoardControl.Name:='MainBoard';FMiniBoardControl.Name:='EnginePvBoard';
+    FBoardControl.Visible:=True;FMiniBoardControl.Visible:=True;FAnalyzerMiniBoardControl.Visible:=True;
+    FPvBrowser.AttachViews;FAnalyzerPvBrowser.AttachViews;
+    FAnalyzerMemo.Text:=C.AnalyzerLogText;FMctsMemo.Text:=C.MctsLogText;FAnnotatorSecondsEdit.Text:=C.SecondsText;
+    ClearMctsStatsGrid;SetDisplayedTreeTracking('','','',0,-1);FNotation.InvalidateSignature;
+    FLastDatabaseSearchFEN:='';LoadGuiPreferences(FPreferences,GameVariantId(Variant));
+    ApplyPreferences;UpdateContextFeatures;RememberGamePreference(GameVariantId(Variant));
+  finally FSwitchingContext:=False;end;
+end;
+
+procedure TMainForm.UseDocument(Tree:TGameTree);
+begin
+  if Tree=nil then Exit;
+  ActivateGameContext(Tree.Variant);FDisplayedPosition:=DocumentDisplay(Tree);
+end;
+
+procedure TMainForm.SelectGameVariant(Variant:TGameVariant);
+begin
+  ActivateGameContext(Variant);FGameActive:=False;FViewedGameId:=-1;UseDocument(FGameTree);
+  FGamesListBox.ItemIndex:=FGamesListBox.Items.IndexOfObject(FActiveContext);
+  RefreshDisplayFromGameTree(FGameTree,True);
+end;
+
+procedure TMainForm.GameChoiceClick(Sender:TObject);
+begin if Sender is TMenuItem then SelectGameVariant(RegisteredGame(TMenuItem(Sender).Tag));end;
+
+procedure TMainForm.UpdateContextFeatures;
+var I,J:Integer;Comp:TComponent;
+begin
+  // Only existing controls are re-evaluated; dynamic engine-menu items are rebuilt
+  // by their existing popup handlers and must not be retained after they're freed.
+  for I:=0 to High(FFeatureBindings) do begin
+    Comp:=nil;for J:=0 to ComponentCount-1 do if Components[J]=FFeatureBindings[I].Component then Comp:=Components[J];
+    if Comp<>nil then ApplyFeature(Comp,FFeatureBindings[I].Feature);
+  end;
+  for I:=0 to ComponentCount-1 do if Components[I] is TMenuItem then begin
+    if TMenuItem(Components[I]).OnClick=@OpenPdnClick then TMenuItem(Components[I]).Caption:='&Open game...';
+    if TMenuItem(Components[I]).OnClick=@SavePdnClick then TMenuItem(Components[I]).Caption:='&Save '+GameGuiProfileFor(CurrentVariant).FormatName+'...';
+  end;
 end;
 
 function TMainForm.ActiveGameTree: TGameTree;
@@ -1341,23 +1629,28 @@ end;
 
 function TMainForm.GameSupports(AFeature: TGuiGameFeature): Boolean;
 begin
-  Result:=AFeature in GameGuiProfileFor(DefaultGameVariant).Features;
+  Result:=AFeature in GameGuiProfileFor(CurrentVariant).Features;
 end;
 
 procedure TMainForm.ApplyFeature(AComponent: TComponent; AFeature: TGuiGameFeature);
+var N:Integer;
 begin
+  if FGameContexts=nil then begin
+    N:=Length(FFeatureBindings);SetLength(FFeatureBindings,N+1);
+    FFeatureBindings[N].Component:=AComponent;FFeatureBindings[N].Feature:=AFeature;
+  end;
   if AComponent is TMenuItem then
   begin
     TMenuItem(AComponent).Enabled := GameSupports(AFeature);
     if not GameSupports(AFeature) then
-      TMenuItem(AComponent).Hint := 'Not available for '+DefaultGameVariant.Name;
+      TMenuItem(AComponent).Hint := 'Not available for '+CurrentVariant.Name;
   end
   else if AComponent is TControl then
   begin
     TControl(AComponent).Enabled := GameSupports(AFeature);
     if not GameSupports(AFeature) then
     begin
-      TControl(AComponent).Hint := 'Not available for '+DefaultGameVariant.Name;
+      TControl(AComponent).Hint := 'Not available for '+CurrentVariant.Name;
       TControl(AComponent).ShowHint := True;
     end;
   end;
@@ -1971,7 +2264,7 @@ end;
 
 procedure TMainForm.AnalyzerLog(Sender: TObject; const AMessage: string);
 begin
-  PostGuiEvent(TAnalyzerLogGuiMessage.Create(AMessage));
+  PostGuiEvent(TAnalyzerLogGuiMessage.Create(AMessage,TAnalyzerRunnerThread(Sender)));
 end;
 
 procedure TMainForm.AnalyzerFinished(Sender: TObject);
@@ -2041,7 +2334,7 @@ procedure TMainForm.AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
 begin
   if ASnapshot = nil then
     Exit;
-  PostGuiEvent(TAnalyzerSnapshotGuiMessage.Create(ASnapshot));
+  PostGuiEvent(TAnalyzerSnapshotGuiMessage.Create(ASnapshot,TAnalyzerRunnerThread(Sender)));
 end;
 
 function TMainForm.AnnotatorSeconds: Double;
@@ -2272,12 +2565,12 @@ end;
 procedure TMainForm.AnalyzerMove(Sender: TObject;
   const ASearch: TGameTreeSearchRef; const AMoveText: string);
 begin
-  PostGuiEvent(TAnalyzerMoveGuiMessage.Create(ASearch, AMoveText));
+  PostGuiEvent(TAnalyzerMoveGuiMessage.Create(ASearch, AMoveText,TAnalyzerRunnerThread(Sender)));
 end;
 
 procedure TMainForm.MctsLog(Sender: TObject; const AMessage: string);
 begin
-  PostGuiEvent(TMctsLogGuiMessage.Create(AMessage));
+  PostGuiEvent(TMctsLogGuiMessage.Create(AMessage,TAnalyzerRunnerThread(Sender)));
 end;
 
 procedure TMainForm.MctsFinished(Sender: TObject);
@@ -2551,7 +2844,7 @@ begin
     LoadExternalEngines(EnginesJsonFileName, Engines);
     for I := 0 to Engines.Count - 1 do
     begin
-      if not (Engines[I].Kind in GameGuiProfileFor(DefaultGameVariant).EngineKinds) or not (Engines[I].Kind in [eekHub,eekUci]) then
+      if not (Engines[I].Kind in GameGuiProfileFor(CurrentVariant).EngineKinds) or not (Engines[I].Kind in [eekHub,eekUci]) then
         Continue;
       EngineKey := EngineIdentityKey(Engines[I]);
       if BusyKeys.IndexOf(EngineKey) >= 0 then
@@ -2596,7 +2889,7 @@ begin
     LoadExternalEngines(EnginesJsonFileName, Engines);
     Engine := nil;
     for I := 0 to Engines.Count - 1 do
-      if (Engines[I].Kind in GameGuiProfileFor(DefaultGameVariant).EngineKinds) and (Engines[I].Kind in [eekHub,eekUci]) and
+      if (Engines[I].Kind in GameGuiProfileFor(CurrentVariant).EngineKinds) and (Engines[I].Kind in [eekHub,eekUci]) and
         (EngineIdentityKey(Engines[I]) = EngineKey) then
       begin
         Engine := Engines[I];
@@ -2617,7 +2910,7 @@ begin
     FAnalyzerEngineName := GameTitleEngineName(Engine);
     InvalidateAnalyzerPositionSignature;
     FAnalyzerRunner := TAnalyzerRunnerThread.Create(Engine, @AnalyzerLog,
-      @AnalyzerSnapshot, @AnalyzerFinished, armAnalyze, @AnalyzerMove);
+      @AnalyzerSnapshot, @AnalyzerFinished, armAnalyze, @AnalyzerMove,GameVariantId(CurrentVariant));
     FAnalyzerRunner.Start;
     UpdateAutoPlayButtonState;
     RestartAnalyzer(ActiveGameTree);
@@ -2637,8 +2930,7 @@ begin
       FAnalyzerMemo.Lines.Add('Closing Annotator');
     FAnalyzerRunner.PostShutdown;
   end;
-  FAnalyzerEngineKey := '';
-  FAnalyzerEngineName := '';
+
   UpdateAutoPlayButtonState;
   InvalidateAnalyzerPositionSignature;
   if FAnalyzerPvBrowser <> nil then
@@ -2739,7 +3031,7 @@ begin
     FMctsEngineKey := EngineKey;
     InvalidateMctsPositionSignature;
     FMctsRunner := TAnalyzerRunnerThread.Create(Engine, @MctsLog, nil,
-      @MctsFinished, armMcts);
+      @MctsFinished, armMcts,nil,GameVariantId(CurrentVariant));
     FMctsRunner.Start;
     RestartMctsAnnotator(ActiveGameTree);
   finally
@@ -2755,7 +3047,7 @@ begin
       FMctsMemo.Lines.Add('Closing MCTS annotator');
     FMctsRunner.PostShutdown;
   end;
-  FMctsEngineKey := '';
+
   InvalidateMctsPositionSignature;
   ClearMctsStatsGrid;
 end;
@@ -2831,76 +3123,50 @@ begin
   end;
 end;
 
-procedure TMainForm.CloseQueryHandler(Sender: TObject; var CanClose: Boolean);
-var
-  LLiveGames: Integer;
-  LMessage: string;
-  LResponse: Integer;
+procedure TMainForm.CloseQueryHandler(Sender:TObject;var CanClose:Boolean);
+var I,Response,Live:Integer;C:TGameUiContext;RunningTournament:Boolean;Tree:TGameTree;
+  function SaveQuestion(ATree:TGameTree;const Description:string):Boolean;
+  begin
+    Result:=True;if not GameTreeHasContent(ATree) then Exit;
+    if not (gfPdn in GameGuiProfileFor(ATree.Variant).Features) then
+      Exit(ShowGuiConfirmationDialog(Self,'Close ZGUI',
+        'Discard the current board and its moves?','Discard','',mrNo,True)=mrYes);
+    Response:=ShowGuiConfirmationDialog(Self,'Close ZGUI','Save '+Description+' as '+
+      GameGuiProfileFor(ATree.Variant).FormatName+' before closing?','Yes','No',mrNo);
+    if Response=mrCancel then Exit(False);
+    if Response=mrYes then Result:=SaveTreeWithDialog(ATree);
+  end;
 begin
-  CanClose := False;
-  if FClosing then
-  begin
-    CanClose := True;
-    Exit;
-  end;
-
-  if not GameSupports(gfPdn) and
-    not ConfirmDiscardExploration('Close ZGUI') then Exit;
-
-  if (FTournamentDialog <> nil) and FTournamentDialog.HasTournamentData then
-  begin
-    LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
-      'Save the tournament JSON before closing?', 'Yes', 'No', mrNo);
-    if LResponse = mrCancel then
-      Exit;
-    if (LResponse = mrYes) and (not FTournamentDialog.SaveTournamentWithDialog) then
-      Exit;
-  end;
-
-  if HasDisplayedGameToSave then
-  begin
-    LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
-      'Save the currently displayed game as '+GameGuiProfileFor(DefaultGameVariant).FormatName+' before closing?', 'Yes',
-      'No', mrNo);
-    if LResponse = mrCancel then
-      Exit;
-    if (LResponse = mrYes) and (not SaveCurrentGameWithDialog) then
-      Exit;
-  end;
-
-  if GameSupports(gfPdn) and FGameActive and GameTreeHasContent(FGameTree) then
-  begin
-    LResponse := ShowGuiConfirmationDialog(Self, 'Close ZGUI',
-      'Save the standalone board as '+GameGuiProfileFor(DefaultGameVariant).FormatName+' before closing?', 'Yes', 'No', mrNo);
-    if LResponse = mrCancel then
-      Exit;
-    if LResponse = mrYes then
-    begin
-      ShowStandaloneGame(nil);
-      if not SaveCurrentGameWithDialog then
-        Exit;
+  CanClose:=False;if FClosing then begin CanClose:=True;Exit;end;
+  CaptureGameContext;RunningTournament:=False;
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);
+    if (C.FDatabaseForm<>nil) and C.FDatabaseForm.ImportBusy then begin
+      ShowGuiOkDialog(Self,'Close ZGUI','Finish or stop the database import before closing ZGUI');Exit;
+    end;
+    if C.FTournamentDialog<>nil then begin
+      RunningTournament:=RunningTournament or C.FTournamentDialog.IsRunning;
+      if C.FTournamentDialog.HasTournamentData then begin
+        Response:=ShowGuiConfirmationDialog(Self,'Close ZGUI','Save the '+C.Variant.Name+' tournament JSON before closing?',
+          'Yes','No',mrNo);
+        if Response=mrCancel then Exit;
+        if (Response=mrYes) and not C.FTournamentDialog.SaveTournamentWithDialog then Exit;
+      end;
     end;
   end;
-
-  LLiveGames := LiveGameCount;
-  if (LLiveGames > 0) or
-    ((FTournamentDialog <> nil) and FTournamentDialog.IsRunning) then
-  begin
-    LMessage := 'Closing will stop ';
-    if LLiveGames = 1 then
-      LMessage += '1 running game'
-    else
-      LMessage += IntToStr(LLiveGames) + ' running games';
-    if (FTournamentDialog <> nil) and FTournamentDialog.IsRunning then
-      LMessage += ' and the running tournament scheduler';
-    LMessage += '. Close anyway?';
-
-    if ShowGuiConfirmationDialog(Self, 'Close ZGUI', LMessage, 'Yes',
-      'No', mrNo) <> mrYes then
-      Exit;
-  end;
-
-  CanClose := True;
+  if HasDisplayedGameToSave and (SelectedDisplayedGame<>nil) then
+    if not SaveQuestion(ActiveGameTree,'the currently displayed game') then Exit;
+  if FGameContexts<>nil then begin
+    for I:=0 to FGameContexts.Count-1 do begin
+      Tree:=TGameUiContext(FGameContexts[I]).FGameTree;
+      if not SaveQuestion(Tree,'the '+Tree.Variant.Name+' standalone board') then Exit;
+    end;
+  end else if not SaveQuestion(FGameTree,'the standalone board') then Exit;
+  Live:=LiveGameCount;
+  if (Live>0) or RunningTournament then
+    if ShowGuiConfirmationDialog(Self,'Close ZGUI','Closing will stop '+IntToStr(Live)+
+      ' running game(s) and any running tournament schedulers. Close anyway?','Yes','No',mrNo)<>mrYes then Exit;
+  CanClose:=True;
 end;
 
 procedure TMainForm.CopyBoardFenClick(Sender: TObject);
@@ -2933,7 +3199,7 @@ begin
   if not GameSupports(gfPositionSetup) then Exit;
   if FPositionSetupForm = nil then
   begin
-    FPositionSetupForm := TPositionSetupForm.Create(Self,DefaultGameVariant);
+    FPositionSetupForm := TPositionSetupForm.Create(Self,CurrentVariant);
     FPositionSetupForm.OnAccepted := @SetupPositionAccepted;
     FPositionSetupForm.ApplyPreferences(FPreferences);
   end;
@@ -2968,7 +3234,7 @@ begin
     ClearDisplayedPvCache(LBoard.PositionKey, 0);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
-      FGamesListBox.ItemIndex := 0;
+      FGamesListBox.ItemIndex := StandaloneListIndex;
     FGameLog.Clear;
     FGameLogSourceGameId := -1;
     FGameLogSourceLineCount := -1;
@@ -3005,7 +3271,8 @@ procedure TMainForm.PreferencesAccepted(Sender: TObject;
   const APreferences: TGuiPreferences);
 begin
   FPreferences := APreferences;
-  SaveGuiPreferences(FPreferences);
+  if RegisteredGameCount>1 then SaveGuiPreferences(FPreferences,GameVariantId(CurrentVariant))
+  else SaveGuiPreferences(FPreferences);
   ApplyPreferences;
 end;
 
@@ -3119,7 +3386,7 @@ begin
     ClearDisplayedPvCache(LBoard.PositionKey, CurrentMoveCount);
     FViewedGameId := -1;
     if FGamesListBox <> nil then
-      FGamesListBox.ItemIndex := 0;
+      FGamesListBox.ItemIndex := StandaloneListIndex;
     FGameLog.Clear;
     FGameLogSourceGameId := -1;
     FGameLogSourceLineCount := -1;
@@ -3245,34 +3512,34 @@ begin
     'Discard the current board and its moves?', 'Discard', '', mrNo, True) = mrYes;
 end;
 
-function TMainForm.ConfirmReplaceStandaloneGame: Boolean;
-var
-  Response: Integer;
+function TMainForm.ConfirmReplaceTree(Tree:TGameTree):Boolean;
+var Response:Integer;
 begin
-  if not GameSupports(gfPdn) then
-    Exit(ConfirmDiscardExploration('Replace board'));
-  Result := True;
-  if not GameTreeHasContent(FGameTree) then
-    Exit;
-  Response := ShowGuiConfirmationDialog(Self, 'Replace board',
-    'Save the standalone board as '+GameGuiProfileFor(DefaultGameVariant).FormatName+' before replacing it?', 'Yes', 'No', mrNo);
-  if Response = mrCancel then
-    Exit(False);
-  if Response = mrYes then
-  begin
-    if SelectedDisplayedGame<>nil then ShowStandaloneGame(nil);
-    Result := SaveCurrentGameWithDialog;
-  end;
+  Result:=True;if not GameTreeHasContent(Tree) then Exit;
+  Response:=ShowGuiConfirmationDialog(Self,'Replace board',
+    'Save the '+Tree.Variant.Name+' standalone board as '+GameGuiProfileFor(Tree.Variant).FormatName+' before replacing it?',
+    'Yes','No',mrNo);
+  if Response=mrCancel then Exit(False);
+  if Response=mrYes then Result:=SaveTreeWithDialog(Tree);
+end;
+
+function TMainForm.ConfirmReplaceStandaloneGame:Boolean;
+begin
+  if not GameSupports(gfPdn) then Exit(ConfirmDiscardExploration('Replace board'));
+  Result:=ConfirmReplaceTree(FGameTree);
 end;
 
 procedure TMainForm.ShowStandaloneGame(Sender: TObject);
 begin
+  UseDocument(FGameTree);
   ClearHumanMoveSelection;
-  ClearVariationExploration;
+  if (FGameContexts=nil) or (FGameContexts.Count=1) then ClearVariationExploration;
   FGameActive := False;
   FViewedGameId := -1;
-  FDisplayedPosition.Cursor.Follow;
-  FGamesListBox.ItemIndex := 0;
+  if (FGameContexts=nil) or (FGameContexts.Count=1) then FDisplayedPosition.Cursor.Follow;
+  if (FGameContexts<>nil) and (FGameContexts.Count>1) then
+    FGamesListBox.ItemIndex:=FGamesListBox.Items.IndexOfObject(FActiveContext)
+  else FGamesListBox.ItemIndex := StandaloneListIndex;
   SetDisplayedTreeTracking('', '', '', 0, -1);
   FGameLog.Clear;
   FGameLogSourceGameId := -1;
@@ -3389,6 +3656,9 @@ begin
   if (FGameTree <> nil) and (FGameTree.GameTreeId = AGameTreeId) then
     Exit(FGameTreeActor);
 
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do
+    if TGameUiContext(FGameContexts[I]).FGameTree.GameTreeId=AGameTreeId then
+      Exit(TGameUiContext(FGameContexts[I]).FGameTreeActor);
   if FGames = nil then
     Exit;
   for I := 0 to FGames.Count - 1 do
@@ -4157,7 +4427,7 @@ begin
     if FAutoPlayButton <> nil then FAutoPlayButton.Enabled := False;
     Exit;
   end;
-  Caption := 'ZGUI - '+DefaultGameVariant.Name;
+  Caption := 'ZGUI - '+CurrentVariant.Name;
   if FBoardControl <> nil then
   begin
     FBoardControl.SetPosition(FBoard);
@@ -4246,6 +4516,7 @@ begin
     Exit;
   end;
 
+  UseDocument(AGame.GameTree);
   if FViewedGameId <> AGame.Id then
   begin
     ClearHumanMoveSelection;
@@ -4340,7 +4611,7 @@ begin
     FMiniBoardForm.Constraints.MinHeight := 320;
     FMiniBoardForm.OnClose := @MiniBoardFormClose;
 
-    FPopoutBoardControl := CreateGameBoardControl(FMiniBoardForm, DefaultGameVariant);
+    FPopoutBoardControl := CreateGameBoardControl(FMiniBoardForm, CurrentVariant);
     FPopoutBoardControl.Parent := FMiniBoardForm;
     FPopoutBoardControl.Align := alClient;
 
@@ -4426,7 +4697,7 @@ begin
     FAnalyzerMiniBoardForm.OnClose := @AnalyzerMiniBoardFormClose;
 
     FAnalyzerPopoutBoardControl := CreateGameBoardControl(
-      FAnalyzerMiniBoardForm, DefaultGameVariant);
+      FAnalyzerMiniBoardForm, CurrentVariant);
     FAnalyzerPopoutBoardControl.Parent := FAnalyzerMiniBoardForm;
     FAnalyzerPopoutBoardControl.Align := alClient;
 
@@ -4768,7 +5039,7 @@ begin
 
     LPopup := TPopupMenu.Create(FGameTreeForm);
     LMenuItem := TMenuItem.Create(FGameTreeForm);
-    LMenuItem.Caption := 'Copy tree '+GameGuiProfileFor(DefaultGameVariant).FormatName+' to clipboard';
+    LMenuItem.Caption := 'Copy tree '+GameGuiProfileFor(CurrentVariant).FormatName+' to clipboard';
     LMenuItem.OnClick := @CopyGameTreePdnClick;
     ApplyFeature(LMenuItem, gfPdn);
     LPopup.Items.Add(LMenuItem);
@@ -4845,7 +5116,7 @@ begin
 end;
 procedure TMainForm.AboutClick(Sender: TObject);
 begin
-  ShowGuiOkDialog(Self, 'About ZGUI', AppAboutText(DefaultGameVariant.Name));
+  ShowGuiOkDialog(Self, 'About ZGUI', AppAboutText(CurrentVariant.Name));
 end;
 
 procedure TMainForm.QuitClick(Sender: TObject);
@@ -4912,9 +5183,10 @@ var
   LBusyEngineKeys: TStringList;
 begin
   if not GameSupports(gfNewGame) then Exit;
+  if (FSetupForm<>nil) and (FSetupForm.Variant<>CurrentVariant) then FreeAndNil(FSetupForm);
   if FSetupForm = nil then
   begin
-    FSetupForm := TGameSetupForm.Create(Self,DefaultGameVariant);
+    FSetupForm := TGameSetupForm.Create(Self,CurrentVariant);
     FSetupForm.OnAccepted := @GameSetupAccepted;
   end;
   FSetupForm.ApplyPreferences(FPreferences);
@@ -4932,136 +5204,126 @@ procedure TMainForm.EnginesClick(Sender: TObject);
 begin
   if not GameSupports(gfEngines) then Exit;
   if FEnginesDialog = nil then
-    FEnginesDialog := TEnginesDialog.Create(Self,DefaultGameVariant);
+    FEnginesDialog := TEnginesDialog.Create(Self,CurrentVariant);
   ShowFormCenteredOnOwner(FEnginesDialog, Self);
 end;
 
 procedure TMainForm.CreateDatabaseClick(Sender: TObject);
-var
-  Dialog: TSaveDialog;
-  LFen: string;
+var Dialog:TSaveDialog;Variant:TGameVariant;Candidate:TDatabaseForm;
+    Choices:TStringList;Choice,I:Integer;C:TGameUiContext;
 begin
-  if not GameSupports(gfDatabase) then Exit;
-  Dialog := TSaveDialog.Create(Self);
-  try
-    Dialog.Title := 'Create database';
-    Dialog.DefaultExt := 'sqlite';
-    Dialog.Filter := 'SQLite database (*.sqlite)|*.sqlite|All files (*)|*';
-    Dialog.Options := Dialog.Options + [ofOverwritePrompt, ofEnableSizing];
-    if not ExecuteGuiFileDialog(Dialog) then
-      Exit;
-
-    if FDatabaseForm = nil then
-      FDatabaseForm := TDatabaseForm.Create(Self,DefaultGameVariant);
+  Variant:=CurrentVariant;Candidate:=nil;
+  if RegisteredGameCount>1 then begin
+    Choices:=TStringList.Create;
     try
-      FDatabaseForm.OnGameSelected := @PdnGameSelected;
-      FDatabaseForm.OnFileGameSelected := @FileGameSelected;
-      FDatabaseForm.ApplyPreferences(FPreferences);
-      FDatabaseForm.CreateDatabase(Dialog.FileName);
-      if TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
-        FDatabaseForm.SetSearchFEN(LFen);
-      FLastDatabaseSearchFEN := '';
-      ShowFormCenteredOnOwner(FDatabaseForm, Self);
+      for I:=0 to RegisteredGameCount-1 do Choices.Add(RegisteredGame(I).Name);
+      Choice:=ShowGuiChoiceDialog(Self,'Create database','Choose the game for the new database',Choices);
+      if Choice<0 then Exit;Variant:=RegisteredGame(Choice);
+    finally Choices.Free;end;
+  end;
+  C:=ContextForVariant(Variant);
+  if ((FDatabaseForm<>nil) and FDatabaseForm.ImportBusy) or
+    ((C.FDatabaseForm<>nil) and C.FDatabaseForm.ImportBusy) then begin
+    ShowGuiOkDialog(Self,'Create database','Finish or stop the database import before creating another database');Exit;
+  end;
+  Dialog:=TSaveDialog.Create(Self);
+  try
+    Dialog.Title:='Create database';Dialog.DefaultExt:='sqlite';
+    Dialog.Filter:='SQLite database (*.sqlite)|*.sqlite|All files (*)|*';
+    Dialog.Options:=Dialog.Options+[ofOverwritePrompt,ofEnableSizing];
+    if not ExecuteGuiFileDialog(Dialog) then Exit;
+    try
+      Candidate:=TDatabaseForm.Create(Self,Variant);Candidate.CreateDatabase(Dialog.FileName);
+      Candidate.OnGameSelected:=@PdnGameSelected;Candidate.OnFileGameSelected:=@FileGameSelected;
+      ActivateGameContext(Variant);FreeAndNil(FDatabaseForm);FDatabaseForm:=Candidate;Candidate:=nil;
+      CaptureGameContext;FDatabaseForm.ApplyPreferences(FPreferences);FLastDatabaseSearchFEN:='';
+      SelectGameVariant(Variant);ShowFormCenteredOnOwner(FDatabaseForm,Self);
       UpdateDatabaseSearchPositionFromTree(ActiveGameTree);
-    except
-      on E: Exception do
-        ShowGuiOkDialog(Self, 'Create database',
-          'Could not create database: ' + E.Message);
-    end;
-  finally
-    Dialog.Free;
-  end;
+    except on E:Exception do ShowGuiOkDialog(Self,'Create database','Could not create database: '+E.Message);end;
+  finally Candidate.Free;Dialog.Free;end;
 end;
 
-procedure TMainForm.OpenDatabaseClick(Sender: TObject);
-var
-  Dialog: TOpenDialog;
-  LFen: string;
+procedure TMainForm.OpenDatabaseClick(Sender:TObject);
+var Dialog:TOpenDialog;Variant:TGameVariant;Candidate:TDatabaseForm;C:TGameUiContext;
 begin
-  if not GameSupports(gfDatabase) then Exit;
-  Dialog := TOpenDialog.Create(Self);
+  Dialog:=TOpenDialog.Create(Self);Candidate:=nil;
   try
-    Dialog.Title := 'Open database';
-    Dialog.Filter := 'SQLite database (*.sqlite;*.db)|*.sqlite;*.db|All files (*)|*';
-    Dialog.Options := Dialog.Options + [ofFileMustExist, ofEnableSizing];
-    if not ExecuteGuiFileDialog(Dialog) then
-      Exit;
-
-    if FDatabaseForm = nil then
-      FDatabaseForm := TDatabaseForm.Create(Self,DefaultGameVariant);
+    Dialog.Title:='Open database';Dialog.Filter:='SQLite database (*.sqlite;*.db)|*.sqlite;*.db|All files (*)|*';
+    Dialog.Options:=Dialog.Options+[ofFileMustExist,ofEnableSizing];
+    if not ExecuteGuiFileDialog(Dialog) then Exit;
     try
-      FDatabaseForm.OnGameSelected := @PdnGameSelected;
-      FDatabaseForm.OnFileGameSelected := @FileGameSelected;
-      FDatabaseForm.ApplyPreferences(FPreferences);
-      FDatabaseForm.OpenDatabase(Dialog.FileName);
-      if TryGetDisplayedBoardFen(ActiveGameTree, LFen) then
-        FDatabaseForm.SetSearchFEN(LFen);
-      FLastDatabaseSearchFEN := '';
-      ShowFormCenteredOnOwner(FDatabaseForm, Self);
+      Variant:=DatabaseFileVariant(Dialog.FileName,CurrentVariant);C:=ContextForVariant(Variant);
+      if ((FDatabaseForm<>nil) and FDatabaseForm.ImportBusy) or
+        ((C.FDatabaseForm<>nil) and C.FDatabaseForm.ImportBusy) then
+        raise EInvalidOperation.Create('Finish or cancel the database import before opening another database');
+      Candidate:=TDatabaseForm.Create(Self,Variant);Candidate.OpenDatabase(Dialog.FileName);
+      Candidate.OnGameSelected:=@PdnGameSelected;Candidate.OnFileGameSelected:=@FileGameSelected;
+      // Preserve the former window until validation and actual open both succeed.
+      ActivateGameContext(Variant);FreeAndNil(FDatabaseForm);FDatabaseForm:=Candidate;Candidate:=nil;
+      CaptureGameContext;FDatabaseForm.ApplyPreferences(FPreferences);
+      SelectGameVariant(Variant);ShowFormCenteredOnOwner(FDatabaseForm,Self);
       UpdateDatabaseSearchPositionFromTree(ActiveGameTree);
-    except
-      on E: Exception do
-        ShowGuiOkDialog(Self, 'Open database',
-          'Could not open database: ' + E.Message);
-    end;
-  finally
-    Dialog.Free;
-  end;
+    except on E:Exception do ShowGuiOkDialog(Self,'Open database','Could not open database: '+E.Message);end;
+  finally Candidate.Free;Dialog.Free;end;
 end;
 
-procedure TMainForm.OpenPdnClick(Sender: TObject);
-var
-  Dialog: TOpenDialog;
+procedure TMainForm.OpenPdnClick(Sender:TObject);
+var Dialog:TOpenDialog;Variant:TGameVariant;Choices:TStringList;Choice,I:Integer;
 begin
-  if not GameSupports(gfPdn) then Exit;
-  Dialog := TOpenDialog.Create(Self);
+  Dialog:=TOpenDialog.Create(Self);
   try
-    Dialog.Title := 'Open '+GameGuiProfileFor(DefaultGameVariant).FormatName;
-    Dialog.Filter := GameGuiProfileFor(DefaultGameVariant).FileFilter;
-    Dialog.Options := Dialog.Options + [ofFileMustExist, ofEnableSizing];
-    if not ExecuteGuiFileDialog(Dialog) then
-      Exit;
-
-    if FPdnOpenDialog = nil then
-    begin
-      FPdnOpenDialog := TPdnOpenDialog.Create(Self);
-      FPdnOpenDialog.OnGameSelected := @PdnGameSelected;
-      FPdnOpenDialog.OnFileGameSelected := @FileGameSelected;
-    end;
+    Dialog.Title:='Open '+GameGuiProfileFor(CurrentVariant).FormatName;
+    if RegisteredGameCount>1 then Dialog.Filter:='Game files (*.pgn;*.pdn)|*.pgn;*.pdn|PGN (*.pgn)|*.pgn|PDN (*.pdn)|*.pdn|All files (*)|*'
+    else Dialog.Filter:=GameGuiProfileFor(CurrentVariant).FileFilter;
+    Dialog.Options:=Dialog.Options+[ofFileMustExist,ofEnableSizing];
+    if not ExecuteGuiFileDialog(Dialog) then Exit;
     try
-      FPdnOpenDialog.OpenGameFile(Dialog.FileName,GameGuiProfileFor(DefaultGameVariant).FormatName,
-        CreateProfileReader(GameGuiProfileFor(DefaultGameVariant),DefaultGameVariant));
-    except
-      on E: Exception do
-        ShowGuiOkDialog(Self,Dialog.Title,'Could not open file: '+E.Message);
-    end;
-  finally
-    Dialog.Free;
-  end;
+      Variant:=GameFileCandidate(Dialog.FileName,CurrentVariant);
+      if Variant=nil then begin
+        Choices:=TStringList.Create;
+        try
+          if RegisteredGameCount<2 then raise EConvertError.Create('Cannot determine the game from this file; use a PGN or PDN extension');
+          for I:=0 to RegisteredGameCount-1 do Choices.Add(RegisteredGame(I).Name);
+          Choice:=ShowGuiChoiceDialog(Self,'Open game','Choose the game for this file',Choices);
+          if Choice<0 then Exit;Variant:=RegisteredGame(Choice);
+        finally Choices.Free;end;
+      end;
+      if FPdnOpenDialog=nil then begin
+        FPdnOpenDialog:=TPdnOpenDialog.Create(Self);FPdnOpenDialog.OnGameSelected:=@PdnGameSelected;
+        FPdnOpenDialog.OnFileGameSelected:=@FileGameSelected;
+      end;
+      FPdnOpenDialog.OpenGameFile(Dialog.FileName,GameGuiProfileFor(Variant).FormatName,
+        CreateProfileReader(GameGuiProfileFor(Variant),Variant),Variant);
+    except on E:Exception do ShowGuiOkDialog(Self,Dialog.Title,'Could not open file: '+E.Message);end;
+  finally Dialog.Free;end;
 end;
 
-procedure TMainForm.FileGameSelected(Sender: TObject; Entry: TGameFileEntry);
+procedure TMainForm.FileGameSelected(Sender:TObject;Entry:TGameFileEntry);
+var Variant:TGameVariant;C:TGameUiContext;
 begin
-  if not GameSupports(gfPdn) or (Entry=nil) then Exit;
-  Entry.Validate;
-  if Entry.ErrorText<>'' then begin ShowGuiOkDialog(Self,'Open game',Entry.ErrorText); Exit; end;
-  if not ConfirmReplaceStandaloneGame then Exit;
+  if Entry=nil then Exit;
   try
-    Entry.ImportInto(FGameTreeActor);
-    FStandaloneWhitePlayerName:=FGameTree.WhiteName;
-    FStandaloneBlackPlayerName:=FGameTree.BlackName;
-    FStandaloneEventName:=FGameTree.EventName;
-    ClearDisplayedPvCache('',0);
-    // Reuse the existing standalone display transition and refresh.
-    ShowStandaloneGame(nil);
-  except on E:Exception do ShowGuiOkDialog(Self,'Open game',E.Message); end;
+    Entry.Validate;if Entry.ErrorText<>'' then raise EConvertError.Create(Entry.ErrorText);
+    Variant:=CurrentVariant;
+    if Sender is TDatabaseForm then Variant:=TDatabaseForm(Sender).Variant
+    else if (Sender is TPdnOpenDialog) and (TPdnOpenDialog(Sender).Variant<>nil) then Variant:=TPdnOpenDialog(Sender).Variant;
+    C:=ContextForVariant(Variant);if not ConfirmReplaceTree(C.FGameTree) then Exit;
+    Entry.ImportInto(C.FGameTreeActor);SelectGameVariant(Variant);
+    FStandaloneWhitePlayerName:=FGameTree.WhiteName;FStandaloneBlackPlayerName:=FGameTree.BlackName;
+    FStandaloneEventName:=FGameTree.EventName;ClearDisplayedPvCache('',0);ShowStandaloneGame(nil);
+  except on E:Exception do ShowGuiOkDialog(Self,'Open game',E.Message);end;
 end;
 
-procedure TMainForm.PdnGameSelected(Sender: TObject; AGame: TPdnGame);
+procedure TMainForm.PdnGameSelected(Sender:TObject;AGame:TPdnGame);
+var Variant:TGameVariant;C:TGameUiContext;
 begin
-  if not GameSupports(gfPdn) then Exit;
-  if ConfirmReplaceStandaloneGame then
-    LoadPdnGameToDisplay(AGame);
+  if AGame=nil then Exit;
+  try
+    AGame.ParseDeferredMoves;AGame.ValidateMoveTree;
+    Variant:=VariantForFormat(gffPdn,CurrentVariant);C:=ContextForVariant(Variant);
+    if not ConfirmReplaceTree(C.FGameTree) then Exit;
+    SelectGameVariant(Variant);LoadPdnGameToDisplay(AGame);
+  except on E:Exception do ShowGuiOkDialog(Self,'Open PDN',E.Message);end;
 end;
 
 procedure TMainForm.AppendRunningGameToPdn(AGame: TRunningGame;
@@ -5079,14 +5341,15 @@ begin
 end;
 
 function TMainForm.SaveCurrentGameWithDialog: Boolean;
+begin Result:=SaveTreeWithDialog(ActiveGameTree);end;
+
+function TMainForm.SaveTreeWithDialog(Tree:TGameTree):Boolean;
 var
   Dialog: TSaveDialog;
   LPdnText: string;
-  Tree:TGameTree;
   Profile:TGameGuiProfile;
 begin
   Result:=False;
-  Tree:=ActiveGameTree;
   if Tree=nil then Exit;
   Profile:=GameGuiProfileFor(Tree.Variant);
   if not (gfPdn in Profile.Features) then Exit;
@@ -5217,13 +5480,14 @@ begin
   FGames.Add(Result);
   FGamesListBox.Items.AddObject(LTitle + ' - starting', Result);
   FGamesListBox.ItemIndex := FGamesListBox.Items.Count - 1;
-
+  UseDocument(Result.GameTree);
   ClearHumanMoveSelection;
   SetDisplayedTreeTracking('', '', '', 0, -1);
   FDisplayedPosition.Cursor.Follow;
   FGameLogMemo.Clear;
   FGameLogMemoGameId := -1;
   FGameLogMemoLineCount := -1;
+  UseDocument(Result.GameTree);
   InitializeRunningGameTree(Result);
   LBoard := Result.GameTree.Variant.CreatePosition;
   try
@@ -5248,6 +5512,12 @@ begin
     Exit;
 
   AKeys.Clear;
+  CaptureGameContext;
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do
+    if TGameUiContext(FGameContexts[I])<>FActiveContext then begin
+      if TGameUiContext(FGameContexts[I]).FAnalyzerEngineKey<>'' then AKeys.Add(TGameUiContext(FGameContexts[I]).FAnalyzerEngineKey);
+      if TGameUiContext(FGameContexts[I]).FMctsEngineKey<>'' then AKeys.Add(TGameUiContext(FGameContexts[I]).FMctsEngineKey);
+    end;
   if FAnalyzerEngineKey <> '' then
     AKeys.Add(FAnalyzerEngineKey);
   if FMctsEngineKey <> '' then
@@ -5295,6 +5565,7 @@ var
   LGame: TRunningGame;
   LGameTree: TGameTree;
   PendingSnapshots: array of TPendingRunnerSnapshot;
+  MessageContext:TGameUiContext;
   ProcessedEvents: Integer;
   RemoveAfterFinish: Boolean;
   SnapshotMessage: TRunnerSnapshotGuiMessage;
@@ -5462,6 +5733,24 @@ begin
       if not FGuiEventQueue.TryPop(EventObject) then Break;
       Inc(ProcessedEvents);
       try
+        if EventObject is TAnalysisGuiMessage then begin
+          MessageContext:=AnalysisMessageContext(TAnalysisGuiMessage(EventObject));
+          if (TAnalysisGuiMessage(EventObject).SessionId<>0) and (MessageContext=nil) then Continue;
+          if (MessageContext<>nil) and (MessageContext<>FActiveContext) then begin
+            if EventObject is TAnalyzerLogGuiMessage then
+              MessageContext.AnalyzerLogText+=TAnalyzerLogGuiMessage(EventObject).Message+LineEnding
+            else if EventObject is TMctsLogGuiMessage then
+              MessageContext.MctsLogText+=TMctsLogGuiMessage(EventObject).Message+LineEnding
+            else if EventObject is TAnalyzerFinishedGuiMessage then begin
+              if MessageContext.FAnalyzerRunner.FailureText<>'' then
+                MessageContext.AnalyzerLogText+='Annotator stopped: '+MessageContext.FAnalyzerRunner.FailureText+LineEnding;
+              FreeAndNil(MessageContext.FAnalyzerRunner);MessageContext.FAnalyzerEngineKey:='';MessageContext.FAnalyzerEngineName:='';
+            end else if EventObject is TMctsFinishedGuiMessage then begin
+              FreeAndNil(MessageContext.FMctsRunner);MessageContext.FMctsEngineKey:='';
+            end;
+            Continue; // hidden slots are paused; cancelled late snapshots/moves are discarded
+          end;
+        end;
         if EventObject is TAnalyzerSnapshotGuiMessage then
         begin
           QueueAnalyzerSnapshot(TAnalyzerSnapshotGuiMessage(EventObject));
@@ -5578,14 +5867,39 @@ begin
     TGameRunnerThread(Sender).GameId, ASnapshot));
 end;
 
+procedure TMainForm.TournamentContextRequested(Sender:TObject;Variant:TGameVariant;const FileName:string);
+var C:TGameUiContext;Response:Integer;
+begin
+  C:=ContextForVariant(Variant);
+  if C=FActiveContext then C.FTournamentDialog:=FTournamentDialog;
+  if C.FTournamentDialog=nil then begin
+    C.FTournamentDialog:=TTournamentDialog.Create(Self,Variant);
+    C.FTournamentDialog.OnStartGame:=@TournamentStartGame;C.FTournamentDialog.OnSelectGame:=@TournamentSelectGame;
+    C.FTournamentDialog.OnContextRequested:=@TournamentContextRequested;
+  end;
+  if FileName<>'' then begin
+    if C.FTournamentDialog.IsRunning then raise EInvalidOperation.Create('Stop this tournament before loading another');
+    if C.FTournamentDialog.HasTournamentData then begin
+      Response:=ShowGuiConfirmationDialog(Self,'Load tournament','Save the existing '+Variant.Name+' tournament first?',
+        'Yes','No',mrNo);
+      if Response=mrCancel then Exit;
+      if (Response=mrYes) and not C.FTournamentDialog.SaveTournamentWithDialog then Exit;
+    end;
+    C.FTournamentDialog.LoadTournamentFromFile(FileName);
+  end;
+  if C=FActiveContext then FTournamentDialog:=C.FTournamentDialog;
+  ShowFormCenteredOnOwner(C.FTournamentDialog,Self);
+end;
+
 procedure TMainForm.TournamentClick(Sender: TObject);
 begin
   if not GameSupports(gfTournament) then Exit;
   if FTournamentDialog = nil then
   begin
-    FTournamentDialog := TTournamentDialog.Create(Self,DefaultGameVariant);
+    FTournamentDialog := TTournamentDialog.Create(Self,CurrentVariant);
     FTournamentDialog.OnSelectGame := @TournamentSelectGame;
     FTournamentDialog.OnStartGame := @TournamentStartGame;
+    FTournamentDialog.OnContextRequested:=@TournamentContextRequested;
   end;
   ShowFormCenteredOnOwner(FTournamentDialog, Self);
 end;
@@ -5611,10 +5925,15 @@ procedure TMainForm.TournamentStartGame(Sender: TObject; const ASetup: TGameSetu
   const ATitlePrefix: string; out AGame: TObject);
 begin
   AGame := StartGameFromSetup(ASetup, ATitlePrefix);
+  if AGame is TRunningGame then TRunningGame(AGame).TournamentOwner:=Sender;
 end;
 
 procedure TMainForm.GamesListBoxClick(Sender: TObject);
+var Obj:TObject;
 begin
+  if (FGamesListBox.ItemIndex<0) or (FGamesListBox.ItemIndex>=FGamesListBox.Items.Count) then Exit;
+  Obj:=FGamesListBox.Items.Objects[FGamesListBox.ItemIndex];
+  if Obj is TGameUiContext then begin SelectGameVariant(TGameUiContext(Obj).Variant);Exit;end;
   ApplyGameToDisplay(SelectedGame);
 end;
 
@@ -5685,7 +6004,8 @@ function TMainForm.SelectedGame: TRunningGame;
 begin
   Result := nil;
   if (FGamesListBox.ItemIndex >= 0) and (FGamesListBox.ItemIndex < FGamesListBox.Items.Count) then
-    Result := TRunningGame(FGamesListBox.Items.Objects[FGamesListBox.ItemIndex]);
+    if FGamesListBox.Items.Objects[FGamesListBox.ItemIndex] is TRunningGame then
+      Result := TRunningGame(FGamesListBox.Items.Objects[FGamesListBox.ItemIndex]);
 end;
 
 function TMainForm.SelectedDisplayedGame: TRunningGame;
@@ -5694,6 +6014,25 @@ begin
   if not FGameActive then
     Exit;
   Result := SelectedGame;
+end;
+
+procedure TMainForm.Notification(AComponent:TComponent;Operation:TOperation);
+var I:Integer;C:TGameUiContext;
+begin
+  inherited Notification(AComponent,Operation);
+  if FClosing or (Operation<>opRemove) or not (AComponent is TTournamentDialog) then Exit;
+  if FGames<>nil then for I:=0 to FGames.Count-1 do
+    if TRunningGame(FGames[I]).TournamentOwner=AComponent then TRunningGame(FGames[I]).TournamentOwner:=nil;
+  if FTournamentDialog=AComponent then FTournamentDialog:=nil;
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);if C.FTournamentDialog=AComponent then C.FTournamentDialog:=nil;
+  end;
+end;
+
+function TMainForm.TournamentOwnerFor(Game:TRunningGame):TTournamentDialog;
+begin
+  Result:=nil;if Game=nil then Exit;
+  if Game.TournamentOwner is TTournamentDialog then Exit(TTournamentDialog(Game.TournamentOwner));
 end;
 
 procedure TMainForm.RemoveGame(AGame: TRunningGame);
@@ -5713,10 +6052,8 @@ begin
   end;
 
   LIndex := FGamesListBox.Items.IndexOfObject(AGame);
-  if (FTournamentDialog <> nil) and AGame.IsTournamentGame then
-  begin
-    FTournamentDialog.GameStopped(AGame);
-    FTournamentDialog.GameRemoved(AGame);
+  if TournamentOwnerFor(AGame)<>nil then begin
+    TournamentOwnerFor(AGame).GameStopped(AGame);TournamentOwnerFor(AGame).GameRemoved(AGame);
   end;
   FGames.Remove(AGame);
   if LIndex >= 0 then
@@ -5762,8 +6099,7 @@ begin
   if LGame.Lifecycle = rglFinished then
     Exit;
 
-  if FTournamentDialog <> nil then
-    FTournamentDialog.GameStopped(LGame);
+  if TournamentOwnerFor(LGame)<>nil then TournamentOwnerFor(LGame).GameStopped(LGame);
 
   MarkGameStopped(LGame, 'Stopped');
   UpdateGameListItem(LGame);
@@ -5989,6 +6325,7 @@ begin
   if (AGameTree = nil) or (AGameTree <> ActiveGameTree) then
     Exit;
 
+  UseDocument(AGameTree);
   FDisplayedPosition.BeginRefresh(AGameTree);
   try
   LGame := SelectedDisplayedGame;

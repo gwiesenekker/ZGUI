@@ -65,6 +65,8 @@ type
     constructor Create(AFormat:TGameFileFormat = gffPdn);
     destructor Destroy; override;
 
+    // Validate without closing a current database or performing schema upgrades.
+    procedure ValidateDatabaseFile(const AFileName:string);
     procedure Close;
     procedure CreateDatabase(const AFileName: string);
     procedure OpenDatabase(const AFileName: string);
@@ -1142,6 +1144,9 @@ begin
     Q.Free;
   end;
 end;
+
+procedure TGameDatabase.ValidateDatabaseFile(const AFileName:string);
+begin PreflightDatabase(AFileName);end;
 
 procedure TGameDatabase.PreflightDatabase(const AFileName:string);
 var C:TSQLite3Connection;T:TSQLTransaction;Q:TSQLQuery;Stream:TFileStream;

@@ -29,35 +29,44 @@ type
     property GameId: Integer read FGameId;
   end;
 
-  TAnalyzerLogGuiMessage = class(TThreadMessage)
+  // Immutable identity is copied at posting time; dispatch never dereferences a
+  // retired runner or chooses its destination from the currently visible game.
+  TAnalysisGuiMessage=class(TThreadMessage)
+  public
+    SessionId:Int64;
+    SlotId:string;
+    constructor Create(const AKind:string;Source:TAnalyzerRunnerThread=nil);reintroduce;
+  end;
+
+  TAnalyzerLogGuiMessage = class(TAnalysisGuiMessage)
   private
     FMessage: string;
   public
-    constructor Create(const AMessage: string); reintroduce;
+    constructor Create(const AMessage: string;Source:TAnalyzerRunnerThread=nil); reintroduce;
     property Message: string read FMessage;
   end;
 
-  TAnalyzerSnapshotGuiMessage = class(TThreadMessage)
+  TAnalyzerSnapshotGuiMessage = class(TAnalysisGuiMessage)
   private
     FSnapshot: TPvSnapshot;
   public
-    constructor Create(ASnapshot: TPvSnapshot); reintroduce;
+    constructor Create(ASnapshot: TPvSnapshot;Source:TAnalyzerRunnerThread=nil); reintroduce;
     destructor Destroy; override;
     property Snapshot: TPvSnapshot read FSnapshot;
   end;
 
-  TAnalyzerMoveGuiMessage = class(TThreadMessage)
+  TAnalyzerMoveGuiMessage = class(TAnalysisGuiMessage)
   private
     FMoveText: string;
     FSearch: TGameTreeSearchRef;
   public
     constructor Create(const ASearch: TGameTreeSearchRef;
-      const AMoveText: string); reintroduce;
+      const AMoveText: string;Source:TAnalyzerRunnerThread=nil); reintroduce;
     property MoveText: string read FMoveText;
     property Search: TGameTreeSearchRef read FSearch;
   end;
 
-  TAnalyzerFinishedGuiMessage = class(TThreadMessage)
+  TAnalyzerFinishedGuiMessage = class(TAnalysisGuiMessage)
   private
     FRunner: TAnalyzerRunnerThread;
   public
@@ -65,15 +74,15 @@ type
     property Runner: TAnalyzerRunnerThread read FRunner;
   end;
 
-  TMctsLogGuiMessage = class(TThreadMessage)
+  TMctsLogGuiMessage = class(TAnalysisGuiMessage)
   private
     FMessage: string;
   public
-    constructor Create(const AMessage: string); reintroduce;
+    constructor Create(const AMessage: string;Source:TAnalyzerRunnerThread=nil); reintroduce;
     property Message: string read FMessage;
   end;
 
-  TMctsFinishedGuiMessage = class(TThreadMessage)
+  TMctsFinishedGuiMessage = class(TAnalysisGuiMessage)
   private
     FRunner: TAnalyzerRunnerThread;
   public
@@ -84,6 +93,12 @@ type
 implementation
 
 uses SysUtils;
+
+constructor TAnalysisGuiMessage.Create(const AKind:string;Source:TAnalyzerRunnerThread);
+begin
+  inherited Create(AKind);
+  if Source<>nil then begin SessionId:=Source.SessionId;SlotId:=Source.SlotId;end;
+end;
 
 constructor TRunnerSnapshotGuiMessage.Create(AGameId: Integer;
   ASnapshot: TGameRunnerSnapshot);
@@ -105,15 +120,15 @@ begin
   FGameId := AGameId;
 end;
 
-constructor TAnalyzerLogGuiMessage.Create(const AMessage: string);
+constructor TAnalyzerLogGuiMessage.Create(const AMessage: string;Source:TAnalyzerRunnerThread);
 begin
-  inherited Create('analyzer-log');
+  inherited Create('analyzer-log',Source);
   FMessage := AMessage;
 end;
 
-constructor TAnalyzerSnapshotGuiMessage.Create(ASnapshot: TPvSnapshot);
+constructor TAnalyzerSnapshotGuiMessage.Create(ASnapshot: TPvSnapshot;Source:TAnalyzerRunnerThread);
 begin
-  inherited Create('analyzer-snapshot');
+  inherited Create('analyzer-snapshot',Source);
   FSnapshot := ASnapshot;
 end;
 
@@ -124,28 +139,28 @@ begin
 end;
 
 constructor TAnalyzerMoveGuiMessage.Create(const ASearch: TGameTreeSearchRef;
-  const AMoveText: string);
+  const AMoveText: string;Source:TAnalyzerRunnerThread);
 begin
-  inherited Create('analyzer-move');
+  inherited Create('analyzer-move',Source);
   FSearch := ASearch;
   FMoveText := Trim(AMoveText);
 end;
 
 constructor TAnalyzerFinishedGuiMessage.Create(ARunner: TAnalyzerRunnerThread);
 begin
-  inherited Create('analyzer-finished');
+  inherited Create('analyzer-finished',ARunner);
   FRunner := ARunner;
 end;
 
-constructor TMctsLogGuiMessage.Create(const AMessage: string);
+constructor TMctsLogGuiMessage.Create(const AMessage: string;Source:TAnalyzerRunnerThread);
 begin
-  inherited Create('mcts-log');
+  inherited Create('mcts-log',Source);
   FMessage := AMessage;
 end;
 
 constructor TMctsFinishedGuiMessage.Create(ARunner: TAnalyzerRunnerThread);
 begin
-  inherited Create('mcts-finished');
+  inherited Create('mcts-finished',ARunner);
   FRunner := ARunner;
 end;
 
