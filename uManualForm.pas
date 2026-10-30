@@ -9,11 +9,11 @@ unit uManualForm;
 interface
 
 uses
-  Classes, SysUtils, Types, Forms, Controls, StdCtrls, ExtCtrls, ComCtrls,
+  uGuiLayout, Classes, SysUtils, Types, Forms, Controls, StdCtrls, ExtCtrls, ComCtrls,
   Graphics, LCLType, SynEdit, SynEditTypes, uManualDocument, uManualHighlighter;
 
 type
-  TManualForm = class(TForm)
+  TManualForm = class(TGuiLayoutForm)
   private
     FText: TSynEdit;
     FContents: TTreeView;
@@ -60,7 +60,7 @@ constructor TManualForm.Create(AOwner: TComponent);
 var
   Bar: TPanel;
   LabelControl: TLabel;
-  Button: TButton;
+  Button,PreviousButton:TButton;
   Splitter: TSplitter;
 begin
   inherited CreateNew(AOwner);
@@ -93,7 +93,7 @@ begin
   Button := TButton.Create(Self);
   Button.Parent := Bar;
   Button.Name := 'ManualPrevious';
-  Button.Caption := 'Previous';
+  Button.Caption := 'Previous';PreviousButton:=Button;
   Button.SetBounds(334, 12, 90, 30);
   Button.OnClick := @PreviousClick;
   Button := TButton.Create(Self);
@@ -107,6 +107,9 @@ begin
   FStatus.Name := 'ManualMatchStatus';
   FStatus.SetBounds(524, 18, 220, 22);
   FStatus.AutoSize := True;
+
+  LayoutRow(Bar,[LabelControl,FSearch,PreviousButton,Button,FStatus],1);
+  Bar.AutoSize:=True;
 
   FContents := TTreeView.Create(Self);
   FContents.Parent := Self;
@@ -157,6 +160,7 @@ begin
     CenterFormOnOwner(Self, TCustomForm(AOwner))
   else
     CenterFormOnPrimaryMonitor(Self);
+  EnableAutoLayout;
 end;
 
 destructor TManualForm.Destroy;
@@ -347,7 +351,7 @@ begin
       FStatus.Caption := 'Ctrl+F to search'
     else
       FStatus.Caption := 'No matches';
-    Exit;
+    InvalidateLayout;Exit;
   end;
   FMatchIndex := (Index + Length(FMatches)) mod Length(FMatches);
   LStart := OffsetPoint(FMatches[FMatchIndex].Start);
@@ -360,6 +364,7 @@ begin
     (LEnd.Y >= FText.TopLine + FText.LinesInWindow)) then
     FText.TopLine := LStart.Y - FText.LinesInWindow div 3;
   FStatus.Caption := Format('%d of %d matches', [FMatchIndex + 1, Length(FMatches)]);
+  InvalidateLayout;
 end;
 
 procedure TManualForm.SearchChanged(Sender: TObject);

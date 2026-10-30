@@ -4,6 +4,29 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Automatic GUI sizing for both games — 2026-10-30
+
+Commit: pending.
+
+- Reuse the existing controls and event handlers with native LCL panels, alignment,
+  measured rows, wrapping toolbars and scrollable settings pages. Adapt the main
+  header, engine dialogs, New Game, Tournament, Preferences, Database filters,
+  position setup and supporting windows to font and window size changes.
+- Preserve the existing pane groupings and splitters; keep grids and text areas
+  usable at their measured minimum sizes. Long tournament names use the grid's
+  scrollbar instead of forcing the entire window wider than the screen.
+- Fix the layout-test DPI scaling loop by measuring the scaled controls before
+  alignment resumes. Grow an already visible form when wrapping raises its
+  measured minimum. Route test exceptions to the log instead of modal dialogs.
+- User authorisation on 2026-10-30: “As this is GUI only: could you implement
+  automatic resizing of the GUI as discussed? You do not need approvals.” Scope:
+  GUI geometry only, for both games; Claude can review the resulting commit.
+- Validation: application build, all thirteen GUI suites (including 87 mixed-game
+  and 8,944 layout checks), and the full headless regression suite pass against an
+  isolated layout-only source snapshot. Check minimum/default/large/maximized
+  windows, font changes, every preferences page, and 96/144 DPI scaling both ways.
+  Native Windows interaction remains untested.
+
 ### Keep the engine INI editor inside its panel — 2026-10-30
 
 Commit: `5534b2a`.

@@ -90,3 +90,8 @@ echo "==> engine_ini_viewport_check (GTK2, INI editor bounds for both games)"
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/ini-viewport" \
   "$ROOT_DIR/tests/engine_ini_viewport_check.lpi" > "$OUT_DIR/ini-viewport-build.log" 2>&1
 "$OUT_DIR/ini-viewport/engine_ini_viewport_check"
+
+echo "==> gui_layout_check (GTK2, font/window/DPI resizing for both games)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/layout" \
+  "$ROOT_DIR/tests/gui_layout_check.lpi" > "$OUT_DIR/layout-build.log" 2>&1
+timeout 60s "$OUT_DIR/layout/gui_layout_check"

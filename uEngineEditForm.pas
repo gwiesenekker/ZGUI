@@ -5,7 +5,7 @@ unit uEngineEditForm;
 interface
 
 uses
-  uGamePosition, Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, Grids, StdCtrls,
+  uGamePosition, uGuiLayout, Classes, Controls, Dialogs, ExtCtrls, Forms, Graphics, Grids, StdCtrls,
   SysUtils, uDraughtsDxpTestConnection, uEngineParamsJson, uEngineRegistry,
   uPlatformProcess, SyncObjs, uChessUciEngine, uChessUciProtocol, uProcessEngineWorker, uThreadMessageQueue;
 
@@ -13,7 +13,7 @@ type
   TEngineAcceptedEvent = procedure(Sender: TObject;
     AEngine: TExternalEngineDefinition; var AAccepted: Boolean) of object;
 
-  TEngineEditForm = class(TForm)
+  TEngineEditForm = class(TGuiLayoutForm)
   private
     FVariant:TGameVariant;
     FUciEngine: TUciEngine;
@@ -94,6 +94,7 @@ type
     property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure LoadEngine(AEngine: TExternalEngineDefinition);
+    procedure RefreshLayout; override;
     property OnAccepted: TEngineAcceptedEvent read FOnAccepted write FOnAccepted;
   end;
 
@@ -133,6 +134,7 @@ var
   LRightPanel: TPanel;
   LSplitter: TSplitter;
   LTop: Integer;
+  Labels:array[0..7] of TLabel;IniLabel:TLabel;ExeRow,PortRow,Fields:TPanel;
 begin
   inherited Create(AOwner);
   if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
@@ -227,7 +229,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Executable';
+  LLabel.Caption := 'Executable';Labels[0]:=LLabel;
   LLabel.Layout := tlCenter;
 
   LBrowseButton := TButton.Create(Self);
@@ -246,7 +248,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Type';
+  LLabel.Caption := 'Type';Labels[1]:=LLabel;
   LLabel.Layout := tlCenter;
 
   FKindCombo := TComboBox.Create(Self);
@@ -263,7 +265,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Hub id'; FIdLabel:=LLabel;
+  LLabel.Caption := 'Hub id';Labels[2]:=LLabel; FIdLabel:=LLabel;
   LLabel.Layout := tlCenter;
 
   FHubIdEdit := TEdit.Create(Self);
@@ -275,7 +277,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Hub args'; FArgsLabel:=LLabel;
+  LLabel.Caption := 'Hub args';Labels[3]:=LLabel; FArgsLabel:=LLabel;
   LLabel.Layout := tlCenter;
 
   FHubArgsEdit := TEdit.Create(Self);
@@ -289,7 +291,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'DXP id';
+  LLabel.Caption := 'DXP id';Labels[4]:=LLabel;
   LLabel.Layout := tlCenter;
 
   FDxpIdEdit := TEdit.Create(Self);
@@ -301,7 +303,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Host';
+  LLabel.Caption := 'Host';Labels[5]:=LLabel;
   LLabel.Layout := tlCenter;
 
   FDxpHostEdit := TEdit.Create(Self);
@@ -314,7 +316,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'Port';
+  LLabel.Caption := 'Port';Labels[6]:=LLabel;
   LLabel.Layout := tlCenter;
 
   FDxpPortEdit := TEdit.Create(Self);
@@ -335,7 +337,7 @@ begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, 80, 22);
-  LLabel.Caption := 'DXP args';
+  LLabel.Caption := 'DXP args';Labels[7]:=LLabel;
   LLabel.Layout := tlCenter;
 
   FDxpArgsEdit := TEdit.Create(Self);
@@ -355,7 +357,7 @@ begin
   LLabel.Parent := LFieldsPanel;
   LLabel.SetBounds(0, LTop, LFieldsPanel.Width, 22);
   LLabel.Anchors := [akTop, akLeft, akRight];
-  LLabel.Caption := 'INI/config file (click path to browse)';
+  LLabel.Caption := 'INI/config file (click path to browse)';IniLabel:=LLabel;
   LLabel.Layout := tlCenter;
   Inc(LTop, 24);
 
@@ -440,8 +442,18 @@ begin
   finally
     LInitialEngine.Free;
   end;
+  ExeRow:=LayoutRow(LLeftPanel,[FExeEdit,LBrowseButton],0);
+  PortRow:=LayoutRow(LLeftPanel,[FDxpPortEdit,FDxpRoleCombo],0);
+  Fields:=LayoutFields(LLeftPanel,[Labels[0],ExeRow,Labels[1],FKindCombo,
+    Labels[2],FHubIdEdit,Labels[3],FHubArgsEdit,Labels[4],FDxpIdEdit,
+    Labels[5],FDxpHostEdit,Labels[6],PortRow,Labels[7],FDxpArgsEdit]);
+  Fields.Top:=0;IniLabel.Align:=alTop;IniLabel.AutoSize:=True;
+  FIniPathEdit.Align:=alTop;FIniContentMemo.Align:=alClient;
+  // Keep an editable viewport below the measured fixed rows.
+  LLeftPanel.Constraints.MinWidth:=0;
   LoadParamsGrid;
   UpdateKindFields;
+  EnableAutoLayout;
 end;
 
 destructor TEngineEditForm.Destroy;
@@ -1017,6 +1029,18 @@ begin
   end;
 end;
 
+procedure TEngineEditForm.RefreshLayout;
+var Col,Margin:Integer;
+begin
+  inherited RefreshLayout;
+  if FParamsGrid=nil then Exit;
+  Margin:=MeasureGuiText('MM',FParamsGrid.Font).cx;
+  for Col:=0 to 1 do begin
+    FParamsGrid.AutoSizeColumn(Col);
+    FParamsGrid.ColWidths[Col]:=FParamsGrid.ColWidths[Col]+Margin;
+  end;
+end;
+
 procedure TEngineEditForm.UpdateFieldsFromParams;
 var
   Value: string;
@@ -1338,6 +1362,7 @@ begin
   FDxpHostEdit.Enabled := IsDxp;
   FDxpPortEdit.Enabled := IsDxp;
   FDxpRoleCombo.Enabled := IsDxp;
+  InvalidateLayout;
 end;
 
 procedure TEngineEditForm.UciLog(Sender: TObject; const AText: string);

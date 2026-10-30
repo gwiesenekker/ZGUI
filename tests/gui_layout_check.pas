@@ -1,0 +1,105 @@
+program gui_layout_check;
+{$mode objfpc}{$H+}
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
+ Math,ComCtrls,Graphics,ExtCtrls,uGuiLayout,uGuiDialogs,uGamePosition,uChessPosition,
+ uDraughtsPosition,uGameGuiProfile,uEngineEditForm,uEnginesDialog,uGameSetupForm,
+ uTournamentDialog,uPreferencesForm,uDatabaseForm,uDraughtsPositionSetupForm,uMainForm,
+ uPreferences,uManualForm,uPdnOpenDialog,uScoreHistoryForm;
+type TErrors=class
+  procedure Report(Sender:TObject;E:Exception);
+end;
+procedure TErrors.Report(Sender:TObject;E:Exception);
+begin WriteLn('ERROR: ',E.Message);DumpExceptionBackTrace(Output);Flush(Output);Halt(1);end;
+var Checks,Failures:Integer;Errors:TErrors;
+procedure Check(B:Boolean;const Msg:string);
+begin Inc(Checks);if not B then begin Inc(Failures);WriteLn('FAIL: ',Msg);end;end;
+procedure Inspect(C:TWinControl;Root:TForm);
+var I:Integer;Child:TControl;W,H:Integer;Path:string;
+begin
+ for I:=0 to C.ControlCount-1 do begin
+  Child:=C.Controls[I];if not Child.Visible then Continue;
+  Path:=Root.Caption+' font='+IntToStr(Root.Font.Size)+' size='+IntToStr(Root.Width)+'x'+IntToStr(Root.Height)+'/'+C.ClassName+'/'+Child.ClassName+':'+Child.Name;
+  if not (C is TScrollBox) and not (C is TPageControl) then begin
+   Check((Child.Left>=-2) and (Child.Top>=-2) and
+    (Child.Left+Child.Width<=C.ClientWidth+2) and
+    (Child.Top+Child.Height<=C.ClientHeight+2),Path+' bounds '+
+    IntToStr(Child.Left)+','+IntToStr(Child.Top)+','+IntToStr(Child.Width)+','+IntToStr(Child.Height)+
+    ' parent '+IntToStr(C.ClientWidth)+','+IntToStr(C.ClientHeight));
+  end;
+  if (Child is TLabel) and not TLabel(Child).WordWrap then begin
+   W:=MeasureGuiText(TLabel(Child).Caption,Child.Font).cx;
+   H:=MeasureGuiText(TLabel(Child).Caption,Child.Font).cy;
+   Check((W<=Child.Width+2) and (H<=Child.Height+2),Path+' text clipped '+TLabel(Child).Caption+' width='+IntToStr(Child.Width)+' required='+IntToStr(W)+' min='+IntToStr(Child.Constraints.MinWidth)+' max='+IntToStr(Child.Constraints.MaxWidth));
+  end;
+  if Child is TWinControl then Inspect(TWinControl(Child),Root);
+ end;
+end;
+procedure Test(F:TForm);
+var Size,I,Mode,Tab:Integer;Pages:TPageControl;Img:TBitmap;Png:TPortableNetworkGraphic;
+begin
+ try
+  if F is TPreferencesForm then TPreferencesForm(F).StartEdit(DefaultGuiPreferences);
+  WriteLn('Testing ',F.ClassName);Flush(Output);
+  F.Show;for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
+  for Size:=0 to 2 do begin
+   if Size=1 then F.Font.Size:=16 else F.Font.Size:=10;
+   F.Width:=Max(F.Constraints.MinWidth,1000);F.Height:=Max(F.Constraints.MinHeight,800);
+   for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
+   for Mode:=0 to 3 do begin
+    case Mode of
+     0:begin F.Width:=F.Constraints.MinWidth;F.Height:=F.Constraints.MinHeight;end;
+     1:begin F.Width:=Max(1000,F.Constraints.MinWidth);F.Height:=Max(800,F.Constraints.MinHeight);end;
+     2:begin F.Width:=Max(1500,F.Constraints.MinWidth);F.Height:=Max(950,F.Constraints.MinHeight);end;
+     3:F.WindowState:=wsMaximized;
+    end;
+    for I:=1 to 5 do begin Application.ProcessMessages;Sleep(5);end;
+    Inspect(F,F);
+    if F is TPreferencesForm then
+      for I:=0 to F.ComponentCount-1 do if F.Components[I] is TPageControl then begin
+       Pages:=TPageControl(F.Components[I]);
+       for Tab:=0 to Pages.PageCount-1 do begin
+        Pages.ActivePageIndex:=Tab;Application.ProcessMessages;Inspect(F,F);
+       end;
+      end;
+    if Mode=3 then F.WindowState:=wsNormal;
+   end;
+   if (ParamStr(1)='--images') or (ParamStr(2)='--images') then begin
+    Img:=F.GetFormImage;Png:=TPortableNetworkGraphic.Create;
+    try Png.Assign(Img);Png.SaveToFile('/tmp/layout-'+F.ClassName+'-'+IntToStr(Size)+'.png');finally Png.Free;Img.Free;end;
+   end;
+  end;
+  F.AutoAdjustLayout(lapAutoAdjustForDPI,96,144,F.Width,Round(F.Width*1.5));
+  for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;Inspect(F,F);
+  F.AutoAdjustLayout(lapAutoAdjustForDPI,144,96,F.Width,Round(F.Width/1.5));
+  for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;Inspect(F,F);
+ finally F.Free;end;
+end;
+var Chess,Draughts:TGameVariant;I:Integer;
+begin
+ Errors:=TErrors.Create;Application.OnException:=@Errors.Report;
+ RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
+ Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
+ RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
+ try
+  if ParamStr(1)='--main-only' then Test(TMainForm.Create(nil))
+  else if ParamStr(1)='--tournament-only' then Test(TTournamentDialog.Create(nil,Chess)) else begin
+  Test(TGameSetupForm.Create(nil,Chess));
+  Test(TEngineEditForm.Create(nil,Draughts));
+  Test(TEngineEditForm.Create(nil,Chess));
+  Test(TPreferencesForm.Create(nil));
+  Test(TEnginesDialog.Create(nil,Chess));
+  Test(TTournamentDialog.Create(nil,Chess));
+  Test(TTournamentDialog.Create(nil,Draughts));
+  Test(TDatabaseForm.Create(nil,Chess));
+  Test(TDatabaseForm.Create(nil,Draughts));
+  Test(TPositionSetupForm.Create(nil,Chess));
+  Test(TPositionSetupForm.Create(nil,Draughts));
+  Test(TManualForm.Create(nil));Test(TPdnOpenDialog.Create(nil));
+  Test(TScoreHistoryForm.Create(nil));
+  Test(TGameSetupForm.Create(nil,Draughts));
+  Test(TMainForm.Create(nil));
+  end;
+ finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;Application.OnException:=nil;Errors.Free;end;
+ WriteLn('Layout checks: ',Checks,' checks, ',Failures,' failures');
+ if Failures>0 then Halt(1);
+end.

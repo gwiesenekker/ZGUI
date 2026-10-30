@@ -5,7 +5,7 @@ unit uDatabaseForm;
 interface
 
 uses
-  Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
+  uGuiLayout, Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   Grids, Math, Menus, StdCtrls, SysUtils, Types, uDraughtsBoardControl, uDraughtsBoard,
   uGamePosition,uGameGuiProfile,uGameBoardFactory,uGameBoardControl,uGameFileReader,uGameTreePdn,
   uGameDatabase, uDatabaseImportWorker, uGuiDialogs, uDraughtsPdn, uDraughtsPositionSetupForm, uPreferences;
@@ -14,7 +14,7 @@ type
   TDatabaseFileGameSelectedEvent=procedure(Sender:TObject;Entry:TGameFileEntry) of object;
   TDatabaseGameSelectedEvent = procedure(Sender: TObject; AGame: TPdnGame) of object;
 
-  TDatabaseForm = class(TForm)
+  TDatabaseForm = class(TGuiLayoutForm)
   private
     FVariant:TGameVariant; // Borrowed from application composition.
     FProfile:TGameGuiProfile;
@@ -131,6 +131,7 @@ var
   LSearchPanel: TPanel;
   LSplitter: TSplitter;
   LTopPanel: TPanel;
+  FilterControls:array of TControl;Groups:array of TControl;I:Integer;
 begin
   inherited Create(AOwner);
   if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
@@ -350,6 +351,15 @@ begin
   LMenuItem.OnClick := @OptimizePositionSearchClick;
   LBoardPopup.Items.Add(LMenuItem);
   PopupMenu := LBoardPopup;
+  SetLength(FilterControls,LFilterPanel.ControlCount);
+  for I:=0 to High(FilterControls) do FilterControls[I]:=LFilterPanel.Controls[I];
+  SetLength(Groups,6);
+  for I:=0 to 3 do Groups[I]:=LayoutRow(LFilterPanel,[FilterControls[2*I],FilterControls[2*I+1]],1);
+  Groups[4]:=LayoutRow(LFilterPanel,[FilterControls[8],FilterControls[9],FilterControls[10]],1);
+  Groups[5]:=FApplyFilterButton;
+  LayoutFlow(LFilterPanel,Groups);LFilterPanel.AutoSize:=True;
+  FStatusLabel.AutoSize:=True;
+  EnableAutoLayout;
 end;
 
 procedure TDatabaseForm.DoShow;

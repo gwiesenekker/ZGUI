@@ -5,7 +5,7 @@ unit uPreferencesForm;
 interface
 
 uses
-  Classes, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics, StdCtrls,
+  uGuiLayout, Classes, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics, StdCtrls,
   uPreferences, uNotationStyles;
 
 const ScoreColorBase = 9 + Ord(High(TNotationStyle));
@@ -16,7 +16,7 @@ type
   TGamePreferencesAcceptedEvent = procedure(Sender:TObject;
     const Edits:TGamePreferencesEdits) of object;
 
-  TPreferencesForm = class(TForm)
+  TPreferencesForm = class(TGuiLayoutForm)
   private
     FGameSelector:TComboBox;
     FDefaultsButton:TButton;
@@ -91,6 +91,7 @@ var
   LPageControl: TPageControl;
   LTab: TTabSheet;
   LFontButton: TButton;
+  LDescription:TLabel;LMaxLabel:TLabel;FontRow:TPanel;
   S: TNotationStyle;
   C: TScoreHistoryColor;
 begin
@@ -172,12 +173,8 @@ begin
   FEvaluationMaxEdit.Parent := LGroup;
   FEvaluationMaxEdit.SetBounds(250, 28, 80, 24);
 
-  with TLabel.Create(Self) do
-  begin
-    Parent := LGroup;
-    SetBounds(12, 32, 220, 22);
-    Caption := 'Max score';
-  end;
+  LMaxLabel:=TLabel.Create(Self);LMaxLabel.Caption:='Max score';
+  LayoutRow(LGroup,[LMaxLabel,FEvaluationMaxEdit],1);
 
   FEvaluationScaleGroup := TRadioGroup.Create(Self);
   FEvaluationScaleGroup.Parent := LGroup;
@@ -186,14 +183,15 @@ begin
   FEvaluationScaleGroup.Columns := 2;
   FEvaluationScaleGroup.Items.Add('Linear');
   FEvaluationScaleGroup.Items.Add('Logarithmic');
+  FEvaluationScaleGroup.Align:=alTop;FEvaluationScaleGroup.AutoSize:=True;
+  LGroup.AutoSize:=True;
 
   LTab := TTabSheet.Create(Self);
   LTab.PageControl := LPageControl; LTab.Caption := 'Notation'; LTab.Name := 'NotationTab';
-  with TLabel.Create(Self) do
-  begin
-    Parent := LTab; SetBounds(12, 12, 440, 48); WordWrap := True;
-    Caption := 'One font applies to all notation. Monospaced fonts work best. Set colours and bold/italic styles below.';
-  end;
+  LDescription:=TLabel.Create(Self);LDescription.Parent:=LTab;
+  LDescription.Caption:='One font applies to all notation. Monospaced fonts work best. Set colours and bold/italic styles below.';
+  LDescription.WordWrap:=True;LDescription.Align:=alTop;LDescription.AutoSize:=True;
+  LDescription.BorderSpacing.Around:=8;
   LGroup := TGroupBox.Create(Self); LGroup.Parent := LTab;
   LGroup.SetBounds(8, 110, 464, 40+46*(Ord(High(TNotationStyle))+1)); LGroup.Caption := 'Moves window';
   FNotationFontLabel := TLabel.Create(Self); FNotationFontLabel.Parent := LTab;
@@ -202,6 +200,8 @@ begin
   LFontButton := TButton.Create(Self); LFontButton.Parent := LTab;
   LFontButton.SetBounds(352, 58, 110, 30); LFontButton.Caption := 'Font...';
   LFontButton.Name := 'NotationFontChoose'; LFontButton.OnClick := @ChooseNotationFontClick;
+  FontRow:=LayoutRow(LTab,[FNotationFontLabel,LFontButton],0);FontRow.Top:=60;
+  LGroup.Align:=alTop;LGroup.AutoSize:=True;LGroup.Top:=110;
   for S := Low(S) to High(S) do AddNotationRow(LGroup, S, 30+Ord(S)*46);
 
   LTab:=TTabSheet.Create(Self);LTab.PageControl:=LPageControl;
@@ -237,6 +237,9 @@ begin
   LApplyButton.BorderSpacing.Right := 8;
   LApplyButton.Caption := 'Save'; LApplyButton.Name := 'PreferencesApply';
   LApplyButton.OnClick := @ApplyClick;
+  LButtonPanel.AutoSize:=True;
+  ScrollLayoutPages(Self,LPageControl);
+  EnableAutoLayout;
 end;
 
 function TPreferencesForm.SelectNotationFont(AFont: TFont): Boolean;
@@ -289,6 +292,9 @@ begin
     Parent := AParent; SetBounds(372, ATop, 72, 26); Caption := 'Italic';
     Name := 'NotationItalic'+IntToStr(Ord(AStyle)); OnChange := @NotationChanged;
   end;
+  with LayoutRow(AParent,[FNotationSamples[AStyle],FSwatches[Index],Button,
+    FNotationBold[AStyle],FNotationItalic[AStyle]],0) do Top:=ATop;
+  if AParent is TGroupBox then TGroupBox(AParent).AutoSize:=True;
 end;
 procedure TPreferencesForm.NotationChanged(Sender: TObject);
 begin UpdateNotationSamples; end;
@@ -333,6 +339,8 @@ begin
   end;
   LButton.Tag := AIndex;
   LButton.OnClick := @ChooseColorClick;
+  with LayoutRow(AParent,[LLabel,FSwatches[AIndex],LButton],0) do Top:=ATop;
+  if AParent is TGroupBox then TGroupBox(AParent).AutoSize:=True;
 end;
 
 function TPreferencesForm.ColorByIndex(AIndex: Integer): TColor;

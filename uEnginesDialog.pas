@@ -5,11 +5,11 @@ unit uEnginesDialog;
 interface
 
 uses
-  uGamePosition, Classes, Controls, Dialogs, Forms, Grids, Menus, SysUtils,
+  uGamePosition, uGuiLayout, Classes, Controls, Dialogs, Forms, Grids, Menus, SysUtils,
   uEngineEditForm, uEngineRegistry, uGuiDialogs, uGameGuiProfile;
 
 type
-  TEnginesDialog = class(TForm)
+  TEnginesDialog = class(TGuiLayoutForm)
   private
     FVariant:TGameVariant;
     FAddForm: TEngineEditForm;
@@ -96,6 +96,7 @@ begin
   FGrid.PopupMenu := LPopup;
   LoadExternalEngines(FRegistryFileName, FEngines);
   RefreshGrid;
+  EnableAutoLayout;
 end;
 
 destructor TEnginesDialog.Destroy;

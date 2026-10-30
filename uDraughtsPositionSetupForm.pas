@@ -5,14 +5,14 @@ unit uDraughtsPositionSetupForm;
 interface
 
 uses
-  Classes, Controls, ExtCtrls, Forms, Graphics, StdCtrls, SysUtils,
+  uGuiLayout, Classes, Controls, ExtCtrls, Forms, Graphics, StdCtrls, SysUtils,
   uGameBoardControl, uGamePosition, uPositionSetupAdapter, uGuiDialogs, uPreferences;
 
 type
   TPositionSetupAcceptedEvent = procedure(Sender: TObject;
     const AFEN: string; var AAccepted:Boolean) of object;
 
-  TPositionSetupForm = class(TForm)
+  TPositionSetupForm = class(TGuiLayoutForm)
   private
     FVariant:TGameVariant; // Borrowed from application composition.
     FAdapter:TPositionSetupAdapter;
@@ -64,6 +64,7 @@ var
   LBottomPanel: TPanel;
   LButton: TButton;
   LControlsPanel: TPanel;
+  LStartButton,LClearButton,LPasteButton:TButton;
   I: Integer;
 begin
   inherited Create(AOwner);
@@ -115,13 +116,13 @@ begin
   LButton := TButton.Create(Self);
   LButton.Parent := LControlsPanel;
   LButton.SetBounds(0, 8, 76, 24);
-  LButton.Caption := 'Start';
+  LButton.Caption := 'Start';LStartButton:=LButton;
   LButton.OnClick := @SetStartClick;
 
   LButton := TButton.Create(Self);
   LButton.Parent := LControlsPanel;
   LButton.SetBounds(84, 8, 76, 24);
-  LButton.Caption := 'Clear';
+  LButton.Caption := 'Clear';LClearButton:=LButton;
   LButton.OnClick := @ClearClick;
 
   FFenEdit := TEdit.Create(Self);
@@ -134,7 +135,7 @@ begin
   LButton.Parent := LControlsPanel;
   LButton.SetBounds(512, 42, 96, 24);
   LButton.Anchors := [akTop, akRight];
-  LButton.Caption := 'Paste FEN';
+  LButton.Caption := 'Paste FEN';LPasteButton:=LButton;
   LButton.OnClick := @SetFenClick;
 
   FPalettePanel := TPanel.Create(Self);
@@ -190,6 +191,10 @@ begin
   FBoardControl.Align := alClient;
   FBoardControl.ShowSideToMoveMarker := True;
   FBoardControl.OnMouseDown := @BoardMouseDown;
+  with LayoutRow(LControlsPanel,[LStartButton,LClearButton]) do Top:=0;
+  with LayoutRow(LControlsPanel,[FFenEdit,LPasteButton],0) do Top:=1;
+  LControlsPanel.AutoSize:=True;LBottomPanel.AutoSize:=True;
+  EnableAutoLayout;
   UpdatePiecePaletteLayout;
 end;
 
@@ -373,14 +378,14 @@ begin
     Exit;
 
   SquareSize := Max(32, FBoardControl.BoardSquareSize);
-  PaletteWidth := Max(SquareSize + 8, 96);
+  PaletteWidth := Max(Max(SquareSize + 8, 96),MeasureGuiText('Side to move',Font).cx+16);
   SideMargin := Max(0, (PaletteWidth - SquareSize) div 2);
   FPalettePanel.Width := PaletteWidth;
 
   TopPos := 0;
   if FSideGroup <> nil then
   begin
-    FSideGroup.SetBounds(0, TopPos, PaletteWidth, 72);
+    FSideGroup.SetBounds(0, TopPos, PaletteWidth,MeasureGuiText('Side to move'+LineEnding+'White'+LineEnding+'Black',Font).cy+16);
     Inc(TopPos, FSideGroup.Height + 8);
   end;
   if FPaletteLabel <> nil then
@@ -389,6 +394,7 @@ begin
     Inc(TopPos, FPaletteLabel.Height + 4);
   end;
   if FAdapter.IsChessSetup then begin
+    FPalettePanel.Constraints.MinHeight:=TopPos+6*16;
     TileSize:=Max(12,Min((PaletteWidth-24) div 2,(FPalettePanel.ClientHeight-TopPos-12) div 6-4));
     for I:=0 to High(FPiecePaintBoxes) do begin
       Row:=I div 2;Col:=I mod 2;
@@ -396,6 +402,9 @@ begin
         TopPos+Row*(TileSize+4),TileSize,TileSize);
     end;
   end else begin
+  FPalettePanel.Constraints.MinHeight:=TopPos+Length(FPiecePaintBoxes)*20;
+  SquareSize:=Min(SquareSize,Max(12,(FPalettePanel.ClientHeight-TopPos) div Length(FPiecePaintBoxes)-8));
+  SideMargin:=Max(0,(PaletteWidth-SquareSize) div 2);
   for I := 0 to High(FPiecePaintBoxes) do
     if FPiecePaintBoxes[I] <> nil then
     begin

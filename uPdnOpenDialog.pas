@@ -5,7 +5,7 @@ unit uPdnOpenDialog;
 interface
 
 uses
-  Classes, Controls, Forms, Graphics, Grids, StdCtrls, SysUtils, uGuiDialogs,
+  uGuiLayout, Classes, Controls, Forms, Graphics, Grids, StdCtrls, SysUtils, uGuiDialogs,
   uDraughtsPdn, uGameFileReader, uGamePosition;
 
 type
@@ -13,7 +13,7 @@ type
 
   TFileGameSelectedEvent = procedure(Sender: TObject; Entry: TGameFileEntry) of object;
 
-  TPdnOpenDialog = class(TForm)
+  TPdnOpenDialog = class(TGuiLayoutForm)
   private
     FFileName: string;
     FVariant:TGameVariant;
@@ -98,6 +98,8 @@ begin
   FGrid.RowCount := 2;
   FGrid.OnDblClick := @GridDblClick;
   FGrid.OnSelectCell := @GridSelectCell;
+  FStatusLabel.AutoSize:=True;FWarningLabel.AutoSize:=True;
+  EnableAutoLayout;
 end;
 
 destructor TPdnOpenDialog.Destroy;

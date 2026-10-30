@@ -1018,6 +1018,11 @@ that game's appearance. The existing pages are reused for each game; switching
 sections keeps both drafts and does not change the main board's selected game.
 The dialog initially selects the game currently shown in the main window.
 
+Windows and dialogs adapt their rows, labels and minimum sizes to the active font.
+Resize or maximize them to give boards, lists and text areas more room. Toolbars
+and database filters wrap when needed; preferences pages scroll when their content
+needs more space. Existing splitters still let you adjust the main panes.
+
 The appearance settings control:
 
 - light and dark squares of the main board;

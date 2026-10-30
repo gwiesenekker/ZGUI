@@ -5,7 +5,7 @@ unit uTournamentDialog;
 interface
 
 uses
-  CheckLst, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
+  CheckLst, uGuiLayout, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
   Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord,
   uGameGuiProfile,uGamePosition,uGameOrchestrator;
 
@@ -24,7 +24,7 @@ type
     const ATitlePrefix: string; out AGame: TObject) of object;
   TTournamentSelectGameEvent = procedure(Sender: TObject; AGame: TObject) of object;
 
-  TTournamentDialog = class(TForm)
+  TTournamentDialog = class(TGuiLayoutForm)
   private
     FOnContextRequested:TTournamentContextEvent;
     FGameCombo:TComboBox;
@@ -243,6 +243,9 @@ var
   TopPos: Integer;
   Id: TGUID;
   GameIndex:Integer;
+  NameLabel,FenLabel,MovesLabel,MinutesLabel,IncrementLabel,ConcurrentLabel:TLabel;
+  SettingsColumn,ActionsColumn:TPanel;ClockRow:TFlowPanel;
+  ClockControls:array[0..3] of TControl;
 begin
   inherited Create(AOwner);
   if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
@@ -293,7 +296,7 @@ begin
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := ButtonPanel;
   LabelControl.SetBounds(0, 114, 86, 18);
-  LabelControl.Caption := 'Moves';
+  LabelControl.Caption := 'Moves';MovesLabel:=LabelControl;
 
   FMinutesEdit := TEdit.Create(Self);
   FMinutesEdit.Name:='TournamentMinutes';FMinutesEdit.Text := FloatToStr(FProfile.DefaultClock.MinutesPerPeriod);
@@ -303,7 +306,7 @@ begin
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := ButtonPanel;
   LabelControl.SetBounds(96, 114, 86, 18);
-  LabelControl.Caption := 'Time';
+  LabelControl.Caption := 'Time';MinutesLabel:=LabelControl;
 
   FIncrementEdit := TEdit.Create(Self);
   FIncrementEdit.Name:='TournamentIncrement';FIncrementEdit.Text := FloatToStr(FProfile.DefaultClock.IncrementSeconds);
@@ -313,7 +316,7 @@ begin
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := ButtonPanel;
   LabelControl.SetBounds(192, 114, 86, 18);
-  LabelControl.Caption := 'Increment';
+  LabelControl.Caption := 'Increment';IncrementLabel:=LabelControl;
 
   FIncrementModeCombo := TComboBox.Create(Self);
   FIncrementModeCombo.Parent := ButtonPanel;
@@ -331,7 +334,7 @@ begin
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := ButtonPanel;
   LabelControl.SetBounds(640, 82, 120, 18);
-  LabelControl.Caption := 'Concurrent games';
+  LabelControl.Caption := 'Concurrent games';ConcurrentLabel:=LabelControl;
 
   FRoundRobinGroup := TRadioGroup.Create(Self);
   FRoundRobinGroup.Parent := ButtonPanel;
@@ -526,7 +529,23 @@ begin
   FTimer.Enabled := False;
   FTimer.OnTimer := @TimerTick;
   FAcceptedTournamentSignature := TournamentSignature;
+  NameLabel:=TLabel(ButtonPanel.Controls[0]);FenLabel:=TLabel(ButtonPanel.Controls[2]);
+  SettingsColumn:=LayoutStack(ButtonPanel);
+  with LayoutFields(SettingsColumn,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]) do Top:=0;
+  ClockControls[0]:=LayoutFields(ButtonPanel,[MovesLabel,FMovesEdit]);
+  ClockControls[1]:=LayoutFields(ButtonPanel,[MinutesLabel,FMinutesEdit]);
+  ClockControls[2]:=LayoutFields(ButtonPanel,[IncrementLabel,FIncrementEdit]);
+  ClockControls[3]:=FIncrementModeCombo;
+  ClockRow:=LayoutFlow(SettingsColumn,ClockControls);ClockRow.Top:=1;
+  ActionsColumn:=LayoutStack(ButtonPanel);
+  with LayoutRow(ActionsColumn,[CreateButton,ClearButton]) do Top:=0;
+  with LayoutRow(ActionsColumn,[FStartStopButton,SaveButton,LoadButton]) do Top:=1;
+  with LayoutFields(ActionsColumn,[ConcurrentLabel,FConcurrentGamesEdit]) do Top:=2;
+  if FGameCombo<>nil then with LayoutRow(ActionsColumn,[FGameCombo],0) do Top:=3;
+  FRoundRobinGroup.AutoSize:=True;
+  LayoutFlow(ButtonPanel,[SettingsColumn,FRoundRobinGroup,ActionsColumn]);ButtonPanel.AutoSize:=True;
   UpdateButtons;
+  EnableAutoLayout;
 end;
 
 procedure TTournamentDialog.BeginShutdown;
@@ -675,9 +694,7 @@ procedure TTournamentDialog.AdjustPairingGridColumnWidths;
 var
   EngineTextWidth: Integer;
   I: Integer;
-  RequiredWidth: Integer;
   Row: Integer;
-  TotalGridWidth: Integer;
 
   function TextWidth(const AText: string; AMinWidth: Integer): Integer;
   begin
@@ -713,14 +730,9 @@ begin
     for I := 0 to FGrid.ColCount - 1 do
       FGrid.Columns[I].Width := FGrid.ColWidths[I];
 
-  TotalGridWidth := 0;
-  for I := 0 to FGrid.ColCount - 1 do
-    Inc(TotalGridWidth, FGrid.ColWidths[I]);
-  RequiredWidth := 270 + TotalGridWidth + 96;
-  if Constraints.MinWidth < RequiredWidth then
-    Constraints.MinWidth := RequiredWidth;
-  if Width < RequiredWidth then
-    Width := RequiredWidth;
+  // The grid scrolls horizontally when necessary; long engine names must not
+  // force the whole tournament window beyond the monitor's available width.
+
 end;
 
 function TTournamentDialog.DisplayNameForEngine(

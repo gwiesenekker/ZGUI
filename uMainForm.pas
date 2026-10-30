@@ -5,7 +5,7 @@ unit uMainForm;
 interface
 
 uses
-  Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
+  uGuiLayout, Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uGameGuiProfile, uGameFileReader,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
@@ -61,7 +61,7 @@ type
   public TreeId:Int64;Display:TDisplayedPosition;end;
   TFeatureBinding=record Component:TComponent;Feature:TGuiGameFeature;end;
 
-  TMainForm = class(TForm)
+  TMainForm = class(TGuiLayoutForm)
   private
     FGameContexts,FDocumentViews:TList;
     FActiveContext:TGameUiContext;
@@ -1056,6 +1056,7 @@ begin
   FLegalMovesMemo.OnClick := @LegalMovesMemoClick;
 
   LSidePanel := TPanel.Create(Self);
+  LSidePanel.Name:='GameDetailsPanel';
   LSidePanel.Parent := LWorkPanel;
   LSidePanel.Align := alRight;
   LSidePanel.Width := 330;
@@ -1269,6 +1270,8 @@ begin
   LMainPanel.BevelOuter := bvNone;
   LMainPanel.BorderSpacing.Top := 8;
   LMainPanel.BorderSpacing.Bottom := 8;
+  LMainPanel.Constraints.MinWidth:=160;
+  LMainPanel.Constraints.MinHeight:=180;
 
   FBlackClockLabel := TLabel.Create(Self);
   FBlackClockLabel.Parent := LMainPanel;
@@ -1337,11 +1340,22 @@ begin
   LBoardPopup.Items.Add(LMenuItem);
   FBoardControl.PopupMenu := LBoardPopup;
 
+  LayoutExistingFields(LGameHeaderPanel);
+  LGameHeaderPanel.Name:='GameHeaderPanel';
+  LGamesLabel.Align:=alTop;LGamesLabel.AutoSize:=True;
+  FGamesListBox.Align:=alClient;
+  LLegalMovesLabel.Align:=alTop;LLegalMovesLabel.AutoSize:=True;
+  FLegalMovesMemo.Align:=alClient;
+  FAnnotatorSecondsEdit.Align:=alTop;
+  LAnnotatorSecondsPanel.AutoSize:=True;
+  LayoutFlow(LToolbar,[LEnginesButton,LResetButton,LTournamentButton,
+    LAnnotatorSecondsPanel,FAutoPlayButton]);LToolbar.AutoSize:=True;
   OnResize:=@UpdateAnalyzerTextSizes;
   ApplyPreferences;
   RefreshDisplayFromGameTree(FGameTree, True);
   InitializeGameContexts;
   if RegisteredGameCount>1 then UpdateContextFeatures;
+  EnableAutoLayout;
 end;
 
 destructor TMainForm.Destroy;

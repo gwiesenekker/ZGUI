@@ -5,11 +5,11 @@ unit uScoreHistoryForm;
 interface
 
 uses
-  Classes, Controls, Forms, uGamePosition, uPreferences,
+  uGuiLayout, Classes, Controls, Forms, uGamePosition, uPreferences,
   uScoreHistoryControl;
 
 type
-  TScoreHistoryForm = class(TForm)
+  TScoreHistoryForm = class(TGuiLayoutForm)
   private
     FScoreHistoryControl: TScoreHistoryControl;
   public
@@ -40,6 +40,7 @@ begin
   FScoreHistoryControl.Align := alClient;
   FScoreHistoryControl.DisplayMode := shdmBars;
   FScoreHistoryControl.ShowEvaluationBar := True;
+  EnableAutoLayout;
 end;
 
 procedure TScoreHistoryForm.ApplyScoreColors(const Colors:TScoreHistoryColors);

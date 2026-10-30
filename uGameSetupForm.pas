@@ -5,11 +5,11 @@ unit uGameSetupForm;
 interface
 
 uses
-  Classes, Controls, ExtCtrls, Forms, StdCtrls, SysUtils,
+  uGuiLayout, Classes, Controls, ExtCtrls, Forms, StdCtrls, SysUtils,
   uEngineRegistry, uGameOrchestrator, uGameSetupTypes, uPreferences, uGameGuiProfile, uGamePosition, uGuiDialogs;
 
 type
-  TGameSetupForm = class(TForm)
+  TGameSetupForm = class(TGuiLayoutForm)
   private
     FVariant:TGameVariant;
     FBlackPlayerCombo: TComboBox;
@@ -58,7 +58,7 @@ implementation
 
 constructor TGameSetupForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
-  LButtonPanel, LContentPanel: TPanel;
+  LButtonPanel: TPanel; LContentPanel: TScrollBox;
   LCancelButton, LOkButton: TButton;
   LTop,I: Integer;
 begin
@@ -80,10 +80,11 @@ begin
   FRegisteredEngines := TExternalEngineList.Create;
   LoadExternalEngines(EnginesJsonFileName, FRegisteredEngines);
 
-  LContentPanel := TPanel.Create(Self);
+  LContentPanel := TScrollBox.Create(Self);
   LContentPanel.Parent := Self;
   LContentPanel.Align := alClient;
-  LContentPanel.BevelOuter := bvNone;
+  LContentPanel.BorderStyle:=bsNone;
+  LContentPanel.VertScrollBar.Tracking:=True;
   LContentPanel.BorderSpacing.Around := 12;
 
   LTop := 0;
@@ -155,6 +156,8 @@ begin
   LOkButton.BorderSpacing.Right := 8;
   LOkButton.Caption := 'OK';
   LOkButton.OnClick := @OkClick;
+  LButtonPanel.AutoSize:=True;
+  EnableAutoLayout;
 end;
 
 destructor TGameSetupForm.Destroy;
@@ -202,16 +205,11 @@ var
 begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := AParent;
-  LLabel.SetBounds(0, ATop, AParent.ClientWidth, 20);
-  LLabel.Anchors := [akTop, akLeft, akRight];
-  LLabel.Height := 20;
-  LLabel.Caption := ACaption;
-  Inc(ATop, 20);
-
-  AEdit.Parent := AParent;
-  AEdit.SetBounds(0, ATop, AParent.ClientWidth, 28);
-  AEdit.Anchors := [akTop, akLeft, akRight];
-  Inc(ATop, 36);
+  LLabel.Caption:=ACaption;
+  AEdit.Parent:=AParent;
+  with LayoutRow(AParent,[LLabel],-1) do Top:=ATop;
+  with LayoutRow(AParent,[AEdit],0) do Top:=ATop+1;
+  Inc(ATop,2);
 end;
 
 procedure TGameSetupForm.AddLabelledCombo(AParent: TWinControl; const ACaption: string;
@@ -221,17 +219,11 @@ var
 begin
   LLabel := TLabel.Create(Self);
   LLabel.Parent := AParent;
-  LLabel.SetBounds(0, ATop, AParent.ClientWidth, 20);
-  LLabel.Anchors := [akTop, akLeft, akRight];
-  LLabel.Height := 20;
-  LLabel.Caption := ACaption;
-  Inc(ATop, 20);
-
-  ACombo.Parent := AParent;
-  ACombo.SetBounds(0, ATop, AParent.ClientWidth, 28);
-  ACombo.Anchors := [akTop, akLeft, akRight];
-  ACombo.Style := csDropDownList;
-  Inc(ATop, 36);
+  LLabel.Caption:=ACaption;
+  ACombo.Parent:=AParent;ACombo.Style:=csDropDownList;
+  with LayoutRow(AParent,[LLabel],-1) do Top:=ATop;
+  with LayoutRow(AParent,[ACombo],0) do Top:=ATop+1;
+  Inc(ATop,2);
 end;
 
 procedure TGameSetupForm.CancelClick(Sender: TObject);

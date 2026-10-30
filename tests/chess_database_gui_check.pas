@@ -6,7 +6,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,StdCtrls,ExtCtrls,
  uGameTree,uPreferences,uGameGuiProfile,uDraughtsPositionSetupForm;
 var Checks:Integer=0;V:TChessVariant;Main:TMainForm;F:TDatabaseForm;Browser:TPdnOpenDialog;
  Games,Results:TStringGrid;Board:TGameBoardControl;FenEdit:TEdit;Data:TStringList;
- Name,DbName,Before:string;I,ColumnGrowth,WindowGrowth:Integer;RootId:Int64;Setup:TPositionSetupForm;SetupFen:TEdit;OwnedDatabase:TDatabaseForm;Bounds:array of TRect;C:TControl;TextCanvas:TControlCanvas;
+ Name,DbName,Before:string;I:Integer;RootId:Int64;Setup:TPositionSetupForm;SetupFen:TEdit;OwnedDatabase:TDatabaseForm;Structure:array of string;C:TControl;TextCanvas:TControlCanvas;
 procedure Check(B:Boolean;const Text:string);
 begin Inc(Checks);if not B then raise Exception.Create(Text);end;
 procedure Button(Form:TForm;const Text:string);
@@ -183,25 +183,21 @@ begin
  V:=TChessVariant.Create;Name:=GetTempFileName(GetTempDir,'zdbgui');DbName:=Name+'.db';Data:=TStringList.Create;
  Main:=nil;F:=nil;
  try
-  // Same control geometry except the explicitly requested wider chess FEN column.
+  // Both games retain the same controls/grouping. Native flow rows may wrap
+  // differently when the chess FEN column makes the window wider.
   RegisterDefaultGameVariant(DraughtsVariant);F:=TDatabaseForm.Create(nil,DefaultGameVariant);F.Show;Pump;
-  SetLength(Bounds,F.ComponentCount);
-  for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then Bounds[I]:=TControl(F.Components[I]).BoundsRect;
-  F.Free;F:=nil;RegisterDefaultGameVariant(V);F:=TDatabaseForm.Create(nil,DefaultGameVariant);F.Show;Pump;
-  Check(F.ComponentCount=Length(Bounds),'Existing component count');
-  Board:=nil;
-  for I:=0 to F.ComponentCount-1 do if F.Components[I] is TGameBoardControl then
-   Board:=TGameBoardControl(F.Components[I]);
-  WindowGrowth:=F.Width-900;ColumnGrowth:=0;
-  for I:=0 to F.ComponentCount-1 do if F.Components[I]=Board.Parent then
-   ColumnGrowth:=Board.Parent.Width-(Bounds[I].Right-Bounds[I].Left);
+  SetLength(Structure,F.ComponentCount);
   for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then begin
    C:=TControl(F.Components[I]);
-   if C=Board.Parent then begin Inc(Bounds[I].Left,WindowGrowth-ColumnGrowth);Inc(Bounds[I].Right,WindowGrowth);end
-   else if C.Parent=Board.Parent then Inc(Bounds[I].Right,ColumnGrowth)
-   else if (C is TStringGrid) and (TStringGrid(C).ColCount=5) then Inc(Bounds[I].Right,WindowGrowth-ColumnGrowth)
-   else if C.Align in [alTop,alBottom,alClient] then Inc(Bounds[I].Right,WindowGrowth);
-   Check(EqualRect(Bounds[I],C.BoundsRect),'Only requested column width affects bounds '+IntToStr(I));
+   Structure[I]:=C.ClassName+':'+C.Parent.ClassName+':'+IntToStr(Ord(C.Align));
+  end;
+  F.Free;F:=nil;RegisterDefaultGameVariant(V);F:=TDatabaseForm.Create(nil,DefaultGameVariant);F.Show;Pump;
+  Check(F.ComponentCount=Length(Structure),'Existing component count');
+  for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then begin
+   C:=TControl(F.Components[I]);
+   Check((C is TGameBoardControl) or
+     (Structure[I]=C.ClassName+':'+C.Parent.ClassName+':'+IntToStr(Ord(C.Align))),
+     'Shared database control grouping '+IntToStr(I)+' '+Structure[I]+' vs '+C.ClassName+':'+C.Parent.ClassName+':'+IntToStr(Ord(C.Align)));
   end;
   Board:=nil;Games:=nil;Results:=nil;FenEdit:=nil;
   for I:=0 to F.ComponentCount-1 do begin
