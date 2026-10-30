@@ -4,9 +4,32 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
-### Automatic GUI sizing for both games — 2026-10-30
+### Start the DXP launch-test listener before its client — 2026-10-30
 
 Commit: pending.
+
+- In the engine editor's DXP listen role, start the existing socket-test thread
+  and wait for its successful Listen signal before launching the client process.
+  Report bind failures without starting an engine; clean up on launch failure.
+  Preserve the connect role's engine-server-first order and the match adapter.
+- Use an event instead of a dummy connection: a probe would consume the test
+  listener's single client. Wake only our own active listener during cancellation,
+  so a failed bind does not connect to another program occupying the port.
+- User authorisation on 2026-10-30: “Yes, correct, we should first make sure the
+  listener is running. Perhaps we can try a connect before launching the engine or
+  will the listener already error out?” Scope: this DXP editor startup fix,
+  separately from GUI resizing; Claude can review the resulting commit.
+- Tests cover a single-attempt immediate client, repeated launches, an engine
+  exiting without connecting, connect role, bind failure and cancellation. An
+  isolated copy of Scan connects successfully as a DXP client; user engine
+  directories and settings are untouched. Application compilation, the existing
+  DXP checks and all fourteen chess/draughts GUI suites pass against an isolated
+  source snapshot excluding unfinished feature flags. Native Windows interaction
+  remains untested.
+
+### Automatic GUI sizing for both games — 2026-10-30
+
+Commit: `a1430fe`.
 
 - Reuse the existing controls and event handlers with native LCL panels, alignment,
   measured rows, wrapping toolbars and scrollable settings pages. Adapt the main

@@ -820,7 +820,7 @@ var
   Engine: TExternalEngineDefinition;
   I: Integer;
   InitLines: TStringList;
-  LaunchArguments: string;
+  LaunchArguments,ListenerError: string;
 begin
   Args := TStringList.Create;
   InitLines := TStringList.Create;
@@ -867,10 +867,21 @@ begin
     LaunchArguments := EngineParamValue(FCapturedParams,
       EngineLaunchArgumentParamName(Engine.Kind), Engine.Arguments);
     SplitLaunchArguments(ExpandEnginePlaceholders(LaunchArguments, Engine), Args);
+    if (Engine.Kind=eekDxp) and (Engine.DxpRole=derListen) then begin
+      FDxpThread:=TDxpTestConnectionThread.Create(Engine.DxpHost,Engine.DxpPort,
+        Engine.DxpRole,@DxpLog,EngineParamValue(FCapturedParams,'gui-dxp-peer-ip',''));
+      if not FDxpThread.WaitForListener(5000,ListenerError) then begin
+        Log('[DXP listener not ready: '+ListenerError+']');
+        FreeAndNil(FDxpThread);Exit;
+      end;
+    end;
     Log('[launching ' + Engine.ExePath + ']');
     if Args.Count > 0 then
       Log('[arguments: ' + Args.DelimitedText + ']');
-    FProcess.Start(Engine.ExePath, Args, ExtractFilePath(Engine.ExePath));
+    try FProcess.Start(Engine.ExePath, Args, ExtractFilePath(Engine.ExePath));
+    except on E:Exception do begin
+      StopProcessFor(Engine);Log('[could not launch engine: '+E.Message+']');Exit;
+    end;end;
     FProcessPollTimer.Enabled := True;
     ReadForMs(250);
 
@@ -903,8 +914,7 @@ begin
       else
         Log('[DXP configured to connect to ' + Engine.DxpHost + ':' +
           IntToStr(Engine.DxpPort) + ']');
-      FreeAndNil(FDxpThread);
-      FDxpThread := TDxpTestConnectionThread.Create(Engine.DxpHost,
+      if FDxpThread=nil then FDxpThread := TDxpTestConnectionThread.Create(Engine.DxpHost,
         Engine.DxpPort, Engine.DxpRole, @DxpLog,
         EngineParamValue(FCapturedParams, 'gui-dxp-peer-ip', ''));
       if Trim(FDxpIdEdit.Text) = '' then

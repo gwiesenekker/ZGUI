@@ -13,6 +13,11 @@ type
   TDxpTestConnectionThread = class(TThread)
   private
     FLock: TCriticalSection;
+    FListenerReady:TEvent;
+    FListening:Boolean;
+    FStartupError:string;
+    procedure PublishListenerState(Listening:Boolean;const ErrorText:string);
+  private
     FDxpHost: string;
     FAllowedPeer: string;
     FDxpPort: Word;
@@ -31,6 +36,7 @@ type
     constructor Create(const AHost: string; APort: Word; ARole: TDxpEngineRole;
       AOnLog: TDxpTestLogEvent; const AAllowedPeer: string = '');
     destructor Destroy; override;
+    function WaitForListener(ATimeoutMs:Integer;out ErrorText:string):Boolean;
     procedure StopConnection;
   end;
 
@@ -45,6 +51,7 @@ begin
   inherited Create(True);
   FreeOnTerminate := False;
   FLock := TCriticalSection.Create;
+  FListenerReady:=TEvent.Create(nil,True,False,'');
   FDxpHost := Trim(AHost);
   FAllowedPeer := Trim(AAllowedPeer);
   if Trim(FDxpHost) = '' then FDxpHost := '127.0.0.1';
@@ -61,8 +68,37 @@ begin
   StopConnection;
   WaitFor;
   FSocket.Free;
+  FListenerReady.Free;
   FLock.Free;
   inherited Destroy;
+end;
+
+procedure TDxpTestConnectionThread.PublishListenerState(Listening:Boolean;const ErrorText:string);
+begin
+  FLock.Acquire;
+  try FListening:=Listening and not Terminated;FStartupError:=ErrorText;
+  finally FLock.Release;end;
+  FListenerReady.SetEvent;
+end;
+
+function TDxpTestConnectionThread.WaitForListener(ATimeoutMs:Integer;out ErrorText:string):Boolean;
+var Started:QWord;
+begin
+  Result:=False;ErrorText:='';
+  if FRole<>derListen then begin ErrorText:='DXP is not configured as a listener';Exit;end;
+  Started:=GetTickCount64;
+  repeat
+    // Startup logs use Synchronize; service them without re-entering UI actions.
+    CheckSynchronize;
+    if FListenerReady.WaitFor(10)=wrSignaled then begin
+      FLock.Acquire;
+      try Result:=FListening and not Terminated;ErrorText:=FStartupError;
+      finally FLock.Release;end;
+      if not Result and (ErrorText='') then ErrorText:='DXP listener cancelled';
+      Exit;
+    end;
+  until (ATimeoutMs<=0) or (GetTickCount64-Started>=QWord(ATimeoutMs));
+  ErrorText:='DXP listener startup timed out';
 end;
 
 procedure TDxpTestConnectionThread.AcceptConnection(Sender: TObject;
@@ -122,7 +158,7 @@ begin
       // Host/peer configuration remains immutable while StopConnection can read it.
       ListenHost := DxpListenAddress(FDxpHost);
       if FAllowedPeer <> '' then DxpListenAddress(FAllowedPeer);
-      Log('[DXP listening on ' + ListenHost + ':' + IntToStr(FDxpPort) + ']');
+      Log('[DXP preparing listener on ' + ListenHost + ':' + IntToStr(FDxpPort) + ']');
       FLock.Acquire;
       try FServer := TInetServer.Create(ListenHost, FDxpPort);
       finally FLock.Release; end;
@@ -131,6 +167,8 @@ begin
         FServer.MaxConnections := -1;
         FServer.OnConnect := @AcceptConnection;
         FServer.Listen;
+        PublishListenerState(True,'');
+        Log('[DXP listening on '+ListenHost+':'+IntToStr(FDxpPort)+']');
         if not Terminated then FServer.StartAccepting;
       finally
         FLock.Acquire;
@@ -179,19 +217,26 @@ begin
       Sleep(100);
   except
     on E: Exception do
-      if not Terminated then
-        Log('[DXP socket error: ' + E.Message + ']');
+      begin
+        PublishListenerState(False,E.Message);
+        if not Terminated then Log('[DXP socket error: ' + E.Message + ']');
+      end;
   end;
 end;
 
 procedure TDxpTestConnectionThread.StopConnection;
+var Wake:Boolean;
 begin
   Terminate;
   FLock.Acquire;
   try
+    Wake:=FListening and (FServer<>nil);
+    FListening:=False;FStartupError:='DXP listener cancelled';
     if FServer <> nil then FServer.StopAccepting(False);
   finally FLock.Release; end;
-  WakeListener;
+  FListenerReady.SetEvent;
+  // A failed bind must not probe/consume another program's listener.
+  if Wake then WakeListener;
 end;
 
 end.
