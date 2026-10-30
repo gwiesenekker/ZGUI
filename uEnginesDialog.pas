@@ -247,9 +247,12 @@ procedure TEnginesDialog.MeasureColumns;
 var Col,Margin: Integer;
 begin
   if (FGrid=nil) or (csDestroying in ComponentState) then Exit;
-  Margin:=MeasureGuiText('MM',FGrid.Font).cx+FGrid.GridLineWidth;
-  for Col:=1 to 3 do
-    FGrid.ColWidths[Col]:=MeasureGuiText(FGrid.Cols[Col].Text,FGrid.Font).cx+Margin;
+  Margin:=MeasureGuiText('MM',FGrid.Font).cx;
+  for Col:=1 to 3 do begin
+    // Native sizing includes column titles, their own fonts and cell padding.
+    FGrid.AutoSizeColumn(Col);
+    FGrid.ColWidths[Col]:=FGrid.ColWidths[Col]+Margin;
+  end;
 end;
 
 procedure TEnginesDialog.RefreshGrid;

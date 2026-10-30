@@ -1004,9 +1004,11 @@ begin
     FParamsGrid.Cells[1, FParamsGrid.RowCount - 1] := FCapturedParams[I].ParamType;
     FParamsGrid.Cells[2, FParamsGrid.RowCount - 1] := FCapturedParams[I].Value;
   end;
-  Margin:=MeasureGuiText('MM',FParamsGrid.Font).cx+FParamsGrid.GridLineWidth;
-  for Col:=0 to 1 do
-    FParamsGrid.ColWidths[Col]:=MeasureGuiText(FParamsGrid.Cols[Col].Text,FParamsGrid.Font).cx+Margin;
+  Margin:=MeasureGuiText('MM',FParamsGrid.Font).cx;
+  for Col:=0 to 1 do begin
+    FParamsGrid.AutoSizeColumn(Col);
+    FParamsGrid.ColWidths[Col]:=FParamsGrid.ColWidths[Col]+Margin;
+  end;
 end;
 
 procedure TEngineEditForm.UpdateFieldsFromParams;

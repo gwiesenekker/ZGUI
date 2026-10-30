@@ -209,7 +209,7 @@ W:W31-50:B1-20
 
 Open **Engines...** from the toolbar. The engine list shows each executable and
 its Hub, UCI or DXP identity. The executable and ID columns fit
-their text plus a margin; the path column fills the remaining width. Resize the
+their titles and values using their respective fonts, plus a margin; the path column fills the remaining width. Resize the
 window or columns as needed, and hover over clipped text to see its full value.
 
 Right-click the list to:

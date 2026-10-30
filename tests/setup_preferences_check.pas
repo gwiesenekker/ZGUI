@@ -233,9 +233,25 @@ begin
   for C:=Low(C) to High(C) do Check(Pop.ScoreColors[C]=P.ScoreHistoryColors[C],'New popout inherits saved palette');
  finally M.Free;end;
 end;
+procedure CheckMeasuredColumn(Grid:TStringGrid;Col:Integer);
+var BodyWidth,HeaderWidth,Margin:Integer;Column:TGridColumn;
+begin
+  if Col<Grid.FixedCols then begin
+    BodyWidth:=MeasureGuiText(Grid.Cols[Col].Text,Grid.Font).cx;
+    HeaderWidth:=MeasureGuiText(Grid.Cells[Col,0],Grid.TitleFont).cx;
+  end else begin
+    Column:=Grid.Columns[Col-Grid.FixedCols];
+    BodyWidth:=MeasureGuiText(Grid.Cols[Col].Text,Column.Font).cx;
+    HeaderWidth:=MeasureGuiText(Column.Title.Caption,Column.Title.Font).cx;
+  end;
+  if HeaderWidth>BodyWidth then BodyWidth:=HeaderWidth;
+  Margin:=MeasureGuiText('MM',Grid.Font).cx;
+  Check(Grid.ColWidths[Col]>=BodyWidth+Margin,'Column fits actual title and cell fonts plus margin');
+end;
+
 procedure EnginesDialogSizes;
 var Engines:TExternalEngineList;D:TExternalEngineDefinition;Form:TEnginesDialog;
-    Grid:TStringGrid;Saved:TMemoryStream;HadRegistry:Boolean;I,J,Col,Margin,OldPathWidth:Integer;
+    Grid:TStringGrid;Saved:TMemoryStream;HadRegistry:Boolean;I,J,Col,OldPathWidth:Integer;
 begin
   Saved:=TMemoryStream.Create;Engines:=TExternalEngineList.Create;Form:=nil;
   HadRegistry:=FileExists(EnginesJsonFileName);
@@ -244,19 +260,19 @@ begin
     for I:=1 to 35 do begin
       D:=TExternalEngineDefinition.Create;D.Kind:=eekUci;
       D.ExePath:='/a/very/long/directory/which/should/not/determine/the/window/width/engine'+IntToStr(I)+'.exe';
-      D.UciId:='Engine '+IntToStr(I);D.DxpId:='dxp'+IntToStr(I);Engines.Add(D);
+      D.UciId:='Engine '+IntToStr(I);D.DxpId:='';Engines.Add(D);
     end;
     SaveExternalEngines(EnginesJsonFileName,Engines);Form:=TEnginesDialog.Create(nil);Grid:=nil;
     for I:=0 to Form.ComponentCount-1 do if Form.Components[I] is TStringGrid then Grid:=TStringGrid(Form.Components[I]);
     Check(Grid<>nil,'Engines list grid exists');Form.Show;Pump;
+    Check((Grid.Cells[3,0]='') and (Grid.Columns[3].Title.Caption='DXP id'),
+      'DXP header is stored separately from empty cell data');
+    Grid.Columns[3].Title.Font.Size:=18;Grid.Columns[3].Title.Font.Style:=[fsBold];
     for J:=0 to 2 do begin
       Form.Font.Size:=8+5*J;Pump;
       Check((Grid.ColCount=4) and (Grid.FixedCols=0) and (Grid.RowCount=36),
         'Engines list retains four columns and all registrations');
-      Margin:=MeasureGuiText('MM',Grid.Font).cx+Grid.GridLineWidth;
-      for Col:=1 to 3 do
-        Check(Grid.ColWidths[Col]=MeasureGuiText(Grid.Cols[Col].Text,Grid.Font).cx+Margin,
-          'Executable and engine IDs fit longest text plus margin after font change');
+      for Col:=1 to 3 do CheckMeasuredColumn(Grid,Col);
       Check((Grid.ColWidths[0]>0) and (Grid.GridWidth<=Grid.ClientWidth) and
         (Grid.ClientWidth-Grid.GridWidth<=4),'Path fills remaining width with vertical scrolling');
       OldPathWidth:=Grid.ColWidths[0];Form.Width:=Form.Width+150;Pump;
@@ -269,6 +285,12 @@ begin
       Check((Grid.Cells[0,1]=Engines[0].ExePath) and (Grid.Cells[2,1]=Engines[0].UciId),
         'Layout keeps complete path and identity data');
     end;
+    FreeAndNil(Form);Engines.Clear;SaveExternalEngines(EnginesJsonFileName,Engines);
+    Form:=TEnginesDialog.Create(nil);Form.Font.Size:=18;Form.Show;Pump;Grid:=nil;
+    for I:=0 to Form.ComponentCount-1 do if Form.Components[I] is TStringGrid then Grid:=TStringGrid(Form.Components[I]);
+    Check(Grid<>nil,'Empty engines list grid exists');
+    for Col:=1 to 3 do CheckMeasuredColumn(Grid,Col);
+    Check(Grid.GridWidth<=Grid.ClientWidth,'Empty list titles keep the grid within client width');
   finally
     Form.Free;Engines.Free;
     if HadRegistry then Saved.SaveToFile(EnginesJsonFileName) else DeleteFile(EnginesJsonFileName);
@@ -277,7 +299,7 @@ begin
 end;
 
 procedure MeasuredDialogSizes;
-var Font:TFont;Bitmap:TBitmap;One,Two,Multi:TSize;I,J,Col,Margin,OldValueWidth:Integer;
+var Font:TFont;Bitmap:TBitmap;One,Two,Multi:TSize;I,J,Col,OldValueWidth:Integer;
     Main:TMainForm;Log:TMemo;Editor:TEngineEditForm;Grid:TStringGrid;
     Definition:TExternalEngineDefinition;Params:TEngineParamArray;Name,ParamFile,LongName:string;
 begin
@@ -320,10 +342,7 @@ begin
     for J:=0 to 2 do begin
       Editor.Font.Size:=8+5*J;Editor.LoadEngine(Definition);Pump;
       Check((Grid.ColCount=3) and (Grid.FixedCols=1),'Filling columns preserves three columns and the fixed name column');
-      Margin:=MeasureGuiText('MM',Grid.Font).cx+Grid.GridLineWidth;
-      for Col:=0 to 1 do
-        Check(Grid.ColWidths[Col]=MeasureGuiText(Grid.Cols[Col].Text,Grid.Font).cx+Margin,
-          'Name and type fit longest text plus font-based margin');
+      for Col:=0 to 1 do CheckMeasuredColumn(Grid,Col);
       Check((Grid.ColWidths[2]>0) and (Grid.GridWidth<=Grid.ClientWidth) and
         (Grid.ClientWidth-Grid.GridWidth<=4),'Value column fills remaining usable client width with vertical scrolling');
       OldValueWidth:=Grid.ColWidths[2];Editor.Width:=Editor.Width-150;Pump;

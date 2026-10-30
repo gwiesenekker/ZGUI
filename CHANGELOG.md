@@ -4,6 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Include grid titles in measured engine-column widths — 2026-10-30
+
+- Fix clipped DXP headers: column titles are stored separately from cell text, so
+  measuring `Cols[].Text` missed them. Use the existing grid's native autosizing,
+  which includes header/cell fonts and native cell padding, then add the margin.
+- Apply the same correction to measured parameter name/type columns. Preserve the
+  existing filling path/value columns and the rest of both dialogs.
+- Reproduce the previous failure with empty DXP IDs and a larger bold title font.
+  Extend checks to empty registries and measure title and body widths independently.
+- Validation: the new regression fails before the fix and passes afterward.
+  Application compiles; layout/preferences GUI suite passes 284 checks and UCI GUI
+  suite passes 127. Native Windows execution remains unverified.
+
+
 ### Review the multi-game proposal and prepare two Scan engines — 2026-10-30
 
 Record: `7f29ccf` (documentation; local review and engine assets are ignored).
