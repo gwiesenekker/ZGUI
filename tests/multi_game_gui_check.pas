@@ -7,7 +7,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,
   uChessUciEngine,uDraughtsHubEngine,uDraughtsDxpEngine,uDraughtsEngine,uEngineBase,
   uGameGuiMessages,uAnalyzerRunnerThread,uGuiDialogs,uGameTree,uGameTreeActor,uGameTreePdn,
   uChessPgn,uGameDocumentContext,uGameDatabase,uPreferences,Graphics,Grids,ExtCtrls,
-  uTournamentDialog,uTournamentGridModel,uDatabaseForm,SQLite3Conn,SQLDB;
+  uTournamentDialog,uTournamentGridModel,uDatabaseForm,SQLite3Conn,SQLDB,uEnginesDialog;
 var Chess,Draughts:TGameVariant;Checks:Integer=0;RealEngines:Boolean=False;
 procedure Check(Value:Boolean;const Msg:string);
 begin Inc(Checks);if not Value then raise Exception.Create(Msg);end;
@@ -286,6 +286,50 @@ var Main:TMainForm;Engines:TExternalEngineList;Defs:array[0..5]of TExternalEngin
       end else Check(Pos('32x21',Text)>0,'Mixed draughts Save uses draughts moves');
     finally GuiTestFileDialogResult:=-1;DeleteFile(Name);end;
   end;
+  procedure ReviewT5C6;
+  var TD:TTournamentDialog;Dlg,Other:TEnginesDialog;Grid:TStringGrid;Obj:TObject;
+      K,Count:Integer;OldTree:TGameTree;OldRunner:TAnalyzerRunnerThread;OldGame:string;
+      Current:TExternalEngineList;Started:QWord;
+    function OpenEngines:TEnginesDialog;
+    var N:Integer;
+    begin
+      Button(Main,'Engines...').Click;
+      for N:=0 to Main.ComponentCount-1 do if Main.Components[N] is TEnginesDialog then Exit(TEnginesDialog(Main.Components[N]));
+      raise Exception.Create('Missing shared Engines dialog');
+    end;
+    procedure DeleteRow(Row:Integer);
+    var N:Integer;
+    begin
+      Grid:=nil;for N:=0 to Dlg.ComponentCount-1 do if Dlg.Components[N] is TStringGrid then Grid:=TStringGrid(Dlg.Components[N]);
+      Grid.Row:=Row;for N:=0 to Dlg.ComponentCount-1 do if Dlg.Components[N] is TMenuItem then
+        if TMenuItem(Dlg.Components[N]).Caption='Delete engine' then begin TMenuItem(Dlg.Components[N]).Click;Exit;end;
+      raise Exception.Create('Missing delete engine action');
+    end;
+  begin
+    Main.SelectGameVariant(Draughts);Button(Main,'Tournament...').Click;TD:=nil;
+    for K:=0 to Main.ComponentCount-1 do if Main.Components[K] is TTournamentDialog then
+      if TTournamentDialog(Main.Components[K]).Variant=Draughts then TD:=TTournamentDialog(Main.Components[K]);
+    Main.SelectGameVariant(Chess);Drain;Dlg:=OpenEngines;
+    OldTree:=Main.ActiveGameTree;OldRunner:=Main.TestAnalyzerRunner;OldGame:=LastGamePreference;
+    Setup:=Default(TGameSetup);Setup.Variant:=Draughts;Setup.StartingFEN:='W:W32:B27';
+    Setup.TimeControl:=DraughtsGuiProfile.DefaultClock;Setup.WhitePlayer:=pkRegistered;Setup.BlackPlayer:=pkRegistered;
+    Setup.WhiteEngine:=Defs[2];Setup.BlackEngine:=Defs[3];
+    TD.OnStartGame(TD,Setup,'Tournament game',Obj);
+    Check(Main.ActiveGameTree=OldTree,'T5 hidden tournament start leaves selected document unchanged');
+    Check((Main.TestAnalyzerRunner=OldRunner) and Dlg.Visible,'T5 keeps visible annotator and open Engines window');
+    Check(LastGamePreference=OldGame,'T5 background start does not rewrite startup preference');
+    Started:=GetTickCount64;repeat Drain;until (TRunningGame(Obj).Lifecycle=rglFinished) or (GetTickCount64-Started>5000);
+    Check((Main.ActiveGameTree=OldTree) and (Main.TestAnalyzerRunner=OldRunner),'T5 background completion retains visible context');
+    Main.SelectGameVariant(Draughts);Other:=OpenEngines;Count:=0;
+    for K:=0 to Main.ComponentCount-1 do if Main.Components[K] is TEnginesDialog then Inc(Count);
+    Check((Other=Dlg) and (Count=1),'C6 both games share one Engines window');
+    Check(Dlg.TargetVariant=Draughts,'C6 Add-engine context follows active game');DeleteRow(6);
+    Main.SelectGameVariant(Chess);Check(OpenEngines=Dlg,'C6 returning to chess reuses shared registry');DeleteRow(1);
+    Current:=TExternalEngineList.Create;
+    try LoadExternalEngines(EnginesJsonFileName,Current);Check(Current.Count=4,'C6 consecutive cross-game deletes persist without resurrection');
+    finally Current.Free;end;
+    Dlg.Hide;TD.Free;SaveExternalEngines(EnginesJsonFileName,Engines);
+  end;
   procedure Tournaments;
   var C,D:TTournamentDialog;K:Integer;CT,DT:TStringGrid;Started:QWord;CanQuit:Boolean;
       CFile,DFile:string;Before:string;
@@ -388,6 +432,7 @@ begin
     Check(not CanClose,'Cancel protects both standalone documents');
     Check(Main.TestAnalyzerRunner=HA,'Cancel retains the visible annotator');Main.SelectGameVariant(Chess);Drain;
     Check(Main.TestAnalyzerRunner=NewCA,'Cancel retains the hidden annotator');
+    ReviewT5C6;
     Menu(Main,'Close Annotator').Click;Main.SelectGameVariant(Draughts);Menu(Main,'Close Annotator').Click;
     Tick:=GetTickCount64;repeat Drain;Main.CollectBusyEngineKeys(Busy);until (Busy.Count=0) or (GetTickCount64-Tick>5000);
     // Remove the two analysis-only test registrations from the tournament lists.

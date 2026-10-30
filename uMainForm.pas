@@ -46,7 +46,6 @@ type
     FDatabaseForm:TDatabaseForm;
     FSetupForm:TGameSetupForm;
     FPositionSetupForm:TPositionSetupForm;
-    FEnginesDialog:TEnginesDialog;
     FTournamentDialog:TTournamentDialog;
     FAnalyzerRunner:TAnalyzerRunnerThread;
     FAnalyzerEngineKey:string;
@@ -547,7 +546,7 @@ type
     function FindGameById(AGameId: Integer): TRunningGame;
     procedure MarkGameStopped(AGame: TRunningGame; const AReason: string);
     function StartGameFromSetup(const ASetup: TGameSetup;
-      const ATitlePrefix: string = 'Game'): TRunningGame;
+      const ATitlePrefix: string = 'Game';ASelectGame:Boolean=True): TRunningGame;
   end;
 
 var
@@ -1490,7 +1489,6 @@ begin
   C.FDatabaseForm:=FDatabaseForm;
   C.FSetupForm:=FSetupForm;
   C.FPositionSetupForm:=FPositionSetupForm;
-  C.FEnginesDialog:=FEnginesDialog;
   C.FTournamentDialog:=FTournamentDialog;
   C.FAnalyzerRunner:=FAnalyzerRunner;
   C.FAnalyzerEngineKey:=FAnalyzerEngineKey;
@@ -1547,7 +1545,7 @@ begin
     CaptureGameContext;
     HideBoard(FBoardControl);HideBoard(FMiniBoardControl);HideBoard(FAnalyzerMiniBoardControl);
     if FPositionSetupForm<>nil then FPositionSetupForm.Hide;
-    if FSetupForm<>nil then FSetupForm.Hide;if FEnginesDialog<>nil then FEnginesDialog.Hide;
+    if FSetupForm<>nil then FSetupForm.Hide;
     if FMiniBoardForm<>nil then FMiniBoardForm.Hide;if FAnalyzerMiniBoardForm<>nil then FAnalyzerMiniBoardForm.Hide;
     if C.FBoardControl=nil then begin
       C.FBoardControl:=NewBoard(FBoardControl);C.FMiniBoardControl:=NewBoard(FMiniBoardControl);
@@ -1558,6 +1556,7 @@ begin
       C.FAnalyzerPvBrowser.OnBoardChanged:=@AnalyzerPvBoardChanged;
     end;
     FActiveContext:=C;
+    if FEnginesDialog<>nil then FEnginesDialog.TargetVariant:=Variant;
     FGameTree:=C.FGameTree;
     FGameTreeActor:=C.FGameTreeActor;
     FBoard:=C.FBoard;
@@ -1574,7 +1573,6 @@ begin
     FDatabaseForm:=C.FDatabaseForm;
     FSetupForm:=C.FSetupForm;
     FPositionSetupForm:=C.FPositionSetupForm;
-    FEnginesDialog:=C.FEnginesDialog;
     FTournamentDialog:=C.FTournamentDialog;
     FAnalyzerRunner:=C.FAnalyzerRunner;
     FAnalyzerEngineKey:=C.FAnalyzerEngineKey;
@@ -5219,6 +5217,7 @@ begin
   if not GameSupports(gfEngines) then Exit;
   if FEnginesDialog = nil then
     FEnginesDialog := TEnginesDialog.Create(Self,CurrentVariant);
+  FEnginesDialog.TargetVariant:=CurrentVariant;
   ShowFormCenteredOnOwner(FEnginesDialog, Self);
 end;
 
@@ -5441,7 +5440,7 @@ begin
 end;
 
 function TMainForm.StartGameFromSetup(const ASetup: TGameSetup;
-  const ATitlePrefix: string): TRunningGame;
+  const ATitlePrefix: string;ASelectGame:Boolean): TRunningGame;
 var
   LBoard: TGamePosition;
   LVariant:TGameVariant;
@@ -5493,26 +5492,29 @@ begin
   end;
   FGames.Add(Result);
   FGamesListBox.Items.AddObject(LTitle + ' - starting', Result);
-  FGamesListBox.ItemIndex := FGamesListBox.Items.Count - 1;
-  UseDocument(Result.GameTree);
-  ClearHumanMoveSelection;
-  SetDisplayedTreeTracking('', '', '', 0, -1);
-  FDisplayedPosition.Cursor.Follow;
-  FGameLogMemo.Clear;
-  FGameLogMemoGameId := -1;
-  FGameLogMemoLineCount := -1;
-  UseDocument(Result.GameTree);
   InitializeRunningGameTree(Result);
-  LBoard := Result.GameTree.Variant.CreatePosition;
-  try
-    LBoard.LoadFromFEN(ASetup.StartingFEN);
-    ClearDisplayedPvCache(LBoard.PositionKey, 0);
-  finally
-    LBoard.Free;
+  if ASelectGame then begin
+    FGamesListBox.ItemIndex := FGamesListBox.Items.Count - 1;
+    UseDocument(Result.GameTree);
+    ClearHumanMoveSelection;
+    SetDisplayedTreeTracking('', '', '', 0, -1);
+    FDisplayedPosition.Cursor.Follow;
+    FGameLogMemo.Clear;
+    FGameLogMemoGameId := -1;
+    FGameLogMemoLineCount := -1;
+    UseDocument(Result.GameTree);
+    LBoard := Result.GameTree.Variant.CreatePosition;
+    try
+      LBoard.LoadFromFEN(ASetup.StartingFEN);
+      ClearDisplayedPvCache(LBoard.PositionKey, 0);
+    finally
+      LBoard.Free;
+    end;
+    FBoardControl.SetPosition(FBoard);
+    FGameActive := True;
+    RefreshDisplayFromGameTree(Result.GameTree, True);
+
   end;
-  FBoardControl.SetPosition(FBoard);
-  FGameActive := True;
-  RefreshDisplayFromGameTree(Result.GameTree, True);
 
   LRunner.Start;
 end;
@@ -5941,7 +5943,7 @@ end;
 procedure TMainForm.TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
   const ATitlePrefix: string; out AGame: TObject);
 begin
-  AGame := StartGameFromSetup(ASetup, ATitlePrefix);
+  AGame := StartGameFromSetup(ASetup, ATitlePrefix,False);
   if AGame is TRunningGame then TRunningGame(AGame).TournamentOwner:=Sender;
 end;
 

@@ -17,6 +17,7 @@ type
     FEngines: TExternalEngineList;
     FGrid: TStringGrid;
     FRegistryFileName: string;
+    procedure SetTargetVariant(Value:TGameVariant);
     procedure AddEngineClick(Sender: TObject);
     procedure DeleteEngineClick(Sender: TObject);
     function DxpPortConflict(AEngine: TExternalEngineDefinition;
@@ -31,9 +32,11 @@ type
     procedure MeasureColumns;
   protected
     procedure FontChanged(Sender: TObject); override;
+    procedure DoShow;override;
   public
     constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
+    property TargetVariant:TGameVariant read FVariant write SetTargetVariant;
     destructor Destroy; override;
     property Engines: TExternalEngineList read FEngines;
   end;
@@ -102,9 +105,22 @@ begin
   inherited Destroy;
 end;
 
+procedure TEnginesDialog.SetTargetVariant(Value:TGameVariant);
+begin
+  if Value=nil then raise EGamePositionError.Create('Missing engine editor game');
+  FVariant:=Value;
+end;
+
+procedure TEnginesDialog.DoShow;
+begin
+  LoadExternalEngines(FRegistryFileName,FEngines);RefreshGrid;
+  inherited DoShow;
+end;
+
 procedure TEnginesDialog.AddEngineClick(Sender: TObject);
 begin
   FEditingIndex := -1;
+  if (FAddForm<>nil) and (FAddForm.Variant<>FVariant) then FreeAndNil(FAddForm);
   if FAddForm = nil then
   begin
     FAddForm := TEngineEditForm.Create(Self,FVariant);

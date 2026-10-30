@@ -4,6 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Address Claude review T5 and C6 — 2026-10-30
+
+- T5: tournament callbacks start games through the existing runner path without
+  selecting them. Preserve the visible document, annotator, dialogs and last-game
+  preference. User-started New Game and Replay retain automatic selection.
+- C6: use one shared Engines window for the application-wide engine registry.
+  Its Add-engine default follows the active game; reload the registry when the
+  window is shown. Remove per-game copies that could overwrite each other's edits.
+- Add interactive regression checks for a hidden draughts tournament starting
+  while a chess annotator and Engines window are open, and consecutive engine
+  deletions across game switches. Mixed acceptance passes 87 checks; application
+  compilation and GUI/tournament preservation checks are run for these changes.
+
 ### Complete mixed-game acceptance and ownership audit — 2026-10-30
 
 Commit: `e62bbc5`.
