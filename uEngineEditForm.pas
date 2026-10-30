@@ -408,15 +408,13 @@ begin
   FParamsGrid.ColCount := 3;
   FParamsGrid.FixedRows := 1;
   FParamsGrid.Options := FParamsGrid.Options + [goEditing, goColSizing];
-  FParamsGrid.OnDblClick := @ParamDoubleClick;
-  FParamsGrid.OnMouseUp := @ParamsGridMouseUp;
-  FParamsGrid.OnSelectCell := @ParamsGridSelectCell;
   FParamsGrid.Cells[0, 0] := 'name';
-  FParamsGrid.Cells[1, 0] := 'type';
-  FParamsGrid.Cells[2, 0] := 'value';
-  FParamsGrid.ColWidths[0] := 260;
-  FParamsGrid.ColWidths[1] := 90;
-  FParamsGrid.ColWidths[2] := 260;
+  // The name column remains fixed; only the value column absorbs spare width.
+  FParamsGrid.Columns.Add.Title.Caption := 'type';
+  FParamsGrid.Columns[0].SizePriority := 0;
+  FParamsGrid.Columns.Add.Title.Caption := 'value';
+  FParamsGrid.Columns[1].SizePriority := 1;
+  FParamsGrid.AutoFillColumns := True;
 
   FInlineParamCombo := TComboBox.Create(Self);
   FInlineParamCombo.Parent := FParamsGrid;
@@ -425,6 +423,10 @@ begin
   FInlineParamCombo.OnSelect := @InlineParamComboSelect;
   FInlineParamCombo.OnCloseUp := @HideInlineParamCombo;
   FInlineParamCombo.OnExit := @HideInlineParamCombo;
+
+  FParamsGrid.OnDblClick := @ParamDoubleClick;
+  FParamsGrid.OnMouseUp := @ParamsGridMouseUp;
+  FParamsGrid.OnSelectCell := @ParamsGridSelectCell;
 
   LInitialEngine := CurrentEngineDefinition;
   try
@@ -980,7 +982,7 @@ end;
 
 procedure TEngineEditForm.LoadParamsGrid;
 var
-  I: Integer;
+  I, Col, Margin: Integer;
 begin
   if FParamsGrid = nil then
     Exit;
@@ -1002,8 +1004,9 @@ begin
     FParamsGrid.Cells[1, FParamsGrid.RowCount - 1] := FCapturedParams[I].ParamType;
     FParamsGrid.Cells[2, FParamsGrid.RowCount - 1] := FCapturedParams[I].Value;
   end;
-  FParamsGrid.ColWidths[0]:=MeasureGuiText(FParamsGrid.Cols[0].Text,FParamsGrid.Font).cx+
-    MeasureGuiText('MM',FParamsGrid.Font).cx+FParamsGrid.GridLineWidth;
+  Margin:=MeasureGuiText('MM',FParamsGrid.Font).cx+FParamsGrid.GridLineWidth;
+  for Col:=0 to 1 do
+    FParamsGrid.ColWidths[Col]:=MeasureGuiText(FParamsGrid.Cols[Col].Text,FParamsGrid.Font).cx+Margin;
 end;
 
 procedure TEngineEditForm.UpdateFieldsFromParams;

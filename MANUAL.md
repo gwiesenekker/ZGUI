@@ -537,7 +537,9 @@ selection lists Hub engines whose `gui-engine-supports-mcts` parameter is true.
 Statistics reported by that engine are displayed in the MCTS panel.
 
 The annotator status and PV areas reserve space using the active font. Engine
-parameter name columns fit the longest name plus a margin and remain resizable.
+parameter name and type columns fit their longest text plus a margin. The value
+column fills the remaining grid width as the dialog resizes; manual column
+resizing remains available.
 
 ### 5.5 Auto Play
 

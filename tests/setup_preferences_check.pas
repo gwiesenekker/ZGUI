@@ -234,7 +234,7 @@ begin
  finally M.Free;end;
 end;
 procedure MeasuredDialogSizes;
-var Font:TFont;Bitmap:TBitmap;One,Two,Multi:TSize;I,J:Integer;
+var Font:TFont;Bitmap:TBitmap;One,Two,Multi:TSize;I,J,Col,Margin,OldValueWidth:Integer;
     Main:TMainForm;Log:TMemo;Editor:TEngineEditForm;Grid:TStringGrid;
     Definition:TExternalEngineDefinition;Params:TEngineParamArray;Name,ParamFile,LongName:string;
 begin
@@ -270,6 +270,30 @@ begin
     for I:=0 to Editor.ComponentCount-1 do if Editor.Components[I] is TStringGrid then Grid:=TStringGrid(Editor.Components[I]);
     Check(Grid<>nil,'Engine parameter grid exists');Bitmap.Canvas.Font.Assign(Grid.Font);
     Check(Grid.ColWidths[0]>Bitmap.Canvas.TextWidth(LongName),'Parameter name column measures longest value plus margin');
+    Params:=nil;
+    for I:=1 to 40 do AddOrUpdateParam(Params,'option'+IntToStr(I),'long_parameter_type','editable value',False);
+    SaveEngineParamsToJson(ParamFile,'uci',Params);
+    Editor.Width:=1400;Editor.Show;Pump;
+    for J:=0 to 2 do begin
+      Editor.Font.Size:=8+5*J;Editor.LoadEngine(Definition);Pump;
+      Check((Grid.ColCount=3) and (Grid.FixedCols=1),'Filling columns preserves three columns and the fixed name column');
+      Margin:=MeasureGuiText('MM',Grid.Font).cx+Grid.GridLineWidth;
+      for Col:=0 to 1 do
+        Check(Grid.ColWidths[Col]=MeasureGuiText(Grid.Cols[Col].Text,Grid.Font).cx+Margin,
+          'Name and type fit longest text plus font-based margin');
+      Check((Grid.ColWidths[2]>0) and (Grid.GridWidth<=Grid.ClientWidth) and
+        (Grid.ClientWidth-Grid.GridWidth<=4),'Value column fills remaining usable client width with vertical scrolling');
+      OldValueWidth:=Grid.ColWidths[2];Editor.Width:=Editor.Width-150;Pump;
+      Check((Grid.ColWidths[2]<OldValueWidth) and (Grid.GridWidth<=Grid.ClientWidth),
+        'Value column shrinks with dialog without horizontal overflow');
+      Grid.Row:=1;Grid.Col:=2;Grid.EditorMode:=True;Pump;
+      Check((Grid.LeftCol=Grid.FixedCols) and (Grid.CellRect(2,1).Right<=Grid.ClientWidth),
+        'Editing the value keeps all columns visible');
+      Grid.Cells[2,1]:='changed value';Grid.EditorMode:=False;
+      Check(Grid.Cells[2,1]='changed value','Value remains editable with filling columns');
+      Editor.Width:=1400;Pump;
+      Check(Grid.ColWidths[2]=OldValueWidth,'Value column expands when dialog width is restored');
+    end;
   finally Editor.Free;Main.Free;Definition.Free;Bitmap.Free;Font.Free;DeleteFile(ParamFile);DeleteFile(Name);end;
 end;
 
