@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Complete mixed-game acceptance and ownership audit — 2026-10-30
 
+Commit: `e62bbc5`.
+
 - Fix startup from the remembered draughts context to create exactly two
   standalone documents. Reapply board orientation and feature availability on
   switches, clear obsolete unavailable hints, and refresh the selected tree view.
