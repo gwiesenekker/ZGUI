@@ -6,6 +6,8 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Fix engine-game Save format and long annotator budgets — 2026-10-30
 
+Commit: `1be52cb`.
+
 - Address Claude's P17: use one existing-renderer helper for standalone and engine
   game exports, taking PGN/PDN from the tree's variant profile. Save dialog title,
   filter and extension also follow the selected tree, rather than the process
