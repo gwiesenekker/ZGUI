@@ -605,6 +605,10 @@ right for each ply. In line-graph mode, a blue-grey mark indicates that neither
 score is available. Missing-score marks do not mean an evaluation of zero.
 The grey vertical line marks the currently selected ply.
 
+Mate scores reach the configured score limit: `#5` reaches the positive maximum
+and `#-4` the negative minimum. The tooltip retains the mate distance rather than
+replacing it with a pawn score. This applies in both graph and bar modes.
+
 Choose **File > Preferences > Score history** to change the eight colours,
 including missing-score marks and the selected-move line. These settings apply
 to both the main graph and its popout, and can help distinguish scores when the
@@ -612,9 +616,12 @@ default red/green colours are difficult to tell apart. **Save** applies and save
 the choices; **Close** discards unsaved changes. **Defaults** restores all
 preferences in the dialog, not just this tab; use Save to keep them.
 
-The evaluation bar uses only the selected ply's score, preferring its annotator
-score and then its playing-engine score. It does not substitute an earlier ply's
-score when the selected ply has none. White occupies the lower part of the bar and Black the upper
+The evaluation bar uses the displayed game position's score, including the root
+and real variations, preferring its annotator score and then its playing-engine
+score. It does not substitute a different position's score when none is available.
+When browsing an engine or annotator PV, it uses that PV's source score throughout
+the line. Auto Play lines have no separate stored score, so their previews show
+a neutral bar. White occupies the lower part of the bar and Black the upper
 part. A large positive score makes White fill upward from below; a large
 negative score makes Black fill downward from above.
 

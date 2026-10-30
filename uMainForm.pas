@@ -61,6 +61,7 @@ type
     FGameLogMemoShowStdout: Boolean;
     FGameLogMemo: TMemo;
     FDisplayedPosition: TDisplayedPosition;
+    FPreviewAnalysisSource: TNotationAnalysisSource;
     // Reused displayed-position scratch for the active tree's game (main thread).
     FPositionScratch: TGamePosition;
     FPositionScratchVariant: TGameVariant;
@@ -190,7 +191,8 @@ type
     function PublishRunnerSnapshotToGameTree(AGame: TRunningGame;
       ASnapshot: TGameRunnerSnapshot): TGameTree;
     procedure ApplyAnnotatorVariationBrowsePly(ABasePly, AVariationPly: Integer;
-      const AMovesText: string; AGameTree: TGameTree);
+      const AMovesText: string; AGameTree: TGameTree;
+      ASource: TNotationAnalysisSource);
     procedure BoardMouseDown(Sender: TObject; Button: TMouseButton;
       Shift: TShiftState; X, Y: Integer);
     procedure BoardPopupPopup(Sender: TObject);
@@ -1460,6 +1462,7 @@ end;
 procedure TMainForm.ClearVariationExploration;
 begin
   FDisplayedPosition.ClearPreview;
+  FPreviewAnalysisSource := nasNone;
 end;
 
 procedure TMainForm.ToggleBoardFlipped;
@@ -2211,7 +2214,7 @@ begin
     if not Result then Exit;
     FAutoPlay.MoveStored(Command);
     ApplyAnnotatorVariationBrowsePly(FAutoPlay.BasePly, FAutoPlay.MoveCount,
-      FAutoPlay.MovesText, Tree);
+      FAutoPlay.MovesText, Tree, nasAutoPlay);
   finally Command.Free; end;
 end;
 
@@ -3073,11 +3076,15 @@ end;
 
 
 procedure TMainForm.ApplyAnnotatorVariationBrowsePly(ABasePly,
-  AVariationPly: Integer; const AMovesText: string; AGameTree: TGameTree);
+  AVariationPly: Integer; const AMovesText: string; AGameTree: TGameTree;
+      ASource: TNotationAnalysisSource);
 begin
   ClearHumanMoveSelection;
   if FDisplayedPosition.SelectPreview(ABasePly, AVariationPly, AMovesText, AGameTree) then
+  begin
+    FPreviewAnalysisSource := ASource;
     RefreshDisplayFromGameTree(AGameTree, False);
+  end;
 end;
 
 function TMainForm.CurrentMoveCount: Integer;
@@ -4539,7 +4546,8 @@ begin
       end;
     nbPreview:
       ApplyAnnotatorVariationBrowsePly(Target.Variation.BasePly,
-        Target.Variation.VariationPly, Target.Variation.MovesText, Tree);
+        Target.Variation.VariationPly, Target.Variation.MovesText, Tree,
+        Target.Variation.AnalysisSource);
     nbMainline: ApplyGameBrowsePly(Target.Ply);
   end;
   HighlightGameMoveTextSelection(True, Tree);
@@ -4758,7 +4766,7 @@ begin
       if Ply < 0 then Ply := Count;
       if Ply > Count then Ply := 0;
       ApplyAnnotatorVariationBrowsePly(BrowseBasePly, Ply,
-        FDisplayedPosition.PreviewMoves, Tree);
+        FDisplayedPosition.PreviewMoves, Tree, FPreviewAnalysisSource);
     end
     else
     begin
@@ -5065,6 +5073,8 @@ begin
     FScoreHistoryControl.PlyCount, FScoreHistoryControl.CurrentPly,
     FScoreHistoryControl.MaxScore, FScoreHistoryControl.Scale,
     FScoreHistoryControl.StartingSide, FScoreHistoryControl.StartingMoveNumber);
+  FScoreHistoryForm.SetPositionEvaluation(FScoreHistoryControl.PositionEngineScore,
+    FScoreHistoryControl.PositionAnnotatorScore,FScoreHistoryControl.UsesPositionEvaluation);
   ShowFormCenteredOnOwner(FScoreHistoryForm, Self);
 end;
 
@@ -6001,6 +6011,7 @@ var
   LPly: Integer;
   LSignature: string;
   LStartingFEN: string;
+  Node:TGameTreePlyNode;EngineScore,AnnotatorScore:string;
 begin
   if FScoreHistoryControl = nil then
     Exit;
@@ -6008,6 +6019,21 @@ begin
   LGameTree := AGameTree;
   if LGameTree = nil then
     Exit;
+  // The chart stays mainline-only. The bar belongs to the displayed node,
+  // including root/real variations. A PV preview uses only its own source score.
+  EngineScore:='';AnnotatorScore:='';Node:=CurrentDisplayedGameTreeNode(LGameTree);
+  if Node<>nil then begin
+    if FDisplayedPosition.PreviewMoves<>'' then begin
+      case FPreviewAnalysisSource of
+        nasEngine: EngineScore:=Node.EngineScore;
+        nasAnnotator: AnnotatorScore:=Node.AnnotatorScore;
+      end;
+    end else begin
+      EngineScore:=Node.EngineScore;AnnotatorScore:=Node.AnnotatorScore;
+    end;
+  end;
+  FScoreHistoryControl.SetPositionEvaluation(EngineScore,AnnotatorScore);
+  if FScoreHistoryForm<>nil then FScoreHistoryForm.SetPositionEvaluation(EngineScore,AnnotatorScore);
   LAnnotationsText := GameTreeScoreAnnotationsText(LGameTree);
   LStartingFEN := StartingFenForTree(LGameTree);
   LMoveCount := LGameTree.MainlineCount;

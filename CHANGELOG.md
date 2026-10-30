@@ -4,6 +4,23 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Mate scores in score history and displayed-position evaluation — 2026-10-30
+
+- Apply the shared score-display candidate approved in Claude's review of
+  `93795c2`, including the condition to retain the browsed PV's own score.
+- Recognize signed mate scores in the existing history control: positive mates
+  reach the configured maximum, negative mates the minimum, and tooltips keep
+  the mate text. Both graph/bar modes and linear/logarithmic scales are covered.
+- Bind the existing evaluation bar to the displayed node, including root and
+  real variations. During engine/annotator PV previews use only that source's
+  score; unscored Auto Play previews stay neutral. Forward this to the popout.
+- The root/variation bar correction also applies to draughts. GUI layout,
+  mainline history, stored scores, game trees, PGN and databases are unchanged.
+- Update the manual and extend the existing chess GUI suite with rendering,
+  mate endpoints, displayed-node and source-specific PV browsing checks.
+- Validation: application build, full headless regression and all nine GUI
+  suites pass; chess board/PV/GUI suite passes 716 checks.
+
 ### Respect the annotator seconds setting — 2026-10-30
 
 Commit: `f61dec0`.

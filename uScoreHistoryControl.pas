@@ -16,6 +16,8 @@ type
     FScoreColors: TScoreHistoryColors;
     FAnnotationsText: string;
     FCurrentPly: Integer;
+    FUsesPositionEvaluation:Boolean;
+    FPositionEngineScore,FPositionAnnotatorScore:string;
     FDisplayMode: TScoreHistoryDisplayMode;
     FHintText: string;
     FMaxScore: Double;
@@ -24,6 +26,7 @@ type
     FShowEvaluationBar: Boolean;
     FStartingSide: TGameSide;
     FStartingMoveNumber: Integer;
+    function TryScoreText(const AText:string;out Score:Double):Boolean;
     procedure SetScoreColors(const AColors: TScoreHistoryColors);
     function BarPenWidth(APlotWidth, ACount: Integer): Integer;
     function ChartBounds(out APlotLeft, APlotRight: Integer): Boolean;
@@ -68,6 +71,11 @@ type
   public
     property ScoreColors: TScoreHistoryColors read FScoreColors write SetScoreColors;
     function TryCurrentEvaluation(out AScore: Double): Boolean;
+    procedure SetPositionEvaluation(const EngineScore,AnnotatorScore:string;
+      AUsePosition:Boolean=True);
+    property UsesPositionEvaluation:Boolean read FUsesPositionEvaluation;
+    property PositionEngineScore:string read FPositionEngineScore;
+    property PositionAnnotatorScore:string read FPositionAnnotatorScore;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     property AnnotationsText: string read FAnnotationsText
@@ -703,6 +711,7 @@ var
   HasAnnotatorScore: Boolean;
   HasEngineScore: Boolean;
   Lines: TStringList;
+  EngineText,AnnotatorText:string;
 begin
   Lines := TStringList.Create;
   try
@@ -711,6 +720,8 @@ begin
       EngineScore);
     HasAnnotatorScore := TryAnnotationScoreInLines(Lines, APly,
       'annotator', AnnotatorScore);
+    TryAnnotationScoreTextInLines(Lines,APly,'engine',EngineText);
+    TryAnnotationScoreTextInLines(Lines,APly,'annotator',AnnotatorText);
   finally
     Lines.Free;
   end;
@@ -722,13 +733,19 @@ begin
     Exit;
   end;
 
-  if HasEngineScore then
-    Result += 'E: ' + WhitePerspectiveScoreText(EngineScore)
+  if HasEngineScore then begin
+    Result+='E: ';
+    if (EngineText<>'') and (EngineText[1]='#') then Result+=EngineText
+    else Result+=WhitePerspectiveScoreText(EngineScore);
+  end
   else
     Result += 'E: no score';
   Result += '; ';
-  if HasAnnotatorScore then
-    Result += 'A: ' + WhitePerspectiveScoreText(AnnotatorScore)
+  if HasAnnotatorScore then begin
+    Result+='A: ';
+    if (AnnotatorText<>'') and (AnnotatorText[1]='#') then Result+=AnnotatorText
+    else Result+=WhitePerspectiveScoreText(AnnotatorScore);
+  end
   else
     Result += 'A: no score';
 end;
@@ -749,6 +766,32 @@ begin
   Application.ActivateHint(ClientToScreen(Point(AX, AY)), True);
 end;
 
+function TScoreHistoryControl.TryScoreText(const AText:string;out Score:Double):Boolean;
+var Mate:Int64;S:string;I,J:Integer;
+begin
+  S:=Trim(AText);Score:=0;
+  if (S<>'') and (S[1]='#') then begin
+    Result:=False;I:=2;
+    if I>Length(S) then Exit;
+    if S[I] in ['+','-'] then Inc(I);
+    if I>Length(S) then Exit;
+    for J:=I to Length(S) do if not (S[J] in ['0'..'9']) then Exit;
+    Result:=TryStrToInt64(Copy(S,2,MaxInt),Mate);
+    // Bare #0 loses the winner's sign in existing records. Do not invent it.
+    if Result and (Mate=0) and not (S[2] in ['+','-']) then Result:=False;
+    if Result then begin
+      Score:=FMaxScore;if S[2]='-' then Score:=-FMaxScore;
+    end;
+  end else Result:=TryExtractScoreFromAnnotation('score='+S,Score);
+end;
+procedure TScoreHistoryControl.SetPositionEvaluation(const EngineScore,AnnotatorScore:string;
+  AUsePosition:Boolean);
+begin
+  if (FUsesPositionEvaluation=AUsePosition) and (FPositionEngineScore=EngineScore) and
+    (FPositionAnnotatorScore=AnnotatorScore) then Exit;
+  FUsesPositionEvaluation:=AUsePosition;
+  FPositionEngineScore:=EngineScore;FPositionAnnotatorScore:=AnnotatorScore;Invalidate;
+end;
 function TScoreHistoryControl.TryAnnotationScoreTextInLines(ALines: TStrings;
   APly: Integer; const AName: string; out AScoreText: string): Boolean;
 var
@@ -764,7 +807,7 @@ begin
     AScoreText := ExtractAnnotationValue(ALines[APly - 1], 'score');
   if AScoreText = '' then
     Exit;
-  Result := TryExtractScoreFromAnnotation('score=' + AScoreText, Score);
+  Result := TryScoreText(AScoreText, Score);
   if not Result then
     AScoreText := '';
 end;
@@ -777,7 +820,7 @@ begin
   Result := False;
   AScore := 0.0;
   if TryAnnotationScoreTextInLines(ALines, APly, AName, ScoreText) then
-    Result := TryExtractScoreFromAnnotation('score=' + ScoreText, AScore);
+    Result := TryScoreText(ScoreText, AScore);
 end;
 
 function TScoreHistoryControl.TryScoreInLines(ALines: TStrings; APly: Integer;
@@ -803,6 +846,11 @@ var
 begin
   Result := False;
   AScore := 0.0;
+  if FUsesPositionEvaluation then begin
+    Result:=TryScoreText(FPositionAnnotatorScore,AScore);
+    if not Result then Result:=TryScoreText(FPositionEngineScore,AScore);
+    Exit;
+  end;
   if ALines = nil then Exit;
   Ply := FCurrentPly;
   if Ply < 0 then Ply := ALines.Count;

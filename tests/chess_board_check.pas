@@ -5,8 +5,11 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils, Types,
   Controls, Graphics, Math, StdCtrls, Menus, LCLType, Clipbrd, uGamePosition,
   uChessPosition, uDraughtsPosition, uGameBoardControl, uChessBoardControl,
   uPvBrowser, uDraughtsHubEngine, uMainForm, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameNotationView, uGuiDialogs, uGameGuiProfile, uPdnOpenDialog, Grids, uChessPgn, uGameFileReader, uScoreHistoryControl;
+  uGameNotationView, uGuiDialogs, uGameGuiProfile, uPdnOpenDialog, Grids, uChessPgn, uGameFileReader, uScoreHistoryControl, uPreferences;
 type
+  TPaintScore = class(TScoreHistoryControl)
+    procedure Render(B: TBitmap);
+  end;
   TPaintChess = class(TChessBoardControl)
     procedure Render(B: TBitmap);
   end;
@@ -30,6 +33,42 @@ type
     procedure Report(Sender: TObject; E: Exception);
   end;
 var Checks: Integer=0; Variant: TChessVariant;
+procedure TPaintScore.Render(B:TBitmap);
+begin
+  HandleNeeded;PaintWindow(B.Canvas.Handle);
+  B.Canvas.Pixels[0,0]:=B.Canvas.Pixels[0,0];
+end;
+
+procedure CheckMateHistory;
+var Host:TForm;S:TPaintScore;MateImage,NumericImage:TBitmap;
+    Mode,ScaleIndex,LimitIndex:Integer;MateBytes,NumericBytes:TMemoryStream;
+begin
+  Host:=TForm.CreateNew(nil);S:=TPaintScore.Create(Host);S.Parent:=Host;
+  MateImage:=TBitmap.Create;NumericImage:=TBitmap.Create;
+  MateBytes:=TMemoryStream.Create;NumericBytes:=TMemoryStream.Create;
+  try
+    S.SetBounds(0,0,400,160);S.ShowEvaluationBar:=False;S.PlyCount:=2;S.CurrentPly:=0;
+    MateImage.SetSize(S.Width,S.Height);NumericImage.SetSize(S.Width,S.Height);
+    for LimitIndex:=0 to 1 do begin
+      if LimitIndex=0 then S.MaxScore:=10 else S.MaxScore:=3;
+      for Mode:=0 to 1 do for ScaleIndex:=0 to 1 do begin
+        if Mode=0 then S.DisplayMode:=shdmGraph else S.DisplayMode:=shdmBars;
+        S.Scale:=TScoreScale(ScaleIndex);
+        S.AnnotationsText:='engine=#5; annotator=#-4'+LineEnding+'engine=#-2; annotator=#3';
+        S.Render(MateImage);
+        S.AnnotationsText:='engine='+IntToStr(Round(S.MaxScore))+'; annotator=-'+IntToStr(Round(S.MaxScore))+LineEnding+
+          'engine=-'+IntToStr(Round(S.MaxScore))+'; annotator='+IntToStr(Round(S.MaxScore));
+        S.Render(NumericImage);MateBytes.Clear;NumericBytes.Clear;
+        MateImage.SaveToStream(MateBytes);NumericImage.SaveToStream(NumericBytes);
+        if (MateBytes.Size<>NumericBytes.Size) or
+          not CompareMem(MateBytes.Memory,NumericBytes.Memory,MateBytes.Size) then
+          raise Exception.Create('Mate history does not render at the configured endpoints');
+        Inc(Checks);
+      end;
+    end;
+  finally MateBytes.Free;NumericBytes.Free;MateImage.Free;NumericImage.Free;Host.Free;end;
+end;
+
 procedure TErrors.Report(Sender: TObject; E: Exception);
 begin WriteLn('FAIL: ',E.Message); DumpExceptionBackTrace(Output); Halt(1); end;
 procedure Check(Value: Boolean; const Text: string);
@@ -323,6 +362,24 @@ begin
     for I:=0 to Main.ComponentCount-1 do
       if Main.Components[I] is TScoreHistoryControl then Score:=TScoreHistoryControl(Main.Components[I]);
     Check((Score<>nil) and Score.TryCurrentEvaluation(Value) and (Abs(Value-0.25)<0.0001),'Score history works on chess annotations');
+    C:=Actor.CreateRecordEnginePVCommand(Main.ActiveGameTree.Root.NodeId,'#5','d2d4');
+    try Actor.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);finally C.Free;end;
+    Key:=VK_LEFT;Memo.OnKeyDown(Memo,Key,[]);
+    Key:=VK_LEFT;Memo.OnKeyDown(Memo,Key,[]);
+    Check(Score.TryCurrentEvaluation(Value) and (Value=Score.MaxScore),
+      'Root evaluation uses its own positive mate score');
+    Click(B,12);Click(B,28); // d4 is a real variation; the mainline remains e4.
+    C:=Actor.CreateRecordEnginePVCommand(Main.ActiveGameTree.Root.Children[1].NodeId,'#-4','d7d5');
+    try Actor.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);finally C.Free;end;
+    Key:=VK_LEFT;Memo.OnKeyDown(Memo,Key,[]);
+    Key:=VK_RIGHT;Memo.OnKeyDown(Memo,Key,[]);
+    Expected.LoadFromFEN(ChessStartingFEN);Expected.PlayMove('d2d4');
+    Check(B.Position.ToFEN=Expected.ToFEN,'Evaluation probe displays the variation position');
+    Check(Score.TryCurrentEvaluation(Value) and (Value=-Score.MaxScore),
+      'Variation evaluation uses its negative mate score rather than mainline at same ply');
+    Key:=VK_ESCAPE;Memo.OnKeyDown(Memo,Key,[]);
+    Check(Score.TryCurrentEvaluation(Value) and (Abs(Value-0.25)<0.0001),
+      'Returning to mainline restores the displayed position evaluation');
     Actor.Free; Actor:=nil;
     Main.LoadStandaloneFen('8/8/8/8/8/2kb4/r7/K7 w - - 99 1');
     Click(B,1); Check(Main.ActiveGameTree.MainlineCount=0,'Single legal chess move still waits for target');
@@ -362,6 +419,47 @@ begin
     Main.Close; // No misleading PDN save dialog in standalone chess mode.
   finally GuiTestChoiceOnShow:=nil; Actor.Free; Choice.Free; Expected.Free; Main.Free; end;
 end;
+procedure CheckPreviewEvaluation;
+var Main:TMainForm;Actor:TGameTreeActor;C:TGameTreeCommand;Memo:TGameNotationView;
+    Score:TScoreHistoryControl;Value:Double;I:Integer;Key:Word;Before:string;
+  procedure Store(Command:TGameTreeCommand);
+  begin C:=Command;try Actor.ExecuteCommand(C);Check(C.Accepted,C.ErrorText);finally C.Free;end;end;
+  procedure SelectText(const Text:string);
+  begin
+    Check(Pos(Text,Memo.Text)>0,'Preview text '+Text);
+    Memo.SelStart:=Pos(Text,Memo.Text)-1;
+    Memo.SelLength:=Length(Text);Memo.OnClick(Memo);
+  end;
+  procedure Escape;
+  begin Key:=VK_ESCAPE;Memo.OnKeyDown(Memo,Key,[]);end;
+begin
+  Main:=TMainForm.Create(nil);Actor:=nil;Score:=nil;
+  try
+    Main.LoadStandaloneFen(ChessStartingFEN);Actor:=TGameTreeActor.Create(Main.ActiveGameTree,False);
+    Store(Actor.CreateRecordEnginePVCommand(Main.ActiveGameTree.Root.NodeId,'#5','d2d4 d7d5 c2c4'));
+    Store(Actor.CreateRecordAnnotatorPVCommand(Main.ActiveGameTree.Root.NodeId,'#-4','e2e4 e7e5'));
+    Store(Actor.CreateRecordAutoPlayPVCommand(Main.ActiveGameTree.Root.NodeId,'g1f3 g8f6'));
+    Memo:=TGameNotationView(Main.FindComponent('GameMoveMemo'));Memo.Enabled:=False;
+    for I:=0 to Main.ComponentCount-1 do if Main.Components[I] is TScoreHistoryControl then Score:=TScoreHistoryControl(Main.Components[I]);
+    Check(Score<>nil,'Preview evaluation control exists');
+    if not Menu(Main,'Show engine PV move').Checked then Menu(Main,'Show engine PV move').Click;
+    if not Menu(Main,'Show engine full PV').Checked then Menu(Main,'Show engine full PV').Click;
+    if not Menu(Main,'Show annotator PV move').Checked then Menu(Main,'Show annotator PV move').Click;
+    if not Menu(Main,'Show annotator full PV').Checked then Menu(Main,'Show annotator full PV').Click;
+    Key:=VK_LEFT;Memo.OnKeyDown(Memo,Key,[]);Before:=Main.CurrentGameTreePdnText('preview');
+    SelectText('d4');
+    for I:=1 to 3 do begin
+      Check(Score.TryCurrentEvaluation(Value) and (Value=Score.MaxScore),'Every engine PV ply uses its positive mate score');
+      Key:=VK_RIGHT;Memo.OnKeyDown(Memo,Key,[]);
+    end;
+    Escape;SelectText('e4');
+    Check(Score.TryCurrentEvaluation(Value) and (Value=-Score.MaxScore),'Annotator PV uses its own negative mate score');
+    Escape;SelectText('f3');
+    Check(not Score.TryCurrentEvaluation(Value),'Unscored Auto Play preview stays neutral');
+    Escape;Check(Main.CurrentGameTreePdnText('preview')=Before,'Score preview preserves tree and export');
+  finally Actor.Free;Main.Free;end;
+end;
+
 procedure CheckPgnFiles;
 var Main: TMainForm; Browser: TPdnOpenDialog; Grid: TStringGrid; Data: TStringList;
   Name,SavedName,BeforeFEN,BeforeText: string; Board: TGameBoardControl; Memo: TGameNotationView;
@@ -535,7 +633,7 @@ begin
   Variant:=TChessVariant.Create;
   try
     RegisterDefaultGameVariant(Variant);
-    CheckView; CheckCoordinateContrast; CheckPV; CheckLayout; CheckMain; CheckPgnFiles; CheckDiscardProtection;
+    CheckView; CheckCoordinateContrast; CheckPV; CheckLayout; CheckMain; CheckMateHistory; CheckPreviewEvaluation; CheckPgnFiles; CheckDiscardProtection;
     WriteLn('Chess board/PV/GUI checks passed (',Checks,' checks)');
   finally RegisterDefaultGameVariant(DraughtsVariant); Variant.Free; Errors.Free; end;
 end.

@@ -15,6 +15,8 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure ApplyScoreColors(const Colors:TScoreHistoryColors);
+    procedure SetPositionEvaluation(const EngineScore,AnnotatorScore:string;
+      AUsePosition:Boolean=True);
     procedure UpdateScores(const AAnnotationsText: string; APlyCount,
       ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
       AStartingSide: TGameSide; AStartingMoveNumber: Integer = 1);
@@ -42,6 +44,10 @@ end;
 
 procedure TScoreHistoryForm.ApplyScoreColors(const Colors:TScoreHistoryColors);
 begin FScoreHistoryControl.ScoreColors:=Colors;end;
+
+procedure TScoreHistoryForm.SetPositionEvaluation(const EngineScore,AnnotatorScore:string;
+  AUsePosition:Boolean);
+begin FScoreHistoryControl.SetPositionEvaluation(EngineScore,AnnotatorScore,AUsePosition);end;
 
 procedure TScoreHistoryForm.UpdateScores(const AAnnotationsText: string;
   APlyCount, ACurrentPly: Integer; AMaxScore: Double; AScale: TScoreScale;
