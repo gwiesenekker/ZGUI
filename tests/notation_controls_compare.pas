@@ -4,7 +4,7 @@ uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Interfaces, Forms, Controls,
   StdCtrls, ExtCtrls, Classes, SysUtils, Math, Types, Graphics, LCLType, LCLIntf,
   LazUTF8, LCLVersion, SynEdit, uDraughtsBoard, uGameTreeBuilder, RichMemo, uDraughtsPdn, uGameTree, uGameTreeActor,
   uGameTreePdn, uGameTreeCursor, uGameTreeNodeData, uGameOrchestrator, uNotationPresentation,
-  uNotationDocument, uNotationStyles, uNotationControlPrototype, uTreeTestUtils, uDraughtsPosition;
+  uNotationDocument, uNotationStyles, uNotationControlPrototype, uTreeTestUtils, uDraughtsPosition, uGamePosition;
 type
   TComparisonForm = class(TForm)
   public
@@ -118,7 +118,7 @@ begin
   try
     LoadPdnGamesFromFile(FileName, Games); Check(Games.Count = 1, 'Expected one fixture game');
     Game := TPdnGame(Games[0]); Root := Game.BuildMoveTree; TextToMoveList(Game.MovesText, Moves);
-    Result := TGameTreeActor.Create;
+    Result := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
     Execute(Result.CreateRebuildFromInputsCommand(
       GameTreeHeaderInput('prototype', Game.EventName, Game.WhiteName, Game.BlackName,
         Game.ResultText, Game.StartingFEN, False, DefaultTimeControl),
@@ -221,7 +221,7 @@ procedure EdgeCases(Form: TComparisonForm);
 var Tree: TGameTree; Doc: TNotationDocument; OldTree: TGameTree;
     OldDoc: TNotationDocument; Options: TGameTreePdnRenderOptions; I: Integer;
 begin
-  Tree := TGameTree.Create; Doc := TNotationDocument.Create;
+  Tree := TGameTree.Create(DefaultGameVariant); Doc := TNotationDocument.Create;
   OldTree := Form.Tree; OldDoc := Form.Doc;
   try
     Form.Tree := Tree; Form.Doc := Doc;
@@ -318,6 +318,7 @@ end;
 var Form: TComparisonForm; Actor: TGameTreeActor; Doc: TNotationDocument;
     Kind: TPrototypeControlKind; Samples: Integer;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   try
   DefaultFormatSettings.DecimalSeparator := '.';
   Application.Initialize; Application.CaptureExceptions := False;

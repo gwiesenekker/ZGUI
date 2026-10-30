@@ -79,6 +79,16 @@ begin
   Check((GameForEngineKind(eekUci)=Chess) and (GameForEngineKind(eekHub)=Draughts)
     and (GameForEngineKind(eekDxp)=Draughts),'Protocols map to registered variants');
   Check((GameVariantById('chess')=Chess) and (GameVariantById('draughts')=Draughts),'Stable game IDs');
+  Rejected:=False;
+  try TGameTree.Create(nil).Free;except on E:EGamePositionError do Rejected:=True;end;
+  Check(Rejected,'Trees reject missing variants instead of consulting startup selection');
+  Setup:=Default(TGameSetup);Rejected:=False;
+  try GameSetupVariant(Setup);except on E:EGamePositionError do Rejected:=True;end;
+  Check(Rejected,'Setups reject missing variants');
+  RegisterDefaultGameVariant(nil);Rejected:=False;
+  try DefaultGameVariant;except on E:EGamePositionError do Rejected:=True;end;
+  RegisterDefaultGameVariant(Chess);
+  Check(Rejected,'Linked game units do not install implicit defaults');
   Candidate:=TChessVariant.Create;Rejected:=False;
   try try RegisterGame(Candidate,ChessGuiProfile);except on E:EGamePositionError do Rejected:=True;end;
     Check(Rejected,'Duplicate registration rejected');finally Candidate.Free;end;

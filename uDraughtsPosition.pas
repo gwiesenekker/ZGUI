@@ -593,14 +593,7 @@ begin
   end;
 end;
 
-function LegacyDraughtsDefault:TGameVariant;
-begin Result:=DraughtsVariant;end;
-
-initialization
-  RegisterDefaultGameVariantFactory(@LegacyDraughtsDefault);
-
 finalization
-  RegisterDefaultGameVariantFactory(nil);
   FreeAndNil(GDraughtsVariant);
 
 end.

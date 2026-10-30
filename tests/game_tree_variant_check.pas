@@ -407,7 +407,7 @@ begin
   LVariant := TCounterVariant.Create;
   LTree := TGameTree.Create(LVariant);
   LActor := TGameTreeActor.Create(LTree, False);
-  LPv := TAnalysisPvState.Create; // starts with the default game (draughts)
+  LPv := TAnalysisPvState.Create(DefaultGameVariant); // starts with the default game (draughts)
   LDisplay := TDisplayedPosition.Create;
   LAutoPlay := TAutoPlayCoordinator.Create;
   LSnapshot := TPvSnapshot.Create;
@@ -680,7 +680,7 @@ var
 begin
   LVariant := TCounterVariant.Create;
   LObserver := TRunnerObserver.Create;
-  LSetup := Default(TGameSetup);
+  LSetup := Default(TGameSetup); LSetup.Variant:=DefaultGameVariant;
   LSetup.StartingFEN := 'W:0';
   LSetup.WhitePlayer := pkHuman;
   LSetup.BlackPlayer := pkHuman;
@@ -758,6 +758,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckRootSideFollowsVariant;
   CheckActorOnInjectedVariant;
   CheckCompletedMovesWithEquivalentSpellings;

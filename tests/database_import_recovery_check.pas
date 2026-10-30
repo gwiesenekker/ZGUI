@@ -3,7 +3,7 @@ program database_import_recovery_check;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, SysUtils, Process, SQLite3Conn, SQLDB, uDraughtsBoard, uGameDatabase, uDraughtsPdn, uGameTreeNodeData, uDraughtsPosition;
+  Classes, SysUtils, Process, SQLite3Conn, SQLDB, uDraughtsBoard, uGameDatabase, uDraughtsPdn, uGameTreeNodeData, uDraughtsPosition, uGamePosition;
 
 type
   TImportObserver = class
@@ -452,6 +452,7 @@ var
   Observer: TImportObserver;
   Imported, Duplicates, Errors: Integer;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--crash-import' then
   begin
     Database := TGameDatabase.Create;

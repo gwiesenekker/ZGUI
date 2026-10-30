@@ -1,6 +1,6 @@
 program game_tree_index_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uGameTree, uDraughtsPosition;
+uses Classes, SysUtils, uGameTree, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 var Tree: TGameTree; Seen, Live: TStringList;
@@ -31,7 +31,7 @@ var LocalTree: TGameTree; Node, Added: TGameTreePlyNode;
   Removed: array of Int64; Trimmed: array[6..200] of Int64;
   I, J, K: Integer; RootId, TipId: Int64; Before: QWord;
 begin
-  LocalTree := TGameTree.Create;
+  LocalTree := TGameTree.Create(DefaultGameVariant);
   try
     RootId := LocalTree.Root.NodeId;
     LocalTree.RecordMainlineMove(1, '32-28'); LocalTree.RecordMainlineMove(2, '18-23');
@@ -73,8 +73,9 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckLargeRemovalBatches;
-  Tree := TGameTree.Create; Seen := TStringList.Create; Live := TStringList.Create;
+  Tree := TGameTree.Create(DefaultGameVariant); Seen := TStringList.Create; Live := TStringList.Create;
   try
     CheckIndex;
     for I := 1 to 25 do

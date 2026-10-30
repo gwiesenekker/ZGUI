@@ -15,13 +15,11 @@ uses
 
 var
   Chess: TChessVariant;
-  PreviousVariant: TGameVariant;
 
 begin
   RequireDerivedFormResource := False;
   // Select the game explicitly before any GUI object asks for the default.
   // Linked draughts adapters stay available to their existing legacy consumers.
-  PreviousVariant := DefaultGameVariant;
   Chess := TChessVariant.Create;
   RegisterGame(Chess,ChessGuiProfile);
   RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
@@ -36,7 +34,7 @@ begin
     // The selected variant outlives all its trees, browsers and board views.
     if Application.MainForm <> nil then Application.MainForm.Free;
     MainForm := nil;
-    RegisterDefaultGameVariant(PreviousVariant);
+    RegisterDefaultGameVariant(nil);
     ClearRegisteredGames;
   end;
 end.

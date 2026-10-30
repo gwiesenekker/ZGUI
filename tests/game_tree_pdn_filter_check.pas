@@ -5,7 +5,7 @@ program game_tree_pdn_filter_check;
 uses
   Classes, SysUtils, Base64, uDraughtsBoard, uGameOrchestrator, uGameTree, uGameTreeBuilder,
   uGameTreePdn, uGameTreeSearchRef, uPvSnapshot, uTreeTestUtils, uDraughtsPdn,
-  uGameTreeNodeData, uDraughtsPosition;
+  uGameTreeNodeData, uDraughtsPosition, uGamePosition;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -44,8 +44,8 @@ var
   VariationIndex: Integer;
   VariationNode: TGameTreePlyNode;
 begin
-  GameTreeA := TGameTree.Create;
-  GameTreeB := TGameTree.Create;
+  GameTreeA := TGameTree.Create(DefaultGameVariant);
+  GameTreeB := TGameTree.Create(DefaultGameVariant);
   try
     Check(GameTreeA.GameTreeId > 0, 'game tree id should be positive');
     Check(GameTreeB.GameTreeId > 0, 'second game tree id should be positive');
@@ -118,7 +118,7 @@ var
   VariationIndex: Integer;
   VariationMoves: TStringList;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   VariationMoves := TStringList.Create;
   try
     GameTree.BeginRebuild('stable', 'Event', 'White', 'Black', '*',
@@ -201,7 +201,7 @@ var
   Moves: TStringList;
   Text: string;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   Moves := TStringList.Create;
   Annotations := TStringList.Create;
   try
@@ -248,7 +248,7 @@ var
   SawEngineMove: Boolean;
   Text: string;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   try
     GameTree.BeginRebuild('test', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
@@ -417,7 +417,7 @@ var
   Text: string;
   VariationIndex: Integer;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   Moves := TStringList.Create;
   try
     GameTree.BeginRebuild('variations', 'Event', 'White', 'Black', '*',
@@ -458,7 +458,7 @@ var
   Options: TGameTreePdnRenderOptions;
   Text: string;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   try
     GameTree.BeginRebuild('black-start', 'Event', 'White', 'Black', '*',
       'B:W31-50:B1-20');
@@ -482,7 +482,7 @@ var
   Text: string;
   VariationIndex: Integer;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   Moves := TStringList.Create;
   try
     GameTree.BeginRebuild('plain-variation-annotation', 'Event', 'White',
@@ -512,7 +512,7 @@ var
   Text: string;
   VariationIndex: Integer;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   Moves := TStringList.Create;
   try
     GameTree.BeginRebuild('full-pdn-variations', 'Export Event', 'White',
@@ -541,7 +541,7 @@ end;
 procedure CheckVariationNumbering;
 var Tree: TGameTree; Text: string;
 begin
-  Tree := TGameTree.Create;
+  Tree := TGameTree.Create(DefaultGameVariant);
   try
     Tree.BeginRebuild('numbers', 'Numbers', 'White', 'Black', '*', DefaultStartingFEN);
     Tree.RecordMainlineMove(1, '32-28');
@@ -557,7 +557,7 @@ const Fen = 'B:WK21,26:B1,31,39,14,17,19';
 var Tree: TGameTree; Game: TPdnGame; Games: TList; Board: TDraughtsBoard;
   Text, Legal: string; Moves: TStringList; I, Writer: Integer;
 begin
-  Tree := TGameTree.Create; Game := TPdnGame.Create; Games := TList.Create;
+  Tree := TGameTree.Create(DefaultGameVariant); Game := TPdnGame.Create; Games := TList.Create;
   Board := TDraughtsBoard.Create; Moves := TStringList.Create;
   try
     Tree.BeginRebuild('ambiguous', 'Capture', 'White', 'Black', '*', Fen);
@@ -599,7 +599,7 @@ var
   Text, FileName: string;
   I, Cycle: Integer;
 begin
-  Tree := TGameTree.Create;
+  Tree := TGameTree.Create(DefaultGameVariant);
   Games := TList.Create;
   Lines := TStringList.Create;
   FileName := GetTempFileName(GetTempDir, 'gwd');
@@ -694,6 +694,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckCompactMetadata;
   CheckVariationNumbering;
   CheckAmbiguousCaptureAfterMove;

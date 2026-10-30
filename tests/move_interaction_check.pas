@@ -114,11 +114,12 @@ var
   Move: string;
   Command: TGameTreeCommand;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckHighlights;
   CheckSelection('W:W31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50:B1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20');
   CheckSelection('W:WK32:B27,28');
   CheckSelection('W:WK21:B31,39,14,17,19');
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Board := Actor.GameTree.Variant.CreatePosition;
   try
     Check(Actor.GameTree.TryBuildPositionAtNode(Actor.GameTree.Root, Board), 'initial replay');

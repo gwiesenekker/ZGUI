@@ -1,12 +1,13 @@
 program database_import_worker_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase, uDatabaseImportWorker, uDraughtsPosition;
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase, uDatabaseImportWorker, uDraughtsPosition, uGamePosition;
 procedure Check(Condition: Boolean; const Text: string);
 begin if not Condition then raise Exception.Create(Text); end;
 var Database: TGameDatabase; Worker: TDatabaseImportWorker;
   State: TDatabaseImportState; Lines: TStringList; Name, DbName: string;
   Started: QWord; Games: TList; I: Integer;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   Name := GetTempFileName(GetTempDir, 'gwdworker'); DbName := Name + '.db';
   Database := TGameDatabase.Create; Lines := TStringList.Create; Games := TList.Create;
   try

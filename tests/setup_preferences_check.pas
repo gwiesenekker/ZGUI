@@ -84,7 +84,7 @@ procedure DraftDialog;
 var D:TPositionSetupForm;R:TReceiver;Edit:TEdit;Board:TGameBoardControl;
  I,J:Integer;Box:TPaintBox;Old:string;Overlap:TRect;
 begin
- D:=TPositionSetupForm.Create(nil);R:=TReceiver.Create;
+ D:=TPositionSetupForm.Create(nil,DefaultGameVariant);R:=TReceiver.Create;
  try
   D.OnAccepted:=@R.Setup;D.StartSetup(ChessStartingFEN);D.Show;Pump;
   D.Width:=520;D.Height:=420;Pump;Board:=TGameBoardControl(D.FindComponent('SetupBoard'));
@@ -262,7 +262,7 @@ begin
       D.ExePath:='/a/very/long/directory/which/should/not/determine/the/window/width/engine'+IntToStr(I)+'.exe';
       D.UciId:='Engine '+IntToStr(I);D.DxpId:='';Engines.Add(D);
     end;
-    SaveExternalEngines(EnginesJsonFileName,Engines);Form:=TEnginesDialog.Create(nil);Grid:=nil;
+    SaveExternalEngines(EnginesJsonFileName,Engines);Form:=TEnginesDialog.Create(nil,DefaultGameVariant);Grid:=nil;
     for I:=0 to Form.ComponentCount-1 do if Form.Components[I] is TStringGrid then Grid:=TStringGrid(Form.Components[I]);
     Check(Grid<>nil,'Engines list grid exists');Form.Show;Pump;
     Check((Grid.Cells[3,0]='') and (Grid.Columns[3].Title.Caption='DXP id'),
@@ -286,7 +286,7 @@ begin
         'Layout keeps complete path and identity data');
     end;
     FreeAndNil(Form);Engines.Clear;SaveExternalEngines(EnginesJsonFileName,Engines);
-    Form:=TEnginesDialog.Create(nil);Form.Font.Size:=18;Form.Show;Pump;Grid:=nil;
+    Form:=TEnginesDialog.Create(nil,DefaultGameVariant);Form.Font.Size:=18;Form.Show;Pump;Grid:=nil;
     for I:=0 to Form.ComponentCount-1 do if Form.Components[I] is TStringGrid then Grid:=TStringGrid(Form.Components[I]);
     Check(Grid<>nil,'Empty engines list grid exists');
     for Col:=1 to 3 do CheckMeasuredColumn(Grid,Col);
@@ -330,7 +330,7 @@ begin
     Definition.Kind:=eekUci;Definition.ExePath:=Name;
     LongName:='An unusually long engine parameter name used to check measured column width';
     Params:=nil;AddOrUpdateParam(Params,LongName,'string','value',False);
-    SaveEngineParamsToJson(ParamFile,'uci',Params);Editor:=TEngineEditForm.Create(nil);
+    SaveEngineParamsToJson(ParamFile,'uci',Params);Editor:=TEngineEditForm.Create(nil,DefaultGameVariant);
     Editor.Font.Size:=16;Editor.LoadEngine(Definition);Grid:=nil;
     for I:=0 to Editor.ComponentCount-1 do if Editor.Components[I] is TStringGrid then Grid:=TStringGrid(Editor.Components[I]);
     Check(Grid<>nil,'Engine parameter grid exists');Bitmap.Canvas.Font.Assign(Grid.Font);

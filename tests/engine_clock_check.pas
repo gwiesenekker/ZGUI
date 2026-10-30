@@ -176,7 +176,7 @@ end;
 procedure CheckHubLevel;
 var Game: TGameOrchestrator; Engine: THubEngine; Clock: TTimeControl; Text: string;
 begin
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Engine := CreateEngine('--fast-hub');
     Game.Engine[gsWhite] := Engine;
@@ -219,7 +219,7 @@ var
   Fen, MoveText: string;
   Tick: QWord;
 begin
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Engine := CreateEngine(Mode);
     Game.Engine[Side] := Engine;
@@ -274,7 +274,7 @@ var
   Engine: THubEngine;
   Clock: TTimeControl;
 begin
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Engine := CreateEngine('--fast-hub');
     Game.Engine[gsWhite] := Engine;
@@ -304,7 +304,7 @@ var
   Engine: THubEngine;
   Moves: TGameMoveDataArray;
 begin
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Engine := CreateEngine('--history-hub');
     Game.Engine[gsWhite] := Engine;
@@ -344,7 +344,7 @@ begin
     for SourceIndex := 0 to 1 do
       for Used := 49 to 51 do
       begin
-        Game := TGameOrchestrator.Create;
+        Game := TGameOrchestrator.Create(DefaultGameVariant);
         try
           Clock := DefaultTimeControl;
           Clock.MinutesPerPeriod := 1;
@@ -397,7 +397,7 @@ var
   Engine: THubEngine;
   Clock: TTimeControl;
 begin
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Engine := CreateEngine('--recovering-hub');
     Game.Engine[gsWhite] := Engine;
@@ -421,6 +421,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if Pos('-hub', ParamStr(1)) > 0 then
   begin
     FakeHub(ParamStr(1));

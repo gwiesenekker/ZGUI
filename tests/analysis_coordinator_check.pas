@@ -15,7 +15,7 @@ var Actor: TGameTreeActor; Pv: TAnalysisPvState; Display: TDisplayedPosition;
   Board, Visible: TGamePosition; Node: TGameTreePlyNode;
   BasePly: Integer; Text, Score, Depth, TimeText, Key: string;
 begin
-  Actor := TGameTreeActor.Create; Pv := TAnalysisPvState.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True); Pv := TAnalysisPvState.Create(DefaultGameVariant);
   Display := TDisplayedPosition.Create; Board := DraughtsVariant.CreatePosition;
   try
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
@@ -72,7 +72,7 @@ var Actor, Other: TGameTreeActor; AutoPlay: TAutoPlayCoordinator;
   Board: TGamePosition; Command: TGameTreeCommand; Search: TGameTreeSearchRef;
   Node: TGameTreePlyNode; ErrorText: string;
 begin
-  Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True); Other := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   AutoPlay := TAutoPlayCoordinator.Create; Board := DraughtsVariant.CreatePosition;
   try
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
@@ -211,8 +211,8 @@ var Actor, Previous: TGameTreeActor; Coordinator: TAnalysisCoordinator;
   Snapshot: TPvSnapshot; Command: TGameTreeCommand; Tree: TGameTree;
   ErrorText, Key: string;
 begin
-  Actor := TGameTreeActor.Create; Previous := TGameTreeActor.Create;
-  Coordinator := TAnalysisCoordinator.Create; Display := TDisplayedPosition.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True); Previous := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
+  Coordinator := TAnalysisCoordinator.Create(DefaultGameVariant); Display := TDisplayedPosition.Create;
   Board := DraughtsVariant.CreatePosition; OtherBoard := DraughtsVariant.CreatePosition;
   Snapshot := TPvSnapshot.Create;
   try
@@ -303,12 +303,13 @@ var Actor, Other: TGameTreeActor; Coordinator: TAnalysisCoordinator;
   Node, ResolvedNode: TGameTreePlyNode; Search, NewSearch: TGameTreeSearchRef;
   ErrorText, Key, Signature: string; State: TGameTreeSearchState;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckAutoPlay;
   CheckChessAutoPlay;
   CheckPvState;
   CheckRequestsAndSnapshots;
-  Actor := TGameTreeActor.Create; Other := TGameTreeActor.Create;
-  Coordinator := TAnalysisCoordinator.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True); Other := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
+  Coordinator := TAnalysisCoordinator.Create(DefaultGameVariant);
   Snapshot := TPvSnapshot.Create; Board := DraughtsVariant.CreatePosition;
   try
     Tree := Actor.GameTree;

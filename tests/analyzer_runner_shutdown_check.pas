@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, SyncObjs, uDraughtsBoard, uGameTreeSearchRef,
-  uDraughtsHubEngine, uAnalyzerRunnerThread, uEngineRegistry, uDraughtsPosition;
+  uDraughtsHubEngine, uAnalyzerRunnerThread, uEngineRegistry, uDraughtsPosition, uGamePosition;
 
 type
   TRunnerObserver = class
@@ -207,6 +207,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if (ParamStr(1) = '--unresponsive-hub') or (ParamStr(1) = '--silent-launch-hub') then
   begin
     FakeUnresponsiveHub;

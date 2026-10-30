@@ -43,7 +43,7 @@ procedure RememberGamePreference(const GameId:string);
 implementation
 
 uses
-  Classes, FPJSON, JSONParser, SysUtils;
+  Classes, FPJSON, JSONParser, SysUtils, uAtomicFile;
 
 const ScoreColorKeys: array[TScoreHistoryColor] of string = (
   'score_history_engine_nonnegative', 'score_history_engine_negative',
@@ -107,7 +107,8 @@ procedure RememberGamePreference(const GameId:string);
 var Data:TJSONObject;Lines:TStringList;
 begin
   Data:=ReadPreferenceObject;Lines:=TStringList.Create;
-  try Data.Delete('last_game');Data.Add('last_game',GameId);Lines.Text:=Data.FormatJSON([],2);Lines.SaveToFile(PreferencesJsonFileName);
+  try Data.Delete('last_game');Data.Add('last_game',GameId);Lines.Text:=Data.FormatJSON([],2);
+    WriteTextFileAtomically(PreferencesJsonFileName,Lines.Text);
   finally Lines.Free;Data.Free;end;
 end;
 
@@ -312,7 +313,7 @@ begin
     Data.Add('game_preferences',Games);
     Value:=Old.Find('last_game');if Value<>nil then Data.Add('last_game',Value.Clone);
     Lines.Text := Data.FormatJSON([], 2);
-    Lines.SaveToFile(PreferencesJsonFileName);
+    WriteTextFileAtomically(PreferencesJsonFileName,Lines.Text);
   finally
     Lines.Free;
     Data.Free;Old.Free;

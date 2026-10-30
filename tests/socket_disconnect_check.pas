@@ -2,7 +2,7 @@ program socket_disconnect_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads, BaseUnix, sockets,{$ENDIF}
-  Classes, SysUtils, ssockets, uSocketSafety, uDraughtsPosition;
+  Classes, SysUtils, ssockets, uSocketSafety, uDraughtsPosition, uGamePosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -77,6 +77,7 @@ end;
 {$ENDIF}
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   {$IFDEF UNIX}
   if ParamStr(1) = '--protected' then
   begin

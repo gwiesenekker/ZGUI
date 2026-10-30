@@ -1,6 +1,6 @@
 program tournament_record_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, FPJSON, JSONParser, uTournamentStorage, uTournamentGameRecord, uDraughtsPdn, uDraughtsPosition;
+uses Classes, SysUtils, FPJSON, JSONParser, uTournamentStorage, uTournamentGameRecord, uDraughtsPdn, uDraughtsPosition, uGamePosition;
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
   if not Condition then
@@ -56,6 +56,7 @@ var
   PdnText, FileName: string;
   I: Integer;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckProjectionIdentity;
   CheckStreamedDocument;
   RecordData := TTournamentGameRecord.Create;

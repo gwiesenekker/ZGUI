@@ -2,7 +2,7 @@ program performance_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Classes, SysUtils, md5,
   uDraughtsBoard, uDraughtsPdn, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uDraughtsPosition;
+  uGameTreePdn, uGameOrchestrator, uDraughtsPosition, uGamePosition;
 var
   Games: TList; Game: TPdnGame; Root: TPdnMoveNode; Moves: TStringList;
   TreeActor, Actor: TGameTreeActor; Board: TDraughtsBoard;
@@ -26,7 +26,7 @@ end;
 function ImportGame(out ImportedNodes, ImportWarnings: Integer): TGameTreeActor;
 var Command: TGameTreeCommand;
 begin
-  Result := TGameTreeActor.Create;
+  Result := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Execute(Result, Result.CreateRebuildFromInputsCommand(
       GameTreeHeaderInput('benchmark', Game.EventName, Game.WhiteName,
@@ -65,6 +65,7 @@ begin
     FormatFloat('0.000', Milliseconds / Count), ',', Length(OutputText), ',', Hash);
 end;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   DefaultFormatSettings.DecimalSeparator := '.';
   Check((ParamCount >= 1) and (ParamCount <= 5), 'Usage: performance_check fixture.pdn [renders imports replays samples]');
   RenderCount := CountArgument(2, 100); ImportCount := CountArgument(3, 10);

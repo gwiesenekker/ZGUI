@@ -90,8 +90,7 @@ type
     procedure UpdateFieldsFromParams;
     procedure UpdateKindFields;
   public
-    constructor Create(AOwner: TComponent); override; overload;
-    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure LoadEngine(AEngine: TExternalEngineDefinition);
@@ -117,9 +116,6 @@ const
     'You can use {ip}/{host} and {port} macros.' +
     LineEnding +
     'These will be expanded into the configured host and port settings.';
-
-constructor TEngineEditForm.Create(AOwner:TComponent);
-begin Create(AOwner,DefaultGameVariant);end;
 
 constructor TEngineEditForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var

@@ -5,7 +5,7 @@ program board_regression_check;
 uses
   Classes, SysUtils,
   uDraughtsBoard,
-  uDraughtsDxpProtocol, uDraughtsPosition;
+  uDraughtsDxpProtocol, uDraughtsPosition, uGamePosition;
 
 const
   ReplayMoves: array[0..13] of string = (
@@ -520,6 +520,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckCopyConstruction;
   CheckMoveNormalization;
   CheckLegalMoveComparison;

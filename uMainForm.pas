@@ -641,7 +641,7 @@ begin
   FStartingFEN := DefaultGameVariant.DefaultStartingFEN;
   FGameState := gosWaiting;
   FGameResult := '*';
-  FAnalysis := TAnalysisCoordinator.Create;
+  FAnalysis := TAnalysisCoordinator.Create(DefaultGameVariant);
   FAutoPlay := TAutoPlayCoordinator.Create;
   FDisplayedPosition := TDisplayedPosition.Create;
 
@@ -667,7 +667,7 @@ begin
   FViewedGameId := -1;
   FGameLog := TStringList.Create;
   FMoveInteraction := TMoveInteraction.Create;
-  FGameTree := TGameTree.Create;
+  FGameTree := TGameTree.Create(DefaultGameVariant);
   FGameTreeActor := TGameTreeActor.Create(FGameTree, False);
   FGames := TList.Create;
   FGuiEventQueue := TThreadMessageQueue.Create(True);
@@ -1507,7 +1507,7 @@ begin
   for I:=0 to RegisteredGameCount-1 do if RegisteredGame(I)<>C.Variant then begin
     C:=TGameUiContext.Create;C.Variant:=RegisteredGame(I);
     C.FGameTree:=TGameTree.Create(C.Variant);C.FGameTreeActor:=TGameTreeActor.Create(C.FGameTree,False);
-    C.FBoard:=C.Variant.CreatePosition;C.FAnalysis:=TAnalysisCoordinator.Create;
+    C.FBoard:=C.Variant.CreatePosition;C.FAnalysis:=TAnalysisCoordinator.Create(C.Variant);
     C.FStandaloneWhitePlayerName:='White';C.FStandaloneBlackPlayerName:='Black';C.FStandaloneEventName:='?';
     C.AnalyzerLogText:='Annotator closed';C.MctsLogText:='MCTS annotator closed';C.SecondsText:='1';
     LoadGuiPreferences(C.FPreferences,GameVariantId(C.Variant));FGameContexts.Add(C);

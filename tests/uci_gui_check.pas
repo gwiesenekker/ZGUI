@@ -104,7 +104,7 @@ end;
 procedure EditorDefaults;
 var F:TEngineEditForm;D:TExternalEngineDefinition;V:TGameVariant;I:Integer;Kind:TComboBox;Init:TMemo;
 begin
-  V:=DefaultGameVariant;F:=TEngineEditForm.Create(nil);D:=TExternalEngineDefinition.Create;
+  V:=DefaultGameVariant;F:=TEngineEditForm.Create(nil,DefaultGameVariant);D:=TExternalEngineDefinition.Create;
   try
     Kind:=nil;Init:=nil;
     for I:=0 to F.ComponentCount-1 do if F.Components[I] is TComboBox then
@@ -138,7 +138,7 @@ begin
   P:=nil; AddOrUpdateParam(P,'legacy','string','preserved',False); SaveEngineParamsToJson(Name,'hub',P);
   D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=Exe; D.Arguments:='--fake-uci';
   D.UciId:='Saved GUI UCI'; D.IniFileName:=IniName; D.IniContent:='retained=ini';
-  F:=TEngineEditForm.Create(nil); Lines:=TStringList.Create;
+  F:=TEngineEditForm.Create(nil,DefaultGameVariant); Lines:=TStringList.Create;
   try
     F.LoadEngine(D); G:=GridOf(F); Tick:=GetTickCount64; Button(F,'Launch engine').Click;
     Check(GetTickCount64-Tick<200,'Discovery returns immediately');
@@ -265,7 +265,7 @@ var F:TMainForm;Engines:TExternalEngineList;D:TExternalEngineDefinition;
   procedure StartStopped(const Fen:string);
   var Setup:TGameSetup;Game:TRunningGame;Started:QWord;
   begin
-    Setup:=Default(TGameSetup);Setup.StartingFEN:=Fen;Setup.TimeControl:=ChessGuiProfile.DefaultClock;
+    Setup:=Default(TGameSetup); Setup.Variant:=DefaultGameVariant;Setup.StartingFEN:=Fen;Setup.TimeControl:=ChessGuiProfile.DefaultClock;
     Game:=F.StartGameFromSetup(Setup);Started:=GetTickCount64;
     repeat Pump(F);until (Game.Lifecycle=rglRunning) or (Game.Lifecycle=rglFinished) or
       (GetTickCount64-Started>5000);
@@ -434,9 +434,9 @@ begin
   if not RealEngine then D.Arguments:='--fake-uci'; Engines.Add(D);
   if not RealEngine then begin D:=TExternalEngineDefinition.Create; D.Kind:=eekHub; D.ExePath:=Exe; D.HubId:='Not Chess'; Engines.Add(D); end;
   SaveExternalEngines(EnginesJsonFileName,Engines);
-  F:=TMainForm.Create(nil); Dialog:=TGameSetupForm.Create(F); Capture:=TGameAccept.Create; Capture.Main:=F;
+  F:=TMainForm.Create(nil); Dialog:=TGameSetupForm.Create(F,DefaultGameVariant); Capture:=TGameAccept.Create; Capture.Main:=F;
   try
-    Setup:=Default(TGameSetup); Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=ChessGuiProfile.DefaultClock;
+    Setup:=Default(TGameSetup); Setup.Variant:=DefaultGameVariant; Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=ChessGuiProfile.DefaultClock;
     BadDefinition:=TExternalEngineDefinition.Create;
     try
       BadDefinition.Kind:=eekHub; BadDefinition.ExePath:=Exe;
@@ -476,7 +476,7 @@ begin
     Text:=F.CurrentGameTreePdnText('test'); A:=TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
     try ImportChessPgn(Text,A,nil); Check(A.GameTree.MainlineCount=2,'Clocked game PGN reloads through existing adapter'); Check(A.GameTree.MainlineNode[2].HasClockInfo,'Clock annotations survive PGN reload'); finally A.Free; end;
     // Engine-as-White exercises a different player mapping through the same path.
-    Setup:=Default(TGameSetup); Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=ChessGuiProfile.DefaultClock;
+    Setup:=Default(TGameSetup); Setup.Variant:=DefaultGameVariant; Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=ChessGuiProfile.DefaultClock;
     Setup.TimeControl.MinutesPerPeriod:=0.05; Setup.TimeControl.IncrementSeconds:=0.1;
     Setup.WhitePlayer:=pkRegistered; Setup.WhiteEngine:=Engines[0]; Capture.Game:=F.StartGameFromSetup(Setup); WaitPlies(1);
     F.MarkGameStopped(Capture.Game,'done'); Tick:=GetTickCount64;

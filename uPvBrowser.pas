@@ -94,7 +94,7 @@ constructor TPvBrowser.Create(AVariant: TGameVariant;
   ABoardControl: TGameBoardControl; AInfoLabel: TLabel; APvMemo: TMemo);
 begin
   inherited Create;
-  if AVariant = nil then AVariant := DefaultGameVariant;
+  if AVariant = nil then raise EGamePositionError.Create('Missing PV game variant');
   FVariant := AVariant;
   FBaseBoard := FVariant.CreatePosition;
   FPositionClass := FBaseBoard.ClassType;

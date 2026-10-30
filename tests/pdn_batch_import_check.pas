@@ -1,7 +1,7 @@
 program pdn_batch_import_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, Math,
-  uDraughtsPdn, uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreePdn, uDraughtsPosition;
+  uDraughtsPdn, uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreePdn, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 procedure LegacyImport(Actor: TGameTreeActor; Source: TPdnMoveNode; Id: Int64;
@@ -36,7 +36,7 @@ procedure CompareImport(Root: TPdnMoveNode; const Fen: string;
 var OldActor, NewActor: TGameTreeActor; Command: TGameTreeCommand;
   Warnings: TStringList; Count: Integer;
 begin
-  OldActor := TGameTreeActor.Create; NewActor := TGameTreeActor.Create;
+  OldActor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True); NewActor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Warnings := TStringList.Create;
   try
     OldActor.GameTree.BeginRebuild('test', '?', 'White', 'Black', '*', Fen);
@@ -61,6 +61,7 @@ end;
 var Root, First, Branch, Nested, Leaf: TPdnMoveNode; I: Integer;
   Actor: TGameTreeActor; Command: TGameTreeCommand;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   Root := TPdnMoveNode.Create;
   Root.HasNodeData := True; Root.NodeData.CommentText := 'root note';
   First := Root.AddMove('32-28', True);
@@ -91,7 +92,7 @@ begin
       3: Leaf := Leaf.AddMove('6-1', True);
     end;
   CompareImport(Root, 'W:WK50:BK1', 0, 200);
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Command := Actor.CreateImportPdnTreeCommand(nil);
     try

@@ -205,6 +205,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--fake-hub' then
   begin
     FakeHub;

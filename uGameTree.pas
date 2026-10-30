@@ -164,8 +164,8 @@ type
     function FindBranchNode(AIndex, APly: Integer): TGameTreePlyNode;
     function RestoreNodeData(ANodeId: Int64; const Data: TGameTreeNodeData): Boolean;
     function RecordCompletedMoveData(APly: Integer; const AData: TGameMoveData): Boolean;
-    // AVariant = nil uses DefaultGameVariant (registered by the linked game).
-    constructor Create(AVariant: TGameVariant = nil);
+    // The caller supplies the application-owned game variant.
+    constructor Create(AVariant: TGameVariant);
     destructor Destroy; override;
     procedure Clear;
     procedure SetExtraTags(const ATags: TGameFileTags; out AChanged: Boolean);
@@ -371,7 +371,7 @@ begin
   inherited Create;
   FVariant := AVariant;
   if FVariant = nil then
-    FVariant := DefaultGameVariant;
+    raise EGamePositionError.Create('Missing game tree variant');
   FGameTreeId := AllocateGameTreeId;
   FNextNodeId := 0;
   FMainline := TFPList.Create;

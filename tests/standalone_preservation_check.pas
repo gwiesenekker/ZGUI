@@ -97,7 +97,7 @@ var Tree, Other: TGameTree; Host: TForm; View: TTreeView; Seen: TStringList;
     Check(Seen.Count = CountNodes(Tree.Root), 'layout includes every model node exactly once');
   end;
 begin
-  Tree := TGameTree.Create; Other := TGameTree.Create;
+  Tree := TGameTree.Create(DefaultGameVariant); Other := TGameTree.Create(DefaultGameVariant);
   Host := TForm.Create(nil);
   View := TTreeView.Create(nil); View.Parent := Host; Seen := TStringList.Create;
   try
@@ -312,7 +312,7 @@ begin
   DbName := FileName + '.db';
   Text := TStringList.Create;
   Games := TList.Create;
-  Form := TDatabaseForm.Create(AForm);
+  Form := TDatabaseForm.Create(AForm,DefaultGameVariant);
   Probe := TDatabaseModalProbe.Create;
   Database := TGameDatabase.Create;
   try
@@ -424,7 +424,7 @@ begin
     WhiteEngine.Arguments := '--history-white';
     BlackEngine.Assign(WhiteEngine);
     BlackEngine.Arguments := '--history-black';
-    Setup := Default(TGameSetup);
+    Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
     Setup.WhitePlayer := pkRegistered;
     Setup.BlackPlayer := pkRegistered;
     Setup.WhiteEngine := WhiteEngine;
@@ -469,7 +469,7 @@ var
 begin
   Standalone := AForm.ActiveGameTree;
   Text := GameTreeToPdnText(Standalone);
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := 'W:W31-50:B1-20';
   Setup.TimeControl := DefaultTimeControl;
   Setup.WhitePlayer := pkHuman;
@@ -829,7 +829,7 @@ var
   Key: Word;
   Text: string;
 begin
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := DefaultStartingFEN;
   Setup.TimeControl := DefaultTimeControl;
   Setup.WhitePlayer := pkHuman;
@@ -1202,7 +1202,7 @@ begin
     Check(GameTreeToPdnText(AForm.ActiveGameTree) = BeforeText,
       'standalone export must not change model headers or content');
   end;
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := DefaultStartingFEN;
   Setup.TimeControl := DefaultTimeControl;
   Game := TRunningGame.Create(999, 'Export test', nil, pkHuman, pkHuman,
@@ -1248,6 +1248,7 @@ var
   Game: TPdnGame;
   Reporter: TTestExceptionReporter;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--history-white' then
   begin
     FakeHistoryHub('32-28'); Halt(0);

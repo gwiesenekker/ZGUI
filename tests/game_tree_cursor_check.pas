@@ -3,7 +3,7 @@ program game_tree_cursor_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreeCursor, uTreeTestUtils, uDraughtsPosition;
+  uGameTreeCursor, uTreeTestUtils, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const MessageText: string);
 begin
   if not Value then raise Exception.Create(MessageText);
@@ -25,8 +25,9 @@ var
   Selected, Parent: Int64;
   Changed: Boolean;
 begin
-  Actor := TGameTreeActor.Create;
-  Other := TGameTreeActor.Create;
+  RegisterDefaultGameVariant(DraughtsVariant);
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
+  Other := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Cursor := TGameTreeCursor.Create;
   Moves := TStringList.Create;
   try

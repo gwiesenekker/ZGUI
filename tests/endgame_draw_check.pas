@@ -42,7 +42,7 @@ procedure CheckPlayedFiveMoveDraw;
 var Game: TGameOrchestrator; Candidate: TGamePosition; Seen: TStringList;
   Ply, I: Integer; Move: string; Found: Boolean;
 begin
-  Game := TGameOrchestrator.Create; Candidate := nil; Seen := TStringList.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant); Candidate := nil; Seen := TStringList.Create;
   try
     Game.NewGame('W:WK46:BK1'); Seen.Add(Game.Position.PositionKey);
     for Ply := 1 to 10 do
@@ -65,4 +65,5 @@ begin
     Check(Game.GameResult = '2-0', 'terminal capture is a win rather than a draw');
   finally Seen.Free; Candidate.Free; Game.Free; end;
 end;
-begin CheckLimits; CheckPlayedFiveMoveDraw; WriteLn('OK'); end.
+begin
+  RegisterDefaultGameVariant(DraughtsVariant); CheckLimits; CheckPlayedFiveMoveDraw; WriteLn('OK'); end.

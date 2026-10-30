@@ -29,7 +29,7 @@ uses SysUtils, Math;
 function GameSetupVariant(const Setup:TGameSetup):TGameVariant;
 begin
   Result:=Setup.Variant;
-  if Result=nil then Result:=DefaultGameVariant; // Legacy callers during migration.
+  if Result=nil then raise EGamePositionError.Create('Missing game setup variant');
 end;
 procedure ValidateGameSetup(const Setup: TGameSetup; Variant: TGameVariant; Allowed: TExternalEngineKinds);
 var P: TGamePosition;
@@ -40,7 +40,7 @@ var P: TGamePosition;
     if EngineExecutableProblem(Engine)<>'' then raise EConvertError.Create(EngineExecutableProblem(Engine));
   end;
 begin
-  if (Setup.Variant<>nil) and (Setup.Variant<>Variant) then raise EConvertError.Create('Game setup variant mismatch');
+  if GameSetupVariant(Setup)<>Variant then raise EConvertError.Create('Game setup variant mismatch');
   if (Setup.TimeControl.MovesPerPeriod<0) or IsNan(Setup.TimeControl.MinutesPerPeriod) or
     IsInfinite(Setup.TimeControl.MinutesPerPeriod) or (Setup.TimeControl.MinutesPerPeriod<=0) or
     (Setup.TimeControl.MinutesPerPeriod>MaxDouble/60) or IsNan(Setup.TimeControl.IncrementSeconds) or

@@ -169,11 +169,7 @@ function GameSideForPly(AStartSide: TGameSide; APly: Integer): TGameSide;
   ASource = nil leaves ATarget unchanged. }
 procedure AssignGamePosition(var ATarget: TGamePosition; ASource: TGamePosition);
 
-{ The variant used when a generic object is created without one. A game unit
-  registers itself in its initialization section, so a program selects its
-  game by linking that unit (for draughts, the draughts position unit). }
-type TDefaultGameVariantFactory = function:TGameVariant;
-procedure RegisterDefaultGameVariantFactory(AFactory:TDefaultGameVariantFactory);
+{ Startup selection only. Context constructors require an explicit variant. }
 procedure RegisterDefaultGameVariant(AVariant: TGameVariant);
 function DefaultGameVariant: TGameVariant;
 
@@ -181,10 +177,6 @@ implementation
 
 var
   GDefaultVariant: TGameVariant = nil;
-  GDefaultFactory:TDefaultGameVariantFactory=nil;
-
-procedure RegisterDefaultGameVariantFactory(AFactory:TDefaultGameVariantFactory);
-begin GDefaultFactory:=AFactory;end;
 
 procedure RegisterDefaultGameVariant(AVariant: TGameVariant);
 begin
@@ -193,10 +185,8 @@ end;
 
 function DefaultGameVariant: TGameVariant;
 begin
-  if (GDefaultVariant=nil) and Assigned(GDefaultFactory) then Exit(GDefaultFactory());
   if GDefaultVariant = nil then
-    raise EGamePositionError.Create('No game variant is registered; link a game ' +
-      'position unit into the program');
+    raise EGamePositionError.Create('No startup game selected; register it explicitly before creating the main form');
   Result := GDefaultVariant;
 end;
 

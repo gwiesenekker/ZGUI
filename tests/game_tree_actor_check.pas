@@ -8,7 +8,7 @@ uses
   {$ENDIF}
   Classes, SysUtils, Math, uGameTreeNodeData,
   uDraughtsBoard, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreeSearchRef, uDraughtsPdn, uPdnText, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition;
+  uGameTreeSearchRef, uDraughtsPdn, uPdnText, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition, uGamePosition;
 
 type
   TQueuedCommandObserver = class
@@ -44,7 +44,7 @@ procedure CheckFreshGameTreeDefaults;
 var
   GameTree: TGameTree;
 begin
-  GameTree := TGameTree.Create;
+  GameTree := TGameTree.Create(DefaultGameVariant);
   try
     Check(GameTree.StartingFEN = DefaultStartingFEN,
       'fresh game tree should default to the initial position FEN');
@@ -72,7 +72,7 @@ var
   RevisionAfterTimeControl: Int64;
   VariationNode: TGameTreePlyNode;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   EmptyAnnotations := TStringList.Create;
   try
@@ -434,7 +434,7 @@ var
   Search: TGameTreeSearchRef;
   State: TGameTreeSearchState;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Observer := TQueuedCommandObserver.Create;
   try
     Actor.GameTree.BeginRebuild('queue', 'Event', 'White', 'Black', '*',
@@ -538,7 +538,7 @@ var
   Search: TGameTreeSearchRef;
   State: TGameTreeSearchState;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Actor.GameTree.BeginRebuild('queued-search-target', 'Event', 'White',
       'Black', '*', 'W:W31-50:B1-20');
@@ -605,7 +605,7 @@ var
   StartCommand: TGameTreeCommand;
   State: TGameTreeSearchState;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Actor.GameTree.BeginRebuild('search', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
@@ -823,7 +823,7 @@ var
   StartCommand: TGameTreeCommand;
   State: TGameTreeSearchState;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   try
     Actor.GameTree.BeginRebuild('search-rebuild', 'Event', 'White', 'Black',
@@ -909,7 +909,7 @@ var
   Node: TGameTreePlyNode;
   RevisionAfterPV: Int64;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Actor.GameTree.BeginRebuild('pv', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
@@ -1020,7 +1020,7 @@ var
   MainlineNode: TGameTreePlyNode;
   VariationNode: TGameTreePlyNode;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Actor.GameTree.BeginRebuild('store-move', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
@@ -1141,7 +1141,7 @@ var
     end;
   end;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   Annotations := TStringList.Create;
   try
@@ -1346,7 +1346,7 @@ var
   Command: TGameTreeCommand;
   Node: TGameTreePlyNode;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Actor.GameTree.BeginRebuild('auto-play', 'Event', 'White', 'Black', '*',
       'W:W31-50:B1-20');
@@ -1389,7 +1389,7 @@ var
   Data: TGameTreeNodeData;
   Rev: Int64;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Data := Default(TGameTreeNodeData);
     Data.CommentText := 'restored'; Data.EnginePV := '32-28';
@@ -1413,6 +1413,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckRestoreNodeData;
   CheckFreshGameTreeDefaults;
   CheckActorCommands;

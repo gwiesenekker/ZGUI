@@ -25,8 +25,9 @@ var
   Selected: Int64;
   Key: string;
 begin
-  Actor := TGameTreeActor.Create;
-  Other := TGameTreeActor.Create;
+  RegisterDefaultGameVariant(DraughtsVariant);
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
+  Other := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Display := TDisplayedPosition.Create;
   Board := DraughtsVariant.CreatePosition;
   Oracle := TDraughtsBoard.Create;

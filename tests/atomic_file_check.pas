@@ -1,6 +1,6 @@
 program atomic_file_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uAtomicFile, uDraughtsPosition;
+uses Classes, SysUtils, uAtomicFile, uDraughtsPosition, uGamePosition;
 procedure Check(Condition: Boolean; const Text: string);
 begin
   if not Condition then
@@ -12,6 +12,7 @@ var
   Search: TSearchRec;
   Raised: Boolean;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   Check(IsTransientPublicationError(5) and IsTransientPublicationError(32) and
     IsTransientPublicationError(33), 'transient Windows sharing and access errors are retried');
   Check(not IsTransientPublicationError(80) and not IsTransientPublicationError(3),

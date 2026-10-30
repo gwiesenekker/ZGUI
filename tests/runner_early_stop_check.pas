@@ -1,7 +1,7 @@
 program runner_early_stop_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, SyncObjs, uGameRunnerThread,
-  uAnalyzerRunnerThread, uGameSetupTypes, uGameOrchestrator, uEngineRegistry, uDraughtsBoard, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
+  uAnalyzerRunnerThread, uGameSetupTypes, uGameOrchestrator, uEngineRegistry, uDraughtsBoard, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine, uGamePosition;
 type TObserver = class
   Count: Integer;
   procedure Finished(Sender: TObject);
@@ -75,9 +75,10 @@ end;
 var Setup: TGameSetup; Observer: TObserver; Runner: TGameRunnerThread;
   Analyzer: TAnalyzerRunnerThread; Definition: TExternalEngineDefinition; I, Mode: Integer;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckDisposalDuringCompletion;
   Observer := TObserver.Create; Definition := TExternalEngineDefinition.Create;
-  Setup := Default(TGameSetup); Setup.StartingFEN := DefaultStartingFEN;
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant; Setup.StartingFEN := DefaultStartingFEN;
   Setup.TimeControl := DefaultTimeControl; Setup.WhitePlayer := pkHuman; Setup.BlackPlayer := pkHuman;
   try
     for Mode := 0 to 1 do

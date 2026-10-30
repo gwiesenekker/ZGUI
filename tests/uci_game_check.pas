@@ -180,7 +180,7 @@ var O: TObserver; R: TGameRunnerThread; Setup: TGameSetup; Tick: QWord; Done: Bo
   WR,BR,WU,BU: Double;
 begin
   O:=TObserver.Create; O.Lock:=TCriticalSection.Create; O.Data:=TGameRunnerSnapshot.Create;
-  Setup:=Default(TGameSetup); Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=DefaultTimeControl;
+  Setup:=Default(TGameSetup); Setup.Variant:=DefaultGameVariant; Setup.StartingFEN:=ChessStartingFEN; Setup.TimeControl:=DefaultTimeControl;
   Setup.TimeControl.MovesPerPeriod:=0; Setup.TimeControl.MinutesPerPeriod:=0.002; Setup.TimeControl.IncrementSeconds:=0.1;
   R:=TGameRunnerThread.Create(Setup,900,@O.Snapshot,nil);
   try

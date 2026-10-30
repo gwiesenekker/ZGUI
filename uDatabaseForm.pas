@@ -85,8 +85,7 @@ type
   protected
     procedure DoShow; override;
   public
-    constructor Create(AOwner: TComponent); override; overload;
-    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
     property ImportBusy:Boolean read FImportBusy;
     destructor Destroy; override;
@@ -120,9 +119,6 @@ begin
   else
     Result := Format('%dh %02dm', [Seconds div 3600, (Seconds mod 3600) div 60]);
 end;
-
-constructor TDatabaseForm.Create(AOwner:TComponent);
-begin Create(AOwner,DefaultGameVariant);end;
 
 constructor TDatabaseForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
@@ -915,7 +911,7 @@ procedure TDatabaseForm.SetupPositionClick(Sender: TObject);
 begin
   if FPositionSetupForm = nil then
   begin
-    FPositionSetupForm := TPositionSetupForm.Create(Self);
+    FPositionSetupForm := TPositionSetupForm.Create(Self,FVariant);
     FPositionSetupForm.OnAccepted := @SetupPositionAccepted;
     FPositionSetupForm.ApplyPreferences(FPreferences);
   end;

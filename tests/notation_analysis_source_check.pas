@@ -1,6 +1,6 @@
 program notation_analysis_source_check;
 {$mode objfpc}{$H+}{$codepage utf8}
-uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uTreeTestUtils, uNotationDocument, uNotationStyles, uDraughtsPosition;
+uses SysUtils, uGameTree, uGameTreePdn, uNotationPresentation, uTreeTestUtils, uNotationDocument, uNotationStyles, uDraughtsPosition, uGamePosition;
 procedure Check(B: Boolean; const Text: string);
 begin if not B then raise Exception.Create(Text); end;
 procedure Fixture(BlackStart: Boolean; MoveCount: Integer);
@@ -9,7 +9,7 @@ var Tree: TGameTree; Presenter: TNotationPresentation; Options: TGameTreePdnRend
     Counts: array[TNotationAnalysisSource] of Integer; Doc: TNotationDocument; ExpectedStyle: TNotationStyle; Changed: Boolean;
     PV, Before: string; Selection: TNotationSelection; Target: TNotationBrowseTarget;
 begin
-  Tree := TGameTree.Create; Presenter := TNotationPresentation.Create; Doc := TNotationDocument.Create;
+  Tree := TGameTree.Create(DefaultGameVariant); Presenter := TNotationPresentation.Create; Doc := TNotationDocument.Create;
   try
     if BlackStart then Tree.BeginRebuild('black', '?', 'W', 'B', '*', 'B:W31-50:B1-20');
     Tree.RecordNodeAnnotation(Tree.Root, 'Unicode 棋 😀');
@@ -67,6 +67,7 @@ begin
   finally Doc.Free; Presenter.Free; Tree.Free; end;
 end;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   Fixture(False,0); Fixture(False,1); Fixture(True,0); Fixture(True,1);
   WriteLn('Notation analysis-source checks passed');
 end.

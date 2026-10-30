@@ -149,7 +149,7 @@ type
       ANode: TGameTreePlyNode; const AMoveText: string;
       out AChanged: Boolean): Boolean;
   public
-    constructor Create(AGameTree: TGameTree = nil;
+    constructor Create(AGameTree: TGameTree;
       AOwnsGameTree: Boolean = True);
     destructor Destroy; override;
 
@@ -291,16 +291,9 @@ constructor TGameTreeActor.Create(AGameTree: TGameTree;
   AOwnsGameTree: Boolean);
 begin
   inherited Create;
-  if AGameTree = nil then
-  begin
-    FGameTree := TGameTree.Create;
-    FOwnsGameTree := True;
-  end
-  else
-  begin
-    FGameTree := AGameTree;
-    FOwnsGameTree := AOwnsGameTree;
-  end;
+  if AGameTree = nil then raise EGamePositionError.Create('Missing actor game tree');
+  FGameTree := AGameTree;
+  FOwnsGameTree := AOwnsGameTree;
   FCommandQueue := TThreadMessageQueue.Create(True);
   FSearches := TObjectList.Create(True);
 end;

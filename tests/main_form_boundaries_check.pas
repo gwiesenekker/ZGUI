@@ -234,7 +234,7 @@ begin
     Form.LoadStandaloneFen('W:WK32:B27,28');
     Id := Form.ActiveGameTree.GameTreeId; BeforeText := GameTreeToPdnText(Form.ActiveGameTree);
     GuiTestConfirmationResult := 0; // Any unwanted prompt now fails the test.
-    Setup := Default(TGameSetup); Setup.StartingFEN := DefaultStartingFEN;
+    Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant; Setup.StartingFEN := DefaultStartingFEN;
     Setup.TimeControl := DefaultTimeControl; Setup.WhitePlayer := pkHuman; Setup.BlackPlayer := pkHuman;
     Running := Form.StartGameFromSetup(Setup);
     Check(Form.ActiveGameTree = Running.GameTree, 'new running game is displayed without a replacement prompt');
@@ -336,7 +336,7 @@ begin
     Params := nil; AddOrUpdateParam(Params, 'gui-engine-supports-mcts', 'bool', 'true', False);
     SaveEngineParamsToJson(ParamFile, 'hub', Params);
     Form := TMainForm.Create(nil);
-    Setup := Default(TGameSetup); Setup.StartingFEN := DefaultStartingFEN;
+    Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant; Setup.StartingFEN := DefaultStartingFEN;
     Setup.WhitePlayer := pkHuman; Setup.BlackPlayer := pkHuman; Setup.TimeControl := DefaultTimeControl;
     Game := Form.StartGameFromSetup(Setup);
     Tick := GetTickCount64;
@@ -580,7 +580,7 @@ begin
   AddOrUpdateParam(Params, 'path', 'string', 'valid', False);
   SaveEngineParamsToJson(ParamName, 'hub', Params);
   Lines.LoadFromFile(ParamName); Before := Lines.Text;
-  Form := TEngineEditForm.Create(nil);
+  Form := TEngineEditForm.Create(nil,DefaultGameVariant);
   try
     Form.LoadEngine(Definition); Grid := nil;
     for I := 0 to Form.ComponentCount - 1 do
@@ -677,6 +677,7 @@ end;
 
 var Reporter: TExceptionReporter;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--boundary-hub' then begin FakeHub; Halt(0); end;
   RequireDerivedFormResource := False; Application.Initialize;
   Reporter := TExceptionReporter.Create; Application.OnException := @Reporter.Report;

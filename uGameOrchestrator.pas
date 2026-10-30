@@ -83,7 +83,7 @@ type
     function EngineClock(Side: TGameSide): TEngineGameClockState;
   public
     // AVariant: the game; nil uses the registered default game.
-    constructor Create(AVariant: TGameVariant = nil);
+    constructor Create(AVariant: TGameVariant);
     destructor Destroy; override;
 
     procedure NewGame(const AStartingFEN: string);
@@ -156,7 +156,7 @@ constructor TGameOrchestrator.Create(AVariant: TGameVariant);
 begin
   inherited Create;
   if AVariant = nil then
-    AVariant := DefaultGameVariant;
+    raise EGamePositionError.Create('Missing game variant');
   FVariant := AVariant;
   FPosition := FVariant.CreatePosition;
   FRules := FVariant.CreateRules;

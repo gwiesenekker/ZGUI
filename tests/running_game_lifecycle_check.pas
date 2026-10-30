@@ -7,7 +7,7 @@ uses
   cthreads,
   {$ENDIF}
   Classes, SysUtils, SyncObjs, uThreadMessageQueue, uPvSnapshot, uAnalyzerRunnerThread, uGameTreeSearchRef, uRunningGame, uGameGuiMessages, uGameRunnerThread,
-  uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
+  uEngineRegistry, uDraughtsBoard, uGameSetupTypes, uGameMoveHistory, uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine, uGamePosition;
 
 type
   TLogRunner = class(TGameRunnerThread)
@@ -121,7 +121,7 @@ var Setup: TGameSetup; Definition: TExternalEngineDefinition;
   Observer: TObserver; Runner: TGameRunnerThread;
 begin
   Definition := TExternalEngineDefinition.Create; Observer := TObserver.Create;
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := DefaultStartingFEN; Setup.TimeControl := DefaultTimeControl;
   Setup.WhitePlayer := pkRegistered; Setup.BlackPlayer := pkHuman;
   Definition.Kind := eekHub; Definition.HubId := 'LiveHub';
@@ -147,7 +147,7 @@ var
   Input: TRunningSnapshotTreeInput;
   Ready, Complete: Boolean;
 begin
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := 'W:W31-50:B1-20';
   Setup.WhitePlayer := pkHuman;
   Setup.BlackPlayer := pkHuman;
@@ -192,7 +192,7 @@ var
   Snapshot: TGameRunnerSnapshot;
   Command: TGameTreeCommand;
 begin
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := 'W:W31-50:B1-20';
   Setup.TimeControl := DefaultTimeControl;
   Game := TRunningGame.Create(2, 'lifecycle', nil, pkHuman, pkHuman,
@@ -247,7 +247,7 @@ var
   Moves: TGameMoveDataArray;
   CopySnapshot: TGameRunnerSnapshot;
 begin
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := 'W:W31-50:B1-20';
   Setup.WhitePlayer := pkHuman;
   Setup.BlackPlayer := pkHuman;
@@ -333,7 +333,7 @@ var Setup, CopySetup: TGameSetup; Game: TRunningGame;
   Snapshot: TGameRunnerSnapshot; Data: TRunningSnapshotTreeInput;
   Log: TRunningSnapshotLogInput; Keys: TStringList;
 begin
-  Setup := Default(TGameSetup); CopySetup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant; CopySetup := Default(TGameSetup); CopySetup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := DefaultStartingFEN; Setup.TimeControl := DefaultTimeControl;
   Setup.WhiteEngine := TExternalEngineDefinition.Create;
   Setup.BlackEngine := TExternalEngineDefinition.Create;
@@ -412,6 +412,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--live-hub' then begin FakeLiveHub; Halt(0); end;
   CheckOwnedSetupAndSnapshot;
   CheckGuiMessageOwnership;

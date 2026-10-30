@@ -1,6 +1,6 @@
 program pdn_variation_identity_check;
 {$mode objfpc}{$H+}
-uses Classes, SysUtils, uDraughtsBoard, uDraughtsPdn, uGameTreeNodeData, uGameDatabase, uDraughtsPosition;
+uses Classes, SysUtils, uDraughtsBoard, uDraughtsPdn, uGameTreeNodeData, uGameDatabase, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function ReadGame(const Text: string): TPdnGame;
@@ -167,6 +167,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckEquivalentSiblings; CheckConflictingMetadata; CheckDistinctCaptures; CheckSiblingBoardRestoration;
   CheckDatabaseIdentity('W:W38:B33,24,K6',
     '(1. 38x20x24x33 {variation note} 6-11) *');

@@ -38,6 +38,7 @@ begin
  end;P.LoadFromFEN(ChessStartingFEN);
 end;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
  Base:=GetTempFileName(GetTempDir,'zdb');DeleteFile(Base);Name:=Base+'.chess';Draughts:=Base+'.draughts';Pgn:=Base+'.pgn';
  Db:=TGameDatabase.Create(gffPgn);Other:=TGameDatabase.Create;P:=TChessPosition.Create;List:=TList.Create;
  C:=TSQLite3Connection.Create(nil);T:=TSQLTransaction.Create(nil);Q:=TSQLQuery.Create(nil);

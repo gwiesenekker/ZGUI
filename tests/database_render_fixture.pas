@@ -1,11 +1,12 @@
 program database_render_fixture;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,Graphics,Classes,SysUtils,uDatabaseForm;
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,Graphics,Classes,SysUtils,uDatabaseForm, uGamePosition, uDraughtsPosition;
 var F:TDatabaseForm;B:TBitmap;I,J:Integer;OutDir:string;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  OutDir:=IncludeTrailingPathDelimiter(ParamStr(1));ForceDirectories(OutDir);
- F:=TDatabaseForm.Create(nil);B:=TBitmap.Create;
+ F:=TDatabaseForm.Create(nil,DefaultGameVariant);B:=TBitmap.Create;
  try
   F.Show;
   for I:=0 to 1 do begin

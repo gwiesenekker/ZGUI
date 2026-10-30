@@ -44,8 +44,7 @@ type
     procedure UpdatePiecePalette;
     procedure UpdatePiecePaletteLayout;
   public
-    constructor Create(AOwner: TComponent); override; overload;
-    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
@@ -58,9 +57,6 @@ implementation
 
 uses
   Math,uGameGuiProfile;
-
-constructor TPositionSetupForm.Create(AOwner:TComponent);
-begin Create(AOwner,DefaultGameVariant);end;
 
 constructor TPositionSetupForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var

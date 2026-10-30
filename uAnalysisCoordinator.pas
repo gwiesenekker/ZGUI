@@ -16,9 +16,8 @@ type
       FPrincipalVariationTimeText, FPvBasePositionKey: string;
     FPvBasePly: Integer;
   public
-    // AVariant: the game of the initial (start) positions; nil uses the
-    // registered default game.
-    constructor Create(AVariant: TGameVariant = nil);
+    // AVariant: the explicit game of the initial (start) positions.
+    constructor Create(AVariant: TGameVariant);
     destructor Destroy; override;
     procedure SetAnalyzerBase(APosition: TGamePosition; APly: Integer);
     procedure SetAnalyzerBaseFromTree(AGameTree: TGameTree; ANodeId: Int64;
@@ -103,7 +102,7 @@ type
     FAnalyzerSignature, FMctsSignature: string;
   public
     // AVariant: see TAnalysisPvState.Create.
-    constructor Create(AVariant: TGameVariant = nil);
+    constructor Create(AVariant: TGameVariant);
     destructor Destroy; override;
     procedure TrackSearch(const ASearch: TGameTreeSearchRef);
     procedure ClearSearch;
@@ -507,7 +506,7 @@ constructor TAnalysisPvState.Create(AVariant: TGameVariant);
 begin
   inherited Create;
   if AVariant = nil then
-    AVariant := DefaultGameVariant;
+    raise EGamePositionError.Create('Missing game variant');
   FAnalyzerPvBaseVariant := AVariant;
   FMainBaseVariant := AVariant;
   FAnalyzerPvBase := AVariant.CreatePosition;

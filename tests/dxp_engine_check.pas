@@ -199,7 +199,7 @@ var
 begin
   Port := AvailablePort;
   Definition := TExternalEngineDefinition.Create;
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Definition.Kind := eekDxp;
     Definition.DxpId := 'Regression DXP';
@@ -240,7 +240,7 @@ var
 begin
   Port := AvailablePort;
   Definition := TExternalEngineDefinition.Create;
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Definition.Kind := eekDxp;
     Definition.DxpId := 'Disconnected DXP';
@@ -276,7 +276,7 @@ var Definition: TExternalEngineDefinition; Game: TGameOrchestrator;
   Engine: TDxpEngine; Port: Word;
 begin
   Port := AvailablePort; Definition := TExternalEngineDefinition.Create;
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Definition.Kind := eekDxp; Definition.DxpId := 'Capture-order DXP';
     Definition.DxpRole := derListen; Definition.DxpHost := '127.0.0.1'; Definition.DxpPort := Port;
@@ -304,7 +304,7 @@ var
 begin
   Port := AvailablePort;
   Definition := TExternalEngineDefinition.Create;
-  Game := TGameOrchestrator.Create;
+  Game := TGameOrchestrator.Create(DefaultGameVariant);
   try
     Definition.Kind := eekDxp;
     Definition.DxpId := 'Silent DXP';
@@ -335,6 +335,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--peer' then
   begin
     FakePeer(StrToInt(ParamStr(2)), ParamStr(3)[1]);

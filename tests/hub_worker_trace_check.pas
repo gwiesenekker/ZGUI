@@ -49,6 +49,7 @@ end;
 var Def: TExternalEngineDefinition; Engine: THubEngine; Moves: TStringList;
   Trace,Expected,Root,ClockBefore,ClockAfter: string;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1)='--fake-trace' then begin Fake; Halt; end;
   Root:=GetEnvironmentVariable('GWDGUI_ROOT'); if Root='' then Root:=GetCurrentDir;
   Trace:=GetTempFileName(GetTempDir,'hub'); Def:=TExternalEngineDefinition.Create; Moves:=TStringList.Create;

@@ -112,6 +112,7 @@ begin
 end;
 var I:Integer;Text,Root:string;F:TStringList;G:TChessPgnDatabaseGame;W:TStringList;Rejected:Boolean;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
  V:=TChessVariant.Create;
  try
   Rejected:=False;

@@ -46,8 +46,7 @@ type
     function SelectedEngineKey(ACombo: TComboBox): string;
     function SelectedPlayer(ACombo: TComboBox): TPlayerKind;
   public
-    constructor Create(AOwner: TComponent); override; overload;
-    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure ApplyPreferences(const APreferences: TGuiPreferences);
@@ -56,9 +55,6 @@ type
   end;
 
 implementation
-
-constructor TGameSetupForm.Create(AOwner:TComponent);
-begin Create(AOwner,DefaultGameVariant);end;
 
 constructor TGameSetupForm.Create(AOwner:TComponent;AVariant:TGameVariant);
 var

@@ -351,6 +351,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckFEN;
   CheckFENDiagnostics;
   CheckSpecialMoves;

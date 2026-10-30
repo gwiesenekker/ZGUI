@@ -114,7 +114,7 @@ var H:THost;D,Reloaded:TTournamentDialog;Grid:TStringGrid;Keys:TStringList;Tick:
 begin
  if Real then begin RegisterPeers(2,'',True);Expected:=2;end else begin RegisterPeers(5,'slow');Expected:=10;end;
  H:=THost.Create;H.Games:=TList.Create;H.Main:=TMainForm.Create(nil);
- D:=TTournamentDialog.Create(H.Main);Reloaded:=nil;Keys:=TStringList.Create;
+ D:=TTournamentDialog.Create(H.Main,DefaultGameVariant);Reloaded:=nil;Keys:=TStringList.Create;
  try
   Check(TEdit(D.FindComponent('TournamentStartingFEN')).Text=ChessStartingFEN,'Chess FEN comes from profile');
   Check((TEdit(D.FindComponent('TournamentMoves')).Text='0') and
@@ -171,7 +171,7 @@ begin
   Text:=Contents(D.PdnFileName);Game:=TRunningGame(H.Games[0]);
   Check(Pos('[Date "'+FormatDateTime('yyyy.mm.dd',Game.StartedAt)+'"]',Text)>0,'P12 start date survives completed-game capture');
   Check(PgnTournamentFileMatchesId(D.PdnFileName,'')=False,'Ownership rejects an empty requested identity');
-  Reloaded:=TTournamentDialog.Create(H.Main);Reloaded.LoadTournamentFromFile(FileName);
+  Reloaded:=TTournamentDialog.Create(H.Main,DefaultGameVariant);Reloaded.LoadTournamentFromFile(FileName);
   Check((TStringGrid(Reloaded.FindComponent('TournamentPairings')).RowCount=Expected+1) and not Reloaded.IsRunning,'Reload retains completed rows without launching');
   if not Real then begin
    for I:=1 to 5 do begin
@@ -191,7 +191,7 @@ procedure CheckSwissAndValidation;
 var D,Reloaded:TTournamentDialog;Grid:TStringGrid;I,J,Byes:Integer;P:TRadioGroup;
  Before,Name:string;Raised:Boolean;Data:TJSONObject;
 begin
- RegisterPeers(5,'fast');D:=TTournamentDialog.Create(nil);Reloaded:=nil;
+ RegisterPeers(5,'fast');D:=TTournamentDialog.Create(nil,DefaultGameVariant);Reloaded:=nil;
  try
   P:=nil;for I:=0 to D.ComponentCount-1 do if D.Components[I] is TRadioGroup then P:=TRadioGroup(D.Components[I]);
   Check(P<>nil,'Existing pairing radio group');P.ItemIndex:=2;
@@ -224,7 +224,7 @@ begin
   try Data.Strings['starting_fen']:='invalid FEN';WriteFile(Directory+'/bad-fen.json',Data.AsJSON);finally Data.Free;end;
   Raised:=False;try D.LoadTournamentFromFile(Directory+'/bad-fen.json');except on E:Exception do Raised:=True;end;
   Check(Raised and (Grid.RowCount=7),'Invalid loaded root is rejected before changing the dialog');
-  Reloaded:=TTournamentDialog.Create(nil);Reloaded.LoadTournamentFromFile(Name);
+  Reloaded:=TTournamentDialog.Create(nil,DefaultGameVariant);Reloaded.LoadTournamentFromFile(Name);
   Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).RowCount=7,'Swiss rounds survive JSON reload');
  finally Reloaded.Free;D.Free;end;
 end;
@@ -233,7 +233,7 @@ var H:THost;D:TTournamentDialog;Grid:TStringGrid;Tick:QWord;Keys:TStringList;I:I
  FileName:string;Data,Rec:TJSONObject;
 begin
  RegisterPeers(2,Mode);H:=THost.Create;H.Games:=TList.Create;H.Main:=TMainForm.Create(nil);
- D:=TTournamentDialog.Create(H.Main);Keys:=TStringList.Create;
+ D:=TTournamentDialog.Create(H.Main,DefaultGameVariant);Keys:=TStringList.Create;
  try
   D.OnStartGame:=@H.Start;Configure(D,1,ChessStartingFEN);Grid:=TStringGrid(D.FindComponent('TournamentPairings'));
   FileName:=Directory+'/'+Mode+'.json';D.SaveTournamentToFile(FileName);

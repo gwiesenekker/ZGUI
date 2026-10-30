@@ -3,7 +3,7 @@ program game_tree_validation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition;
+  uGameTreePdn, uGameOrchestrator, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const MessageText: string);
 begin
   if not Value then raise Exception.Create(MessageText);
@@ -46,7 +46,7 @@ var
   ParentId: Int64;
   Node: TGameTreePlyNode;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
     ParentId := Actor.GameTree.MainlineNode[1].NodeId;
@@ -77,7 +77,7 @@ var
   Command: TGameTreeCommand;
   ParentId, ChildId: Int64;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Execute(Actor, Actor.CreateAppendMainlineMoveCommand('32-28', gmsHuman));
     ParentId := Actor.GameTree.MainlineNode[1].NodeId;
@@ -117,7 +117,7 @@ var
       AnalysisNodeId, '0.75', '38-32'));
   end;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   try
     Header := GameTreeHeaderInput('carry', 'carry', '', '', '*', '', False,
@@ -154,10 +154,11 @@ var
   Header: TGameTreeHeaderInput;
   NodeId: Int64;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckTypedBranchImport;
   CheckLiteralNodeImport;
   CheckRebuildKeepsOnlySurvivingParents;
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   Board := TDraughtsBoard.Create;
   try

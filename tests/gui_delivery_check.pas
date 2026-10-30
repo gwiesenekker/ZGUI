@@ -4,7 +4,7 @@ program gui_delivery_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Classes, SysUtils, SyncObjs,
   uMainForm, uGameGuiMessages, uGameRunnerThread, uRunningGame, uDraughtsBoard,
   uGameSetupTypes, uGameOrchestrator, uGameTree, uThreadMessageQueue,
-  uPvSnapshot, uAnalysisCoordinator, uGameTreeSearchRef, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
+  uPvSnapshot, uAnalysisCoordinator, uGameTreeSearchRef, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine, uGamePosition;
 type
   TCollector = class
     Lock: TCriticalSection;
@@ -199,10 +199,11 @@ begin
 end;
 var Collector: TCollector; Setup: TGameSetup; I: Integer;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   RequireDerivedFormResource := False; Application.Initialize;
   Collector := TCollector.Create; Collector.Lock := TCriticalSection.Create;
   Collector.Ready := TEvent.Create(nil, True, False, '');
-  Setup := Default(TGameSetup); Setup.StartingFEN := DefaultStartingFEN;
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant; Setup.StartingFEN := DefaultStartingFEN;
   Setup.TimeControl := DefaultTimeControl; Setup.WhitePlayer := pkHuman; Setup.BlackPlayer := pkHuman;
   try
     GetSamples(Collector, Setup);

@@ -5,7 +5,7 @@ program game_preservation_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, StrUtils, uGameTree, uGameTreeActor, uGameTreeBuilder,
-  uGameTreePdn, uGameOrchestrator, uDraughtsPdn, uPdnText, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition;
+  uGameTreePdn, uGameOrchestrator, uDraughtsPdn, uPdnText, uDraughtsBoard, uTreeTestUtils, uDraughtsPosition, uGamePosition;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -67,7 +67,7 @@ var
   Revision: Int64;
   Text: string;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Rebuild(Actor, 'import', '', '32-28 18-23 37-32');
     Execute(Actor, ImportBranch(Actor, 1,
@@ -126,7 +126,7 @@ var
 begin
   Lines := TStringList.Create;
   Annotations := TStringList.Create;
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Game := ParseGame('[Event "standard"]' + LineEnding + LineEnding +
       '1. 32-28 18-23 (1... 20-24) 2. 37-32 *');
@@ -238,7 +238,7 @@ begin
     '1... 18-23 (1... 19-23) 2. 32-28 ' +
     '(2. 33-28 {White reply} (2. 31-27 {Nested reply} 12-18) 17-22) ' +
     '23x32 3. 37x28 (3. 38x27 {White capture} 12-18) 12-18 *';
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Lines := TStringList.Create;
   Annotations := TStringList.Create;
   Board := TDraughtsBoard.Create;
@@ -297,7 +297,7 @@ begin
     '18-23 {Black reply} (1... 20-24 {First alternative comment} ' +
     '2. 37-32 {Middle comment;' + LineEnding + 'E: 0.20} ' +
     '14-20 {Last comment}) 2. 37-32 {Final mainline comment} *');
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     for Pass := 1 to 3 do
     begin
@@ -344,7 +344,7 @@ var
   First: TGameTreePlyNode;
   Original: string;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Rebuild(Actor, 'exploration', '', '32-28 18-23 37-32');
     Original := '20-24 37-32 14-20 41-37';
@@ -422,7 +422,7 @@ begin
     '2. 37-32 {Original continuation} (2. 38-32 {Nested choice} ' +
     '14-20 {Nested tail} (2... 18-22 {Deeper choice})) ' +
     '14-20 {Original tail}) 2. 37-32 *');
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     for Pass := 1 to 3 do
     begin
@@ -495,7 +495,7 @@ procedure CheckVariationsBelongToTheirGame;
 var
   Actor: TGameTreeActor;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Rebuild(Actor, 'game A', '', '32-28 18-23');
     Execute(Actor, ImportBranch(Actor, 1,
@@ -520,6 +520,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckStoredVariationsAreExported;
   CheckVariationsBelongToTheirGame;
   CheckStandardVariationPlacement;

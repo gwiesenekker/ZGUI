@@ -1,7 +1,7 @@
 program notation_analysis_order_check;
 {$mode objfpc}{$H+}
 uses Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreePdn,
-  uNotationPresentation, uTreeTestUtils, uDraughtsPosition;
+  uNotationPresentation, uTreeTestUtils, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function PvFrom(Board: TDraughtsBoard; Choice: Integer): string;
@@ -21,7 +21,7 @@ var Tree: TGameTree; Presenter: TNotationPresentation; Options: TGameTreePdnRend
   I, Base, Flags, Slot, Expected: Integer; PrefixCounts: array of Integer;
   Changed: Boolean;
 begin
-  Tree := TGameTree.Create; Presenter := TNotationPresentation.Create; Board := TDraughtsBoard.Create;
+  Tree := TGameTree.Create(DefaultGameVariant); Presenter := TNotationPresentation.Create; Board := TDraughtsBoard.Create;
   try
     if BlackStart then Tree.BeginRebuild('black', '?', 'White', 'Black', '*', 'B:W31-50:B1-20');
     Board.LoadFromFEN(Tree.StartingFEN);
@@ -90,6 +90,7 @@ begin
 end;
 var Count: Integer;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   for Count := 0 to 3 do
   begin CheckFixture(False, Count); CheckFixture(True, Count); end;
   Writeln('Analysis notation order checks passed');

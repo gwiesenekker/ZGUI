@@ -1,7 +1,7 @@
 program pdn_comment_preservation_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uDraughtsPdn, uGameTreeNodeData,
-  uGameTreeActor, uGameTree, uGameTreePdn, uDraughtsPosition;
+  uGameTreeActor, uGameTree, uGameTreePdn, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 function ReadGame(const Text: string): TPdnGame;
@@ -44,7 +44,7 @@ begin
         Check(Node.HasNodeData and (Node.NodeData.CommentText = Expected), 'trailing comments survive metadata restoration: ' + Position);
         Check((Node.NodeData.EngineScore = '0.1') and (Node.NodeData.EnginePV = Data.EnginePV) and
           (Node.NodeData.EnginePVDepth = '9'), 'extra text retains independent analysis metadata');
-        Actor := TGameTreeActor.Create;
+        Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
         try
           Command := Actor.CreateImportPdnTreeCommand(Root);
           try
@@ -91,7 +91,7 @@ begin
         else if I = 1 then Text := PdnGameToStorageText(Game, nil)
         else
         begin
-          Tree := TGameTree.Create;
+          Tree := TGameTree.Create(DefaultGameVariant);
           try
             Tree.RecordMainlineMove(1, '32-28');
             Data.CommentText := Literal; Data.EnginePV := '32-28';
@@ -113,6 +113,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckLiteralPrefixes;
   CheckTrailingComment('root'); CheckTrailingComment('move'); CheckTrailingComment('variation');
   Writeln('PDN comment preservation checks passed');

@@ -19,9 +19,10 @@ var Setup:TPositionSetupForm;F:TForm;S:TScorePaint;C:TChessPaint;P:TChessPositio
 procedure Save(const Name:string);
 begin B.SaveToFile(OutDir+Name+'.bmp');end;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  OutDir:=IncludeTrailingPathDelimiter(ParamStr(1));ForceDirectories(OutDir);
- B:=TBitmap.Create;Setup:=TPositionSetupForm.Create(nil);F:=TForm.CreateNew(nil);
+ B:=TBitmap.Create;Setup:=TPositionSetupForm.Create(nil,DefaultGameVariant);F:=TForm.CreateNew(nil);
  S:=TScorePaint.Create(F);S.Parent:=F;C:=TChessPaint.Create(F);C.Parent:=F;P:=TChessPosition.Create;
  try
   Setup.StartSetup('B:WK21,K32:BK6,27,28');Setup.Show;Application.ProcessMessages;

@@ -90,7 +90,7 @@ var Form:TDatabaseForm;Moves,GameList:TStringGrid;B:TGameBoardControl;Edit:TEdit
  begin DoubleClickCell(Moves,0,1);Check((B.Position.ToFEN=OldFen) and (Edit.Text=OriginalFen),Reason);end;
  begin
   FileName:=GetTempFileName(GetTempDir,'zdbbrowse');DatabaseName:=FileName+'.db';OtherName:=FileName+'.other';
-  Form:=TDatabaseForm.Create(nil);Text:=TStringList.Create;Expected:=TChessPosition.Create;Probe:=TContinuationImportProbe.Create;
+  Form:=TDatabaseForm.Create(nil,DefaultGameVariant);Text:=TStringList.Create;Expected:=TChessPosition.Create;Probe:=TContinuationImportProbe.Create;
   TreeId:=Main.ActiveGameTree.Root.NodeId;NodeId:=Main.ActiveGameTree.MainlineNode[1].NodeId;TreeText:=Main.CurrentGameTreePdnText('');
   try
    Form.Show;Pump;LocateControls;
@@ -163,13 +163,13 @@ var Form:TDatabaseForm;Moves,GameList:TStringGrid;B:TGameBoardControl;Edit:TEdit
     Form.Free;Form:=nil;
     ExecuteDatabaseSql(DatabaseName,'alter table unavailable_positions rename to positions');
    end;
-   Form:=TDatabaseForm.Create(nil);Form.Show;Pump;LocateControls;
+   Form:=TDatabaseForm.Create(nil,DefaultGameVariant);Form.Show;Pump;LocateControls;
    Form.OpenDatabase(DatabaseName);FindPosition(ChessStartingFEN);Advance('e4','e2e4');
    Check((Main.ActiveGameTree.Root.NodeId=TreeId) and (Main.ActiveGameTree.MainlineNode[1].NodeId=NodeId) and
      (Main.CurrentGameTreePdnText('')=TreeText),'Database browsing preserves main game nodes, moves and annotations');
    // The same handler uses the existing draughts position adapter.
    Form.Free;Form:=nil;Expected.Free;Expected:=nil;RegisterDefaultGameVariant(DraughtsVariant);
-   Form:=TDatabaseForm.Create(nil);Form.Show;Pump;LocateControls;Expected:=TDraughtsPosition.Create;
+   Form:=TDatabaseForm.Create(nil,DefaultGameVariant);Form.Show;Pump;LocateControls;Expected:=TDraughtsPosition.Create;
    Text.Text:='1.32-28 18-23 2.37-32 *';Text.SaveToFile(FileName);
    Form.CreateDatabase(DatabaseName+'.draughts');Form.ImportPdnFile(FileName);FindPosition(Expected.ToFEN);
    Advance('32-28','32-28');Check(Moves.Cells[0,1]='18-23','Draughts searches next continuation');Advance('18-23','18-23');
@@ -184,10 +184,10 @@ begin
  Main:=nil;F:=nil;
  try
   // Same control geometry except the explicitly requested wider chess FEN column.
-  RegisterDefaultGameVariant(DraughtsVariant);F:=TDatabaseForm.Create(nil);F.Show;Pump;
+  RegisterDefaultGameVariant(DraughtsVariant);F:=TDatabaseForm.Create(nil,DefaultGameVariant);F.Show;Pump;
   SetLength(Bounds,F.ComponentCount);
   for I:=0 to F.ComponentCount-1 do if F.Components[I] is TControl then Bounds[I]:=TControl(F.Components[I]).BoundsRect;
-  F.Free;F:=nil;RegisterDefaultGameVariant(V);F:=TDatabaseForm.Create(nil);F.Show;Pump;
+  F.Free;F:=nil;RegisterDefaultGameVariant(V);F:=TDatabaseForm.Create(nil,DefaultGameVariant);F.Show;Pump;
   Check(F.ComponentCount=Length(Bounds),'Existing component count');
   Board:=nil;
   for I:=0 to F.ComponentCount-1 do if F.Components[I] is TGameBoardControl then

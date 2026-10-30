@@ -1,7 +1,7 @@
 program game_runner_history_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uDraughtsBoard, uGameOrchestrator, uGameMoveHistory,
-  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uDraughtsPosition;
+  uGameTree, uGameTreeActor, uGameTreeBuilder, uGameTreePdn, uDraughtsPosition, uGamePosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -47,8 +47,9 @@ begin
 end;
 
 begin
-  Actor := TGameTreeActor.Create;
-  Appended := TGameTreeActor.Create;
+  RegisterDefaultGameVariant(DraughtsVariant);
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
+  Appended := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   try
     Moves.Add('32-28'); Moves.Add('18-23'); Moves.Add('37-32');

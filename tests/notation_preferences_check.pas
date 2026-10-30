@@ -3,7 +3,7 @@ program notation_preferences_check;
 uses {$IFDEF UNIX}cthreads, cwstring,{$ENDIF} Interfaces, Forms, Classes, SysUtils,
   StdCtrls, Controls, ComCtrls, Graphics, Types, LCLType, LMessages, uTreeTestUtils, uPreferences, uPreferencesForm,
   uNotationStyles, uNotationPresentation, uGameTree, uGameTreePdn, uGameNotationView,
-  uNotationHighlighter, uDraughtsPosition;
+  uNotationHighlighter, uDraughtsPosition, uGamePosition;
 type
   TFontChoicePreferences = class(TPreferencesForm)
   public
@@ -39,6 +39,7 @@ var Prefs, Loaded: TGuiPreferences; S: TNotationStyle; Existing: TMemoryStream;
     Before, Expected: string; R: TNotationRange; Highlighter: TNotationRangeHighlighter;
     I, J, Offset: Integer; Hit: TMoveVariationHit; P, Pixel: TPoint; B: TCheckBox;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   try
     RequireDerivedFormResource := False;
     Application.Initialize; Application.CaptureExceptions := False;
@@ -119,7 +120,7 @@ begin
       Dialog.Hide;
       Host := TForm.CreateNew(nil); Host.SetBounds(30,30,600,400);
       View := TGameNotationView.Create(Host); View.Parent := Host; View.Align := alClient;
-      Tree := TGameTree.Create; Presenter := TNotationPresentation.Create;
+      Tree := TGameTree.Create(DefaultGameVariant); Presenter := TNotationPresentation.Create;
       Tree.RecordNodeAnnotation(Tree.Root, 'Gérard 棋 😀 é');
       Tree.RecordMainlineMove(1,'32-28'); Tree.RecordMainlineMove(2,'18-23');
       AddFixtureBranch(Tree, 0, '33-29 19-23', 'Variation comment');

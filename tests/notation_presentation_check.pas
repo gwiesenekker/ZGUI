@@ -1,7 +1,7 @@
 program notation_presentation_check;
 {$mode objfpc}{$H+}
 uses Classes, SysUtils, uGameTree, uGameTreePdn, uNotationPresentation,
-  uTreeTestUtils, uDraughtsPosition;
+  uTreeTestUtils, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin
   if not Value then raise Exception.Create(Text);
@@ -200,8 +200,9 @@ end;
 var Tree, CaptureTree: TGameTree; Presenter: TNotationPresentation;
   Options: TGameTreePdnRenderOptions; I: Integer; Before: string; Range: TNotationRange;
 begin
-  Tree := TGameTree.Create;
-  CaptureTree := TGameTree.Create;
+  RegisterDefaultGameVariant(DraughtsVariant);
+  Tree := TGameTree.Create(DefaultGameVariant);
+  CaptureTree := TGameTree.Create(DefaultGameVariant);
   Presenter := TNotationPresentation.Create;
   try
     Check((Presenter.Text = '') and (Presenter.MoveCount = 0) and

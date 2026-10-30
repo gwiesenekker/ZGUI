@@ -135,8 +135,7 @@ type
     property SaveFileName: string read FFileName;
     property StorageError: string read FStorageError;
     procedure BeginShutdown;
-    constructor Create(AOwner: TComponent); override; overload;
-    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     procedure GameStopped(AGame: TObject);
@@ -222,9 +221,6 @@ begin
     if Result[I] in ['/', '\', ':', '*', '?', '"', '<', '>', '|'] then
       Result[I] := '_';
 end;
-
-constructor TTournamentDialog.Create(AOwner:TComponent);
-begin Create(AOwner,DefaultGameVariant);end;
 
 constructor TTournamentDialog.Create(AOwner:TComponent;AVariant:TGameVariant);
 var

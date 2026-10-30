@@ -7,7 +7,7 @@ uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, CheckLst, Controls, FPJSON, JSONParser, uGuiDialogs,
   uEngineRegistry, uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uRunningGame, uGameSetupTypes,
-  uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPdn, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine;
+  uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPdn, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine, uGamePosition;
 
 type
   TFailingCaptureTournament = class(TTournamentDialog)
@@ -58,7 +58,7 @@ function NewGame(Id: Integer): TRunningGame;
 var
   Setup: TGameSetup;
 begin
-  Setup := Default(TGameSetup);
+  Setup := Default(TGameSetup); Setup.Variant:=DefaultGameVariant;
   Setup.StartingFEN := 'W:W31-50:B1-20';
   Setup.TimeControl := DefaultTimeControl;
   Result := TRunningGame.Create(Id, 'Tournament regression', nil,
@@ -87,7 +87,7 @@ var
   Game: TRunningGame;
   Grid: TStringGrid;
 begin
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   Game := NewGame(101);
   try
     Dialog.LoadTournamentFromFile(Fixture);
@@ -119,7 +119,7 @@ end;
 procedure CheckCaptureFailureStopsCleanly(const Fixture: string);
 var Dialog: TFailingCaptureTournament; Game: TRunningGame;
 begin
-  Dialog := TFailingCaptureTournament.Create(nil);
+  Dialog := TFailingCaptureTournament.Create(nil,DefaultGameVariant);
   Game := NewGame(104);
   try
     WriteFixture(Fixture, 'Capture failure');
@@ -149,7 +149,7 @@ var Dialog: TFailingCaptureTournament; Reloaded: TTournamentDialog;
   Game: TRunningGame; Grid: TStringGrid; Data: TJSONObject;
 begin
   WriteFixture(Fixture, 'Capture isolation');
-  Dialog := TFailingCaptureTournament.Create(nil); Reloaded := TTournamentDialog.Create(nil);
+  Dialog := TFailingCaptureTournament.Create(nil,DefaultGameVariant); Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
   Game := NewGame(105);
   try
     Dialog.LoadTournamentFromFile(Fixture); Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
@@ -186,7 +186,7 @@ const
   Names: array[0..3] of string = ('CreatePairing', 'ClearPairing',
     'LoadTournament', 'ApplyTournamentChanges');
 begin
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   Game := NewGame(102);
   try
     Dialog.LoadTournamentFromFile(Fixture);
@@ -236,7 +236,7 @@ const
     '{"games":[{"record":{"manual_result":17}}]}',
     '{"games":[{"game":1,"round":1},{"game":1,"round":1}]}');
 begin
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   Before := TStringList.Create;
   After := TStringList.Create;
   Bad := TStringList.Create;
@@ -286,7 +286,7 @@ var
   Data: TJSONData;
   Lines: TStringList;
 begin
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   Reloaded := nil;
   Game := NewGame(103);
   Lines := TStringList.Create;
@@ -307,7 +307,7 @@ begin
     finally
       Data.Free;
     end;
-    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
     Reloaded.LoadTournamentFromFile(Fixture);
     Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[
       TournamentColResult, 1] = '1-1', 'fresh form must recover autosaved result');
@@ -346,7 +346,7 @@ var
   Grid: TStringGrid;
   RecoveryFile: string;
 begin
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   RecoveryFile := '';
   try
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
@@ -402,7 +402,7 @@ var
   PdnPath: string;
 begin
   WriteFixture(Fixture, 'Record preservation');
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   Reloaded := nil;
   First := NewGame(201);
   Second := NewGame(202);
@@ -422,14 +422,14 @@ begin
     Check((Pos('[ResultSource "manual"]', Lines.Text) > 0) and
       (Pos('[PlayedResult "2-0"]', Lines.Text) > 0),
       'override must be explicit while retaining the played result');
-    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
     Reloaded.LoadTournamentFromFile(Fixture);
     CheckPdnResult(Reloaded.PdnFileName, '1-1', '1');
     Reloaded.Free;
     Reloaded := nil;
     Dialog.RescheduleSelectedGame(nil);
     Dialog.RegisterRunningGame(1, Second);
-    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
     Reloaded.LoadTournamentFromFile(Fixture);
     Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[
       TournamentColResult, 1] = '*', 'resume must retain the pending attempt');
@@ -455,7 +455,7 @@ begin
     // A damaged/unrelated projection is preserved; rebuild at a fresh path.
     Lines.Text := 'stale export';
     Lines.SaveToFile(PdnPath);
-    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
     Reloaded.LoadTournamentFromFile(Fixture);
     Check(FileContents(PdnPath) = 'stale export' + LineEnding, 'preserve unverified PDN content');
     PdnPath := Reloaded.PdnFileName;
@@ -472,7 +472,7 @@ begin
     Check((not Dialog.IsRunning) and (Dialog.StorageError = '') and DirectoryExists(PdnPath),
       'an occupied directory must remain intact while the projection chooses a new path');
     RemoveDir(PdnPath);
-    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
     Reloaded.LoadTournamentFromFile(Fixture);
     PdnPath := Reloaded.PdnFileName;
     CheckPdnResult(PdnPath, '2-0', '3');
@@ -495,8 +495,8 @@ var
   Grid: TStringGrid;
 begin
   WriteFixture(Fixture, 'Swiss bye');
-  Dialog := TTournamentDialog.Create(nil);
-  Reloaded := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
+  Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.LoadTournamentFromFile(Fixture);
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
@@ -527,7 +527,7 @@ begin
   WriteFixture(Fixture, 'Legacy preservation');
   LegacyPath := ChangeFileExt(Fixture, '.pdn');
   Lines := TStringList.Create;
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Lines.Text := 'Original unlinked archive: keep exactly';
     Lines.SaveToFile(LegacyPath);
@@ -573,7 +573,7 @@ end;
 procedure CheckEmptyResetKeepsStorage(const Fixture: string);
 var Dialog: TTournamentDialog; Clear: TButton; OldPath, OldId: string;
 begin
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.SaveTournamentToFile(Fixture);
     OldPath := Dialog.SaveFileName;
@@ -602,8 +602,8 @@ var
   JsonBefore, PdnBefore, OldPdn, OldId, NewId, NewJson: string;
 begin
   WriteFixture(Fixture, 'Reset preservation');
-  Dialog := TTournamentDialog.Create(nil);
-  Reloaded := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
+  Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
   Game := NewGame(300 + Action);
   try
     Dialog.LoadTournamentFromFile(Fixture);
@@ -702,7 +702,7 @@ const
   Names: array[0..2] of string = ('CreatePairing', 'ClearPairing', 'ApplyTournamentChanges');
 begin
   WriteFixture(Fixture, 'Failed reset save');
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.LoadTournamentFromFile(Fixture);
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
@@ -754,7 +754,7 @@ var
   Grid: TStringGrid;
   OldJson, OldPdn, NewJson, NewPdn, Saved: string;
 begin
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   OldJson := ''; OldPdn := ''; NewJson := ''; NewPdn := '';
   try
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
@@ -797,8 +797,8 @@ var
   OldJson, OldPdn, NewPdn, Saved: string;
   Failed: Boolean;
 begin
-  Dialog := TTournamentDialog.Create(nil);
-  Reloaded := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
+  Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
   OldJson := '';
   OldPdn := '';
   NewPdn := '';
@@ -850,8 +850,8 @@ var
   Data: TJSONObject;
   MovedDir, MovedJson, MovedPdn, Pdn, FallbackPdn: string;
 begin
-  Dialog := TTournamentDialog.Create(nil);
-  Reloaded := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
+  Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
   MovedDir := Target + '.moved';
   MovedJson := IncludeTrailingPathDelimiter(MovedDir) + ExtractFileName(Target);
   MovedPdn := '';
@@ -913,7 +913,7 @@ var
   Tick, Elapsed: QWord;
 begin
   Data := TJSONObject.Create;
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   SavedPdn := '';
   try
     Data.Add('tournament_name', 'Large tournament');
@@ -990,19 +990,19 @@ begin
   Dialog := nil; Reloaded := nil; Missing := nil;
   try
     WriteEngines(False, False);
-    Dialog := TTournamentDialog.Create(nil);
+    Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
     AddTournamentPairingRow(Grid, EnginePickerDisplayName(Engines[0], 1),
       EnginePickerDisplayName(Engines[1], 2), 1);
     Dialog.SaveTournamentToFile(Fixture);
     WriteEngines(True, False);
-    Reloaded := TTournamentDialog.Create(nil);
+    Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
     Reloaded.LoadTournamentFromFile(Fixture);
     Check(Reloaded.GameSetupForRow(1, Setup), 'reordered engines must still resolve');
     Check((Setup.WhiteEngine.HubId = 'A') and (Setup.BlackEngine.HubId = 'B'),
       'saved tournament rows must retain engine identities across picker reorder');
     WriteEngines(True, True);
-    Missing := TTournamentDialog.Create(nil);
+    Missing := TTournamentDialog.Create(nil,DefaultGameVariant);
     Missing.LoadTournamentFromFile(Fixture);
     Check(not Missing.GameSetupForRow(1, Setup), 'missing engine must not bind by a matching slot');
     Grid := TStringGrid(Missing.FindComponent('TournamentPairings'));
@@ -1022,8 +1022,8 @@ var
   Collision: string;
 begin
   WriteFixture(Fixture, 'Owned projection');
-  Source := TTournamentDialog.Create(nil);
-  Moved := TTournamentDialog.Create(nil);
+  Source := TTournamentDialog.Create(nil,DefaultGameVariant);
+  Moved := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Source.LoadTournamentFromFile(Fixture);
     Grid := TStringGrid(Source.FindComponent('TournamentPairings'));
@@ -1061,9 +1061,9 @@ const
 begin
   OriginalPdn := ChangeFileExt(Fixture, '.pdn');
   WriteContents(OriginalPdn, OriginalText);
-  Dialog := TTournamentDialog.Create(nil);
-  Reloaded := TTournamentDialog.Create(nil);
-  Resumed := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
+  Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant);
+  Resumed := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.SaveTournamentToFile(Fixture);
     Check(FileContents(OriginalPdn) = OriginalText,
@@ -1122,7 +1122,7 @@ begin
   DirectoryName := ChangeFileExt(Fixture, '.pdn');
   Check(CreateDir(DirectoryName), 'prepare projection-name directory');
   WriteContents(IncludeTrailingPathDelimiter(DirectoryName) + 'keep', 'directory content');
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.SaveTournamentToFile(Fixture);
     Check(Dialog.PdnFileName <> DirectoryName, 'a directory must not be adopted as a PDN target');
@@ -1150,7 +1150,7 @@ begin
     '{"storage_version":2,"tournament_id":"unmarked-v2","games":[]}');
   ExistingPdn := ChangeFileExt(Fixture, '.pdn');
   WriteContents(ExistingPdn, 'Unmarked existing archive');
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.LoadTournamentFromFile(Fixture);
     Check((FileContents(ExistingPdn) = 'Unmarked existing archive') and
@@ -1184,14 +1184,14 @@ begin
     LegacyKey := LowerCase(Fast.KindText) + '|' + LowerCase(ExpandFileName(Fast.ExePath)) + '|' + LowerCase(Fast.IdText);
     Check(FindEngineByIdentityKey(Engines, LegacyKey) = nil, 'ambiguous legacy key must not silently choose the first engine');
     SaveExternalEngines(Config, Engines);
-    Dialog := TTournamentDialog.Create(nil);
+    Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
     AddTournamentPairingRow(Grid, EnginePickerDisplayName(Fast, 1), EnginePickerDisplayName(Slow, 2), 1);
     Check(Dialog.GameSetupForRow(1, Setup), 'argument variants resolve in game setup');
     Check((Setup.WhiteEngine.Arguments = '--level fast') and (Setup.BlackEngine.Arguments = '--level slow'),
       'same executable must launch distinct argument variants');
     Dialog.SaveTournamentToFile(Fixture);
-    Reloaded := TTournamentDialog.Create(nil); Reloaded.LoadTournamentFromFile(Fixture);
+    Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant); Reloaded.LoadTournamentFromFile(Fixture);
     Check(Reloaded.GameSetupForRow(1, Setup), 'argument variants survive tournament reload');
     Check((Setup.WhiteEngine.Arguments = '--level fast') and (Setup.BlackEngine.Arguments = '--level slow'),
       'reloaded game must not collapse two variants');
@@ -1207,7 +1207,7 @@ procedure CheckUnfingerprintedProjection(const Fixture: string);
 var Dialog, Resumed: TTournamentDialog; Grid: TStringGrid;
   Document: TJSONObject; PdnPath: string;
 begin
-  Dialog := TTournamentDialog.Create(nil); Resumed := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant); Resumed := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
     AddTournamentPairingRow(Grid, 'White', 'Black', 1);
@@ -1234,7 +1234,7 @@ procedure CheckExternalPdnEdits(const Fixture: string);
 var Dialog, Resumed: TTournamentDialog; Grid: TStringGrid;
   PdnPath, Edited: string;
 begin
-  Dialog := TTournamentDialog.Create(nil); Resumed := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant); Resumed := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
     AddTournamentPairingRow(Grid, 'White', 'Black', 1);
@@ -1258,7 +1258,7 @@ var Dialog: TTournamentDialog; FirstId: string;
 begin
   WriteFixture(Fixture, 'First legacy');
   WriteFixture(Fixture + '.second', 'Second legacy');
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.LoadTournamentFromFile(Fixture);
     Dialog.SaveTournamentToFile(Fixture + '.first-saved');
@@ -1281,7 +1281,7 @@ begin
   Collision := ChangeFileExt(Archive, '') + '.legacy-collision.pdn';
   WriteContents(Archive, 'original legacy archive');
   WriteContents(Collision, 'earlier migration output');
-  Dialog := TTournamentDialog.Create(nil);
+  Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
   try
     Dialog.LoadTournamentFromFile(Fixture);
     Check((Dialog.PdnFileName <> Archive) and (Dialog.PdnFileName <> Collision),
@@ -1308,7 +1308,7 @@ begin
    D:=TExternalEngineDefinition.Create;D.Kind:=eekHub;D.HubId:=Names[I];
    D.ExePath:=ExpandFileName(ParamStr(0));if I=0 then D.ExePath:=Fixture+'.missing';Engines.Add(D);
   end;
-  SaveExternalEngines(EnginesJsonFileName,Engines);Dialog:=TTournamentDialog.Create(nil);
+  SaveExternalEngines(EnginesJsonFileName,Engines);Dialog:=TTournamentDialog.Create(nil,DefaultGameVariant);
   Grid:=TStringGrid(Dialog.FindComponent('TournamentPairings'));
   for I:=0 to 3 do AddTournamentPairingRow(Grid,EnginePickerDisplayName(Engines[I],I+1),EnginePickerDisplayName(Engines[4],5),1);
   Dialog.SaveTournamentToFile(Fixture);Probe.Game:=NewGame(901);Dialog.OnStartGame:=@Probe.Start;
@@ -1335,6 +1335,7 @@ var
   Id: TGUID;
   Search: TSearchRec;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   RequireDerivedFormResource := False;
   Application.Initialize;
   Check(CreateGUID(Id) = 0, 'test directory identity');

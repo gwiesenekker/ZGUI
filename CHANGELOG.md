@@ -4,7 +4,22 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Require explicit game contexts — 2026-10-30
+
+- Remove the migration constructors and nil-to-startup fallbacks from trees,
+  actors, analysis bases, setups, boards and game-specific dialogs. Startup
+  selects its game explicitly; linking the draughts unit no longer installs a
+  default. Migrate preservation fixtures through the same explicit APIs.
+- Fix the database position-setup creation path exposed by the stricter API.
+  Publish preferences with the existing atomic-file helper so repeated switches
+  during engine process startup cannot expose a partially written preference file.
+- Validation: headless regression, all nine existing GUI suites, tournament
+  preservation and mixed GUI acceptance (62 checks, including missing-context
+  rejection) pass. Application compilation succeeds.
+
 ### Mixed chess and draughts contexts — 2026-10-30
+
+Commit: `1bf8de8`.
 
 - Enable both games in one process using the existing runners, clocks, trees,
   analysis coordinator, database and tournament implementations. Keep a standalone

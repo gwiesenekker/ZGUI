@@ -6,7 +6,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
-  Classes, SysUtils, uDraughtsHubEngine, uEngineBase, uEngineRegistry, uDraughtsBoard, uDraughtsPosition;
+  Classes, SysUtils, uDraughtsHubEngine, uEngineBase, uEngineRegistry, uDraughtsBoard, uDraughtsPosition, uGamePosition;
 
 procedure Check(ACondition: Boolean; const AMessage: string);
 begin
@@ -151,6 +151,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if (ParamStr(1) = '--slow-hub') or (ParamStr(1) = '--never-stop-hub') then
   begin
     FakeHub(ParamStr(1) = '--never-stop-hub');

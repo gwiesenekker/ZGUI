@@ -32,17 +32,13 @@ type
   protected
     procedure FontChanged(Sender: TObject); override;
   public
-    constructor Create(AOwner: TComponent); override; overload;
-    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce; overload;
+    constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
     property Engines: TExternalEngineList read FEngines;
   end;
 
 implementation
-
-constructor TEnginesDialog.Create(AOwner:TComponent);
-begin Create(AOwner,DefaultGameVariant);end;
 
 constructor TEnginesDialog.Create(AOwner:TComponent;AVariant:TGameVariant);
 var

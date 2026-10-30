@@ -1003,6 +1003,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckAmbiguousCaptureImport;
   CheckDeferredGameParsing;
   CheckPdnResultBoundaries;

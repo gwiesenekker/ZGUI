@@ -3,7 +3,7 @@ program game_tree_topology_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, uDraughtsBoard, uGameTree, uGameTreeActor,
-  uGameTreeBuilder, uGameTreePdn, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition;
+  uGameTreeBuilder, uGameTreePdn, uGameOrchestrator, uTreeTestUtils, uDraughtsPosition, uGamePosition;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -74,7 +74,7 @@ var
   Node: TGameTreePlyNode;
   Id: Int64;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   try
     Rebuild(Actor, 'queued', '', '32-28 18-23');
@@ -109,7 +109,7 @@ var
   I: Integer;
   Command: TGameTreeCommand;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Actual := TDraughtsBoard.Create;
   Expected := TDraughtsBoard.Create;
   Moves := TStringList.Create;
@@ -169,7 +169,7 @@ var
   Tree: TGameTree;
   FirstId, SecondId: Int64;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   try
     Rebuild(Actor, 'promotion', '', '');
     Tree := Actor.GameTree;
@@ -208,7 +208,7 @@ var
   ChildId: Int64;
   Moves: TStringList;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   try
     Rebuild(Actor, 'ancestry', '', '32-28 18-23');
@@ -258,7 +258,7 @@ var
   Actual, Expected: TDraughtsBoard;
   I: Integer;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   Actual := TDraughtsBoard.Create;
   Expected := TDraughtsBoard.Create;
@@ -343,7 +343,7 @@ var
       'a replacement node must not inherit analysis or clocks');
   end;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Moves := TStringList.Create;
   try
     Rebuild(Actor, 'metadata', '', '32-28 18-23 37-32');
@@ -401,7 +401,7 @@ var
   Lines, Moves: TStringList;
   I: Integer;
 begin
-  Actor := TGameTreeActor.Create;
+  Actor := TGameTreeActor.Create(TGameTree.Create(DefaultGameVariant),True);
   Lines := TStringList.Create;
   Moves := TStringList.Create;
   try
@@ -433,6 +433,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   CheckQueuedRebuildPreservesCurrentBranches;
   CheckMainlineAndReplay;
   CheckFirstChildMainContinuation;

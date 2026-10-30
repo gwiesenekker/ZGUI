@@ -410,6 +410,7 @@ begin
 end;
 
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   PrintPerft := ParamStr(1) = '--print-perft';
   RunDraughts;
   RunCounter;

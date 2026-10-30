@@ -2,7 +2,7 @@ program platform_process_check;
 {$mode objfpc}{$H+}
 uses
   {$IFDEF UNIX}cthreads, BaseUnix,{$ENDIF}
-  Classes, SysUtils, Process, uPlatformProcess, uDraughtsPosition;
+  Classes, SysUtils, Process, uPlatformProcess, uDraughtsPosition, uGamePosition;
 type
   TOutputProbe = class
     Text: string;
@@ -16,6 +16,7 @@ var First, Second: TPlatformProcess; Args: TStringList; Probe: TOutputProbe;
   Tick: QWord; Auxiliary: TProcess; Lines: TStringList;
   {$IFDEF LINUX}I: Integer; Target, InputPipe, OutputPipe, ErrorPipe: string;{$ENDIF}
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--chunked-output' then
   begin
     Write('first chunk'); Flush(Output); Sleep(30);

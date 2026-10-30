@@ -1,12 +1,13 @@
 program database_import_performance_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase, uDraughtsPosition;
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, uGameDatabase, uDraughtsPosition, uGamePosition;
 procedure Check(Value: Boolean; const Text: string);
 begin if not Value then raise Exception.Create(Text); end;
 var Db: TGameDatabase; Fixture, Input, Loaded: TStringList; Games: TList;
   Base, DbName, InputName, LogName: string; Count, I, Mode, Pass, Imported,
   Duplicates, Errors: Integer; Tick: QWord;
 begin
+  RegisterDefaultGameVariant(DraughtsVariant);
   Check(ParamCount >= 1, 'usage: database_import_performance_check fixture [games]');
   Count := 100; if ParamCount > 1 then Count := StrToInt(ParamStr(2));
   Check(Count > 0, 'game count must be positive');

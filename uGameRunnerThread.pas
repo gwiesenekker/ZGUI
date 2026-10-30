@@ -130,7 +130,7 @@ type
     procedure Execute; override;
     procedure DoTerminate; override;
   public
-    // AVariant: the game; nil uses the registered default game. Engines are
+    // AVariant: optional explicit game; otherwise use ASetup.Variant. Engines are
     // created through the factories their units register (uEngineBase).
     constructor Create(const ASetup: TGameSetup; AGameId: Integer;
       ASnapshotEvent: TGameRunnerSnapshotEvent;
