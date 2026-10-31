@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Size the tournament setup fields from their content — 2026-10-31
 
-Commit: pending.
+Commit: `8493db9`.
 
 - Give the existing tournament name and starting FEN full-width rows. Measure the
   FEN using its actual font, a representative chess FEN and a margin; update its
