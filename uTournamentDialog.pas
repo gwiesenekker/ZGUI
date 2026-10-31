@@ -271,6 +271,8 @@ var
   SettingsColumn,ActionsColumn,ClockRow:TPanel;
 begin
   inherited Create(AOwner);
+  DisableAlign;
+  try
   if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
   FVariant:=AVariant;
   FProfile:=GameGuiProfileFor(FVariant);
@@ -575,6 +577,7 @@ begin
   ButtonPanel.AutoSize:=True;
   UpdateButtons;
   EnableAutoLayout;
+  finally EnableAlign;end;
 end;
 
 procedure TTournamentDialog.StartingFENChanged(Sender:TObject);
@@ -1069,6 +1072,8 @@ procedure TTournamentDialog.PopulateEngines;
 var
   I: Integer;
 begin
+  FEngineCheckList.Items.BeginUpdate;
+  try
   FEngineCheckList.Clear;
   LoadExternalEngines(EnginesJsonFileName, FEngines);
   for I := 0 to FEngines.Count - 1 do
@@ -1078,6 +1083,7 @@ begin
       FEngines[I]);
     FEngineCheckList.Checked[FEngineCheckList.Items.Count-1] := True;
   end;
+  finally FEngineCheckList.Items.EndUpdate;end;
 end;
 
 function TTournamentDialog.EngineByDisplayName(

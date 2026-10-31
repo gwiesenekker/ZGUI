@@ -24,6 +24,13 @@ type
     FSelectedId:PtrInt;
     FBusy,FDisposing,FLayoutQueued,FPreparingAll:Boolean;
     FDefaultVariant:TGameVariant;
+    FTabUpdateDepth:Integer;
+    FLayoutDirty:Boolean;
+    FRedrawHandle:THandle;
+    procedure BeginTabUpdate;
+    procedure EndTabUpdate;
+    procedure RefreshActiveLayout;
+  private
     FPlans:array of TTournamentClosePlan;
     FOnStartGame:TTournamentStartGameEvent;
     FOnSelectGame:TTournamentSelectGameEvent;
@@ -71,7 +78,7 @@ type
   end;
 implementation
 uses SysUtils,Math,Dialogs,FPJSON,uGuiDialogs,uGameGuiProfile,uGameDocumentContext,
-  uTournamentStorage,LazFileUtils;
+  uTournamentStorage,LazFileUtils{$IFDEF MSWINDOWS},Windows{$ENDIF};
 function SamePath(const A,B:string):Boolean;
 begin
   Result:=(A<>'') and (B<>'');if not Result then Exit;
@@ -131,12 +138,51 @@ begin
   Tab.Dialog:=Dialog;Dialog.BorderStyle:=bsNone;Dialog.Align:=alClient;
   Dialog.Parent:=Tab.Page;Dialog.Show;FPages.ActivePage:=Tab.Page;TitleChanged(Dialog);
 end;
+procedure TTournamentHostForm.BeginTabUpdate;
+begin
+  Inc(FTabUpdateDepth);if FTabUpdateDepth>1 then Exit;
+  DisableAlign;FPages.DisableAlign;
+  {$IFDEF MSWINDOWS}
+  // WM_SETREDRAW changes native visibility. Only suspend an already visible
+  // page control, so resuming never makes a hidden host unexpectedly appear.
+  if FPages.HandleAllocated and Windows.IsWindowVisible(FPages.Handle) then begin
+    FRedrawHandle:=FPages.Handle;
+    Windows.SendMessage(FRedrawHandle,WM_SETREDRAW,0,0);
+  end;
+  {$ENDIF}
+end;
+
+procedure TTournamentHostForm.EndTabUpdate;
+begin
+  if FTabUpdateDepth>1 then begin Dec(FTabUpdateDepth);Exit;end;
+  try
+    try FPages.EnableAlign;finally EnableAlign;end;
+    // Finalize measured bounds before revealing the completed tab.
+    RefreshActiveLayout;
+  finally
+    Dec(FTabUpdateDepth);
+    {$IFDEF MSWINDOWS}
+    if FRedrawHandle<>0 then begin
+      if Windows.IsWindow(FRedrawHandle) then begin
+        Windows.SendMessage(FRedrawHandle,WM_SETREDRAW,1,0);
+        Windows.RedrawWindow(FRedrawHandle,nil,0,
+          RDW_INVALIDATE or RDW_ERASE or RDW_FRAME or RDW_ALLCHILDREN);
+      end;
+      FRedrawHandle:=0;
+    end;
+    {$ENDIF}
+    FPages.Invalidate;
+  end;
+end;
+
 function TTournamentHostForm.NewTournament(Variant:TGameVariant):TTournamentDialog;
 var Tab:TTournamentTab;
 begin
   if FBusy then Exit(nil);
-  Tab:=TTournamentTab.Create;
+  BeginTabUpdate;
   try
+   Tab:=TTournamentTab.Create;
+   try
     Inc(FSerial);Tab.Id:=FSerial;Tab.Dialog:=CreateDialog(Variant);
     Tab.Dialog.TournamentName:='Tournament'+IntToStr(FSerial);
     Tab.Dialog.AcceptInitialSettings;
@@ -145,7 +191,8 @@ begin
   except
     if FTabs.IndexOf(Tab)>=0 then FTabs.Remove(Tab);
     Tab.Dialog.Free;Tab.Page.Free;Tab.Free;raise;
-  end;
+   end;
+  finally EndTabUpdate;end;
 end;
 function TTournamentHostForm.ShowForVariant(Variant:TGameVariant):TTournamentDialog;
 var I:Integer;Tab,Best:TTournamentTab;
@@ -193,13 +240,21 @@ begin
   if (Tab<>nil) and (Tab.Id<>FSelectedId) then begin
     Inc(FSelectionCounter);Tab.LastSelected:=FSelectionCounter;FSelectedId:=Tab.Id;
   end;
-  if FDisposing or FLayoutQueued or (FPages=nil) then Exit;
+  FLayoutDirty:=True;
+  if FLayoutQueued or (FPages=nil) or (FTabUpdateDepth>0) then Exit;
   FLayoutQueued:=True;Application.QueueAsyncCall(@AsyncLayout,0);
 end;
 procedure TTournamentHostForm.AsyncLayout(Data:PtrInt);
+begin
+  FLayoutQueued:=False;
+  if FDisposing or (FTabUpdateDepth>0) or not FLayoutDirty then Exit;
+  RefreshActiveLayout;
+end;
+procedure TTournamentHostForm.RefreshActiveLayout;
 var Tab:TTournamentTab;I:Integer;
 begin
-  FLayoutQueued:=False;if FDisposing then Exit;
+  if FDisposing then Exit;
+  FLayoutDirty:=False;
   // External frees (legacy callers/tests) leave no stale owner/session pointers.
   for I:=FTabs.Count-1 downto 0 do
     if TTournamentTab(FTabs[I]).Dialog=nil then RemoveTab(TTournamentTab(FTabs[I]));
@@ -209,6 +264,7 @@ begin
   Constraints.MinWidth:=Tab.Dialog.Constraints.MinWidth+Width-Tab.Page.ClientWidth;
   Constraints.MinHeight:=Tab.Dialog.Constraints.MinHeight+Height-Tab.Page.ClientHeight;
   Width:=Max(Width,Constraints.MinWidth);Height:=Max(Height,Constraints.MinHeight);
+  FLayoutDirty:=False;
 end;
 procedure TTournamentHostForm.FontChanged(Sender:TObject);
 var I:Integer;
@@ -251,9 +307,12 @@ begin
   try
     D.LoadTournamentFromFile(FileName);
     if D.StorageError<>'' then raise EInOutError.Create(D.StorageError);
-    Tab:=TTournamentTab.Create;Inc(FSerial);Tab.Id:=FSerial;Tab.Dialog:=D;
-    Tab.Page:=TTabSheet.Create(FPages);Tab.Page.PageControl:=FPages;
-    FTabs.Add(Tab);Embed(Tab,D);Result:=D;D:=nil;
+    BeginTabUpdate;
+    try
+      Tab:=TTournamentTab.Create;Inc(FSerial);Tab.Id:=FSerial;Tab.Dialog:=D;
+      Tab.Page:=TTabSheet.Create(FPages);Tab.Page.PageControl:=FPages;
+      FTabs.Add(Tab);Embed(Tab,D);Result:=D;D:=nil;
+    finally EndTabUpdate;end;
   finally D.Free;end;
 end;
 function TTournamentHostForm.Prepare(Tab:TTournamentTab;out Plan:TTournamentClosePlan):Boolean;
@@ -420,8 +479,11 @@ begin
         Old:=Tab.Dialog;Old.StopForClose;
         if not Old.DrainClose and (Plan.SaveName<>'') then raise EInOutError.Create('Final tournament capture failed');
         if Plan.SaveName<>'' then Old.SaveTournamentToFile(Plan.SaveName);
-        Old.RemoveFreeNotification(Self);Tab.Dialog:=nil;Old.Free;
-        Embed(Tab,D);D:=nil;
+        BeginTabUpdate;
+        try
+          Old.RemoveFreeNotification(Self);Tab.Dialog:=nil;Old.Free;
+          Embed(Tab,D);D:=nil;
+        finally EndTabUpdate;end;
       finally FBusy:=False;end;
     finally D.Free;end;
   except on E:Exception do ShowGuiOkDialog(Self,'Tournament game',E.Message);end;

@@ -122,3 +122,33 @@ and cleans up the nested server/test process group. It needs an existing parent
 X display (DISPLAY, default :1), but neither takes focus nor changes that display.
 Main-display testing is reserved for desktop-specific scaling/focus/window-manager
 or remote-session issues, explained to the user before testing there.
+
+
+## QA: Windows tab construction paints incrementally — 2026-10-31
+
+The user clarified the concern: **“It is not a big deal, but you see the tab being
+built up.”** This is a presentation-only correction within the approved tabbed
+GUI work, without scheduler/model changes or a speculative new performance system.
+
+- DisableAlign / EnableAlign brackets existing dialog construction and host tab
+  changes, with finally blocks. BeginUpdate / EndUpdate brackets the existing
+  engine checklist population.
+- The host completes its existing measured layout synchronously while a tab
+  update is batched, avoiding an additional queued full host measurement when
+  those final measurements are already current.
+- Native Windows WM_SETREDRAW is scoped to the existing visible page control.
+  Finally resumes it and invalidates its frame/children. Hidden hosts do not
+  receive SETREDRAW(TRUE), which could accidentally change their visibility.
+  No LockWindowUpdate call or desktop-wide paint lock.
+- Apply presentation batching to New, Open and game replacement. Keep save/close
+  questions and final game capture outside the redraw lock. Retain the deferred
+  native-selector fix. No game/engine/rules/storage changes.
+- Extend the existing integration test for unlocked alignment on return, final
+  visible-tab geometry before pumping events, native drawing visibility and
+  creating chess/draughts tabs in a hidden host without displaying it.
+
+The 153-check GTK tab suite and application compilation pass. Full regression
+results are in CHANGELOG.md. All GUI tests use the hidden-display launcher.
+Native Windows execution/cross-compilation is unavailable here (the Win64 FPC
+system units are absent), so the Windows repaint improvement remains for native
+visual QA. No timing result or speedup percentage is claimed.

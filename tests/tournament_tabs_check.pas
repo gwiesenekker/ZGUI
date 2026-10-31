@@ -2,10 +2,11 @@ program tournament_tabs_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,
   {$IFDEF LCLgtk2}Gtk2,Gtk2Proc,{$ENDIF} Forms,Classes,SysUtils,Controls,
-  StdCtrls,ExtCtrls,ComCtrls,CheckLst,Grids,Dialogs,FPJSON,JSONParser,uMainForm,
+  StdCtrls,ExtCtrls,ComCtrls,CheckLst,Grids,Dialogs,LCLIntf,FPJSON,JSONParser,uMainForm,
   uTournamentHostForm,uTournamentDialog,uTournamentGridModel,uGamePosition,
   uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,uGameSetupTypes,
   uGameOrchestrator,uRunningGame,uDraughtsEngine,uDraughtsHubEngine,uEngineParamsJson,uGuiDialogs,uGameTree;
+type TControlAccess=class(TControl);
 var Chess,Draughts:TGameVariant;Checks:Integer=0;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
@@ -97,6 +98,31 @@ var Main:TMainForm;Host:TTournamentHostForm;Defs:TExternalEngineList;
     Directory,SaveName,Before,Published,Identity:string;D,Other:TTournamentDialog;
     Root:TGameTree;Page:TTabSheet;Rejected,CanClose:Boolean;L:TStringList;
     Decisions:TDecisions;Data:TJSONObject;Combo:TComboBox;Starts:TStarts;
+procedure CheckTabReady(H:TTournamentHostForm;D:TTournamentDialog);
+begin
+ Check((TControlAccess(TControl(H)).AutoSizingLockCount=0) and
+  (TControlAccess(TControl(H.Pages)).AutoSizingLockCount=0) and
+  (TControlAccess(TControl(D)).AutoSizingLockCount=0),
+  'Alignment is resumed before a completed tab returns');
+ if H.Visible then Check((D.Parent.ClientWidth>=D.Constraints.MinWidth) and
+  (D.Parent.ClientHeight>=D.Constraints.MinHeight),
+  'Completed tab has its final measured bounds before pumping events');
+ if H.Visible then Check(IsWindowVisible(H.Pages.Handle),
+  'Native tab drawing is restored after assembly');
+end;
+procedure CheckHiddenHost;
+var H:TTournamentHostForm;D:TTournamentDialog;
+begin
+ H:=TTournamentHostForm.Create(Main);
+ try
+  D:=H.NewTournament(Chess);CheckTabReady(H,D);
+  Check(not H.Visible and not IsWindowVisible(H.Handle),
+   'Assembling a hidden host does not accidentally show it');
+  D:=H.NewTournament(Draughts);CheckTabReady(H,D);
+  Check(not H.Visible and not IsWindowVisible(H.Handle),
+   'Another hidden tab does not reveal the host');
+ finally H.Free;end;
+end;
 procedure ChangeGame(D:TTournamentDialog;Variant:TGameVariant);
 var C:TComboBox;Index:Integer;
 begin
@@ -227,8 +253,9 @@ begin
  try
   RegisterEngines(False);Main:=TMainForm.Create(nil);Main.Show;Pump;
   Button(Main,'Tournament...').Click;Host:=Main.TournamentHost;Check(Host.Count=1,'First open creates one tab');
+  CheckHiddenHost;
   Starts.Original:=Host.OnStartGame;
-  D:=Host.Dialogs[0];Check(Host.ShowForVariant(Chess)=D,'Reopen selects existing same-game tab');
+  D:=Host.Dialogs[0];CheckTabReady(Host,D);Check(Host.ShowForVariant(Chess)=D,'Reopen selects existing same-game tab');
   Page:=Host.Pages.ActivePage;Identity:=D.TournamentIdentity;
   ChangeGame(D,Draughts);D:=Host.Dialogs[0];
   Check(Host.Visible and D.Visible,'Changing Chess to Draughts keeps tournament visible');
@@ -329,7 +356,7 @@ begin
   try Check(Data.Get('tournament_id','')=D.TournamentIdentity,'Existing autosaved state remains readable after failed Save As');
   finally Data.Free;end;
   DiscardAll;
-  Host.Font.Size:=18;D:=Host.NewTournament(Chess);Pump;
+  Host.Font.Size:=18;D:=Host.NewTournament(Chess);CheckTabReady(Host,D);Pump;
   Check(D.Font.Size=18,'New tab inherits the host font');
   Check((D.Parent.ClientWidth>=D.Constraints.MinWidth) and
     (D.Parent.ClientHeight>=D.Constraints.MinHeight),'Host accommodates measured child minimums');

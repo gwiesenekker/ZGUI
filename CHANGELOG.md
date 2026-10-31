@@ -4,6 +4,26 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Present completed tournament tabs without visible buildup — 2026-10-31
+
+Commit: pending.
+
+- Address the Windows QA observation that a new tab visibly builds up. Batch
+  constructor/host alignment and engine-list population, then finish the active
+  tab's measured bounds before resuming drawing. Coalesce the queued host layout
+  pass when the batched update has already supplied the final measurements.
+- On Windows, suspend redraw only on the already visible tournament page control,
+  then restore redraw and invalidate its children in a finally block. Do not use
+  a desktop-wide drawing lock or make a hidden host visible. Apply the same
+  presentation batching to New, Open and in-place game switches for both games.
+  Pairing, scheduling, clocks, engine protocols and saved data are unchanged.
+- Add assertions for restored alignment, immediately measured visible bounds,
+  native visibility and hidden-host creation. The focused GTK suite passes 153
+  checks without unfreed blocks. Application compilation, all 19 GUI suites
+  and both tournament suites pass on hidden displays. Native Windows visual QA
+  remains necessary; this change makes no measured Windows latency claim.
+
+
 ### Keep tournament visible when changing Game — 2026-10-31
 
 Commit: `eea92df`.
