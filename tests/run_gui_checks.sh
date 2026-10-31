@@ -105,3 +105,13 @@ echo "==> engine_parameter_scroll_check (GTK2, immediate wheel scrolling for bot
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/parameter-scroll" \
   "$ROOT_DIR/tests/engine_parameter_scroll_check.lpi" > "$OUT_DIR/parameter-scroll-build.log" 2>&1
 timeout 15s "$OUT_DIR/parameter-scroll/engine_parameter_scroll_check"
+
+echo "==> init_colour_gui_check (GTK2, Hub initialization and preferences previews)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/init-colour" \
+  "$ROOT_DIR/tests/init_colour_gui_check.lpi" > "$OUT_DIR/init-colour-build.log" 2>&1
+timeout 30s "$OUT_DIR/init-colour/init_colour_gui_check"
+
+echo "==> main_readability_gui_check (GTK2, full FEN and ten notation lines)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/main-readability" \
+  "$ROOT_DIR/tests/main_readability_gui_check.lpi" > "$OUT_DIR/main-readability-build.log" 2>&1
+timeout 30s "$OUT_DIR/main-readability/main_readability_gui_check"

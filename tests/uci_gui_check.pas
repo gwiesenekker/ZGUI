@@ -109,8 +109,7 @@ begin
     Kind:=nil;Init:=nil;
     for I:=0 to F.ComponentCount-1 do if F.Components[I] is TComboBox then
       if TComboBox(F.Components[I]).Items.IndexOf('UCI')>=0 then Kind:=TComboBox(F.Components[I]);
-    for I:=0 to F.ComponentCount-1 do if F.Components[I] is TMemo then
-      if (TMemo(F.Components[I]).Parent=F) and not TMemo(F.Components[I]).Visible then Init:=TMemo(F.Components[I]);
+    Init:=TMemo(F.FindComponent('HubInitializationMemo'));
     Check((Kind<>nil) and (Init<>nil),'Engine protocol and init controls exist');
     F.LoadEngine(nil);
     Check(Kind.Text='UCI','New chess engine defaults to UCI');

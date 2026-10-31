@@ -567,6 +567,7 @@ begin
     SendHubParams;
 
     InitLines.Text := ExpandEnginePlaceholders(FEngine.InitText, FEngine);
+    if Trim(InitLines.Text)='' then InitLines.Text:='init';
     for I := 0 to InitLines.Count - 1 do
       if Trim(InitLines[I]) <> '' then
         SendLine(InitLines[I]);

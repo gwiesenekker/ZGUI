@@ -72,6 +72,7 @@ type
     procedure ActivateGameContext(Variant:TGameVariant);
     function ContextForVariant(Variant:TGameVariant):TGameUiContext;
     function DocumentDisplay(Tree:TGameTree):TDisplayedPosition;
+    procedure FenTextChanged(Sender:TObject);
     function CurrentVariant:TGameVariant;
     function StandaloneListIndex:Integer;
     procedure TournamentContextRequested(Sender:TObject;Variant:TGameVariant;const FileName:string);
@@ -518,6 +519,7 @@ type
     procedure Notification(AComponent:TComponent;Operation:TOperation); override;
   public
     constructor Create(AOwner: TComponent); override;
+    procedure RefreshLayout; override;
     destructor Destroy; override;
     {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
     procedure TestRegisterGame(AGame: TRunningGame);
@@ -553,7 +555,7 @@ var
 
 implementation
 
-uses uGameTreeNodeData, LCLIntf, uGameDocumentContext;
+uses uGameTreeNodeData, LCLIntf, uGameDocumentContext, Math;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
@@ -1081,6 +1083,7 @@ begin
   AddHeaderField('Black', 26, FBlackPlayerEdit);
   AddHeaderField('Result', 52, FResultEdit);
   AddHeaderField('FEN', 78, FFenEdit);
+  FFenEdit.Name:='MainFenEdit';FFenEdit.OnChange:=@FenTextChanged;
   LFenPopup := TPopupMenu.Create(Self);
   LMenuItem := TMenuItem.Create(Self);
   LMenuItem.Caption := 'Paste FEN position from clipboard';
@@ -1356,6 +1359,32 @@ begin
   InitializeGameContexts;
   if RegisteredGameCount>1 then UpdateContextFeatures;
   EnableAutoLayout;
+end;
+
+procedure TMainForm.FenTextChanged(Sender:TObject);
+begin InvalidateLayout;end;
+
+procedure TMainForm.RefreshLayout;
+const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
+var I,FieldWidth,LabelWidth:Integer;Row,Side:TWinControl;
+begin
+  inherited RefreshLayout;
+  if (FFenEdit=nil) or (FGameMoveMemo=nil) then Exit;
+  FieldWidth:=MeasureGuiText(FFenEdit.Text,FFenEdit.Font).cx;
+  if GameVariantId(CurrentVariant)='chess' then
+    FieldWidth:=Max(FieldWidth,MeasureGuiText(ChessFenSample,FFenEdit.Font).cx);
+  Inc(FieldWidth,MeasureGuiText('MM',FFenEdit.Font).cx);
+  FFenEdit.Constraints.MinWidth:=FieldWidth;
+  Row:=FFenEdit.Parent;LabelWidth:=0;
+  for I:=0 to Row.ControlCount-1 do if Row.Controls[I] is TLabel then
+    LabelWidth:=Max(LabelWidth,MeasureGuiText(TLabel(Row.Controls[I]).Caption,Row.Controls[I].Font).cx);
+  Row.Constraints.MinWidth:=Max(Row.Constraints.MinWidth,LabelWidth+FieldWidth+Row.ChildSizing.HorizontalSpacing);
+  Side:=Row.Parent.Parent;
+  Side.Constraints.MinWidth:=Max(Side.Constraints.MinWidth,Row.Constraints.MinWidth);
+  if Side.Width<Side.Constraints.MinWidth then Side.Width:=Side.Constraints.MinWidth;
+  FGameMoveMemo.Constraints.MinHeight:=10*Max(1,FGameMoveMemo.LineHeight)+
+    2*GetSystemMetrics(SM_CYEDGE)+GetSystemMetrics(SM_CYHSCROLL);
+  RefreshMinimum;
 end;
 
 destructor TMainForm.Destroy;
@@ -1726,6 +1755,7 @@ begin
   if FScoreHistoryForm<>nil then FScoreHistoryForm.ApplyScoreColors(FPreferences.ScoreHistoryColors);
   UpdateScoreHistory(ActiveGameTree);
   UpdateAnalyzerTextSizes(Self);
+  InvalidateLayout;
 end;
 
 procedure TMainForm.ApplyBoardFlipped;

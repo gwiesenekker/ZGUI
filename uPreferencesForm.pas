@@ -68,6 +68,21 @@ implementation
 uses
   SysUtils, Math, uGuiDialogs;
 
+type
+  TColorSwatchPanel=class(TPanel)
+  protected
+    procedure CalculatePreferredSize(var PreferredWidth,PreferredHeight:Integer;
+      WithThemeSpace:Boolean); override;
+  end;
+
+procedure TColorSwatchPanel.CalculatePreferredSize(var PreferredWidth,PreferredHeight:Integer;
+  WithThemeSpace:Boolean);
+begin
+  // A blank colour sample has content even though it has no caption/children.
+  PreferredWidth:=MeasureGuiText('MMM',Font).cx+8;
+  PreferredHeight:=MeasureGuiText('Ag',Font).cy+8;
+end;
+
 function ScoreColorCaption(C:TScoreHistoryColor):string;
 const Names:array[TScoreHistoryColor] of string=(
  'Engine: zero or positive','Engine: negative','Annotator: zero or positive',
@@ -274,9 +289,9 @@ begin
   FNotationSamples[AStyle] := TLabel.Create(Self);
   with FNotationSamples[AStyle] do
   begin Parent := AParent; SetBounds(12, ATop+4, 150, 24); Caption := NotationStyleNames[AStyle]; Name := 'NotationSample'+IntToStr(Ord(AStyle)); end;
-  FSwatches[Index] := TPanel.Create(Self);
+  FSwatches[Index] := TColorSwatchPanel.Create(Self);
   with FSwatches[Index] do
-  begin Parent := AParent; SetBounds(168, ATop, 30, 24); BevelOuter := bvLowered; end;
+  begin Parent := AParent; SetBounds(168, ATop, 30, 24); BevelOuter := bvLowered; Caption:='';ParentBackground:=False;ParentColor:=False; end;
   Button := TButton.Create(Self);
   Button.Parent := AParent; Button.SetBounds(206, ATop, 76, 26);
   Button.Caption := 'Colour...'; Button.Tag := Index; Button.OnClick := @ChooseColorClick;
@@ -323,10 +338,12 @@ begin
   LLabel.SetBounds(12, ATop + 4, 220, 22);
   LLabel.Caption := ACaption;
 
-  FSwatches[AIndex] := TPanel.Create(Self);
+  FSwatches[AIndex] := TColorSwatchPanel.Create(Self);
   FSwatches[AIndex].Parent := AParent;
   FSwatches[AIndex].SetBounds(250, ATop, 34, 24);
   FSwatches[AIndex].BevelOuter := bvLowered;
+  FSwatches[AIndex].Caption:='';
+  FSwatches[AIndex].ParentBackground:=False;FSwatches[AIndex].ParentColor:=False;
 
   LButton := TButton.Create(Self);
   LButton.Parent := AParent;

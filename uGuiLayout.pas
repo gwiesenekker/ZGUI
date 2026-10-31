@@ -12,10 +12,10 @@ type
   private
     FLayoutReady, FMeasuring,FLayoutQueued,FContentDirty: Boolean;
     FBaseMinWidth,FBaseMinHeight:Integer;
-    procedure RefreshMinimum;
     procedure AsyncLayout(Data:PtrInt);
     procedure RequestLayout(ContentChanged:Boolean);
   protected
+    procedure RefreshMinimum;
     procedure FontChanged(Sender:TObject); override;
     procedure DoShow; override;
     procedure Resize; override;
@@ -203,6 +203,8 @@ begin
         W:=0;H:=0;Child.GetPreferredSize(W,H,True);
         if Child is TLabel then W:=MeasureGuiText(TLabel(Child).Caption,Child.Font).cx;
         if Child is TButton then W:=MeasureGuiText(TButton(Child).Caption,Child.Font).cx+4*Gap(Child);
+        // Leave breathing room after native checkbox captions across themes.
+        if Child is TCheckBox then Inc(W,Gap(Child));
         Child.Constraints.MinWidth:=W;
         Child.Constraints.MaxWidth:=Child.Constraints.MinWidth;
       end else Child.Constraints.MaxWidth:=0;

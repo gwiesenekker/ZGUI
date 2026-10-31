@@ -4,6 +4,38 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Restore Hub initialization and readable GUI controls — 2026-10-31
+
+Commit: pending.
+
+- Show the existing initialization memo as **Hub init** for Hub engines. Empty or
+  whitespace-only scripts default to `init` in both the editor and Hub adapter,
+  including existing empty registrations. Preserve custom scripts and their
+  parameter-file round trip; keep the field hidden for UCI and DXP. No local
+  engine files are migrated or rewritten by this fix.
+- Restore Preferences colour swatches with an explicit font-aware preferred size,
+  a blank caption and their own painted background. Keep previews for board,
+  highlight, notation and score-history colours, including picker updates and
+  independent game drafts. Add padding after native checkbox captions so the end
+  of “Italic” remains visible with different fonts/themes.
+- Measure the main FEN field against a representative chess FEN and the current
+  displayed FEN, with a margin. Reserve at least ten native SynEdit lines for the
+  game-moves pane. Refresh geometry when the FEN or notation preferences change;
+  preserve the game tree, notation content and existing pane/splitter layout.
+- User authorisation on 2026-10-31: “Please fix. QA: I believe we lost the colour
+  preview in the preferences dialog box?” Scope: Hub initialization defaults/field
+  and colour previews. Subsequent QA adds the clipped “Italic” caption and the
+  main FEN/ten-line notation sizing; these remain within the user-authorised
+  automatic GUI resizing work (“You do not need approvals”, 2026-10-30).
+- Add regressions for blank/custom Hub startup, initialization persistence and
+  protocol separation, preview dimensions/pixels/picker updates in both games,
+  checkbox caption padding at two fonts, and main FEN/notation readability.
+  Baseline checks reproduce the blank-init failure and collapsed previews.
+  Application compilation, all seventeen GUI suites (including 9,056 layout,
+  385 initialization/preview and 35 main-readability checks), and the full headless
+  regression suite pass on an isolated snapshot excluding unfinished feature
+  flags. Native Windows interaction remains untested.
+
 ### Scroll engine parameters immediately with the mouse wheel — 2026-10-31
 
 Commit: `6bbaa04`.

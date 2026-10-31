@@ -269,7 +269,9 @@ In the engine editor:
 
 ZGUI starts the executable in the executable's own directory, initiates the
 Hub protocol, applies the configured non-GUI parameters, and initializes the
-engine. Closing the editor stops an engine that was launched for this test.
+engine. The **Hub init** field defaults to `init`; a blank saved script also uses
+`init`. Custom initialization commands can be edited there. This field applies to
+Hub only. Closing the editor stops an engine that was launched for this test.
 
 Hub engines can be used as players and annotators. A Hub engine can also be
 offered as an MCTS annotator when `gui-engine-supports-mcts` is enabled.
@@ -1021,7 +1023,9 @@ The dialog initially selects the game currently shown in the main window.
 Windows and dialogs adapt their rows, labels and minimum sizes to the active font.
 Resize or maximize them to give boards, lists and text areas more room. Toolbars
 and database filters wrap when needed; preferences pages scroll when their content
-needs more space. Existing splitters still let you adjust the main panes.
+needs more space. The main FEN field fits a full chess FEN and expands for longer
+displayed positions. The game-moves pane reserves at least ten lines at its active
+notation font. Existing splitters still let you adjust the main panes.
 
 The appearance settings control:
 

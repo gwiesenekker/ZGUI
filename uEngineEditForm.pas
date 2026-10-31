@@ -40,6 +40,7 @@ type
     FIniContentMemo: TMemo;
     FIniPathEdit: TEdit;
     FInitMemo: TMemo;
+    FHubInitPanel:TPanel;
     FKindCombo: TComboBox;
     FOnAccepted: TEngineAcceptedEvent;
     FParamsGrid: TStringGrid;
@@ -349,9 +350,15 @@ begin
   Inc(LTop, 38);
 
   FInitMemo := TMemo.Create(Self);
-  FInitMemo.Parent := Self;
-  FInitMemo.Visible := False;
+  FInitMemo.Parent := LFieldsPanel;
+  FInitMemo.Name := 'HubInitializationMemo';
   FInitMemo.Text := 'init';
+  FInitMemo.WordWrap:=False;FInitMemo.ScrollBars:=ssAutoVertical;
+  FInitMemo.Hint:='Hub initialization commands. Blank uses init.';
+  FInitMemo.ShowHint:=True;
+  LLabel:=TLabel.Create(Self);LLabel.Caption:='Hub init';
+  FHubInitPanel:=LayoutRow(LFieldsPanel,[LLabel,FInitMemo],1);
+  FHubInitPanel.Name:='HubInitializationRow';FHubInitPanel.Top:=1;
 
   LLabel := TLabel.Create(Self);
   LLabel.Parent := LFieldsPanel;
@@ -700,6 +707,7 @@ begin
   Result.IniFileName := Trim(FIniPathEdit.Text);
   Result.IniContent := FIniContentMemo.Lines.Text;
   Result.InitText := FInitMemo.Text;
+  if (Result.Kind=eekHub) and (Trim(Result.InitText)='') then Result.InitText:='init';
   Result.NormalizeIds;
 end;
 
@@ -1341,6 +1349,10 @@ begin
     AddOrUpdateParam(FCapturedParams,'gui-uci-init','string',FInitMemo.Text,False);
     Exit;
   end;
+  if FKindCombo.ItemIndex=0 then begin
+    if Trim(FInitMemo.Text)='' then FInitMemo.Text:='init';
+    AddOrUpdateParam(FCapturedParams,'gui-hub-init','string',FInitMemo.Text,False);
+  end;
   AddOrUpdateParam(FCapturedParams, EngineLaunchArgumentParamName(eekHub),
     'string', Trim(FHubArgsEdit.Text), False);
   AddOrUpdateParam(FCapturedParams, EngineLaunchArgumentParamName(eekDxp),
@@ -1362,6 +1374,9 @@ var
   IsDxp: Boolean;
 begin
   IsDxp := FKindCombo.ItemIndex = 1;
+  FHubInitPanel.Visible:=FKindCombo.ItemIndex=0;
+  FInitMemo.Visible:=FHubInitPanel.Visible;
+  if (FKindCombo.ItemIndex=0) and (Trim(FInitMemo.Text)='') then FInitMemo.Text:='init';
   if FKindCombo.ItemIndex=2 then begin
     FIdLabel.Caption:='UCI id'; FArgsLabel.Caption:='UCI args';
     FHubArgsEdit.Hint:='Command-line arguments passed to the UCI engine.';
