@@ -4,6 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Propose named tournament tabs and explicit closing — 2026-10-31
+
+Commit: pending.
+
+- Prepare `chatgpt/TABBED_TOURNAMENTS_PROPOSAL.md` for Claude's review:
+  multiple named chess/draughts tournament tabs reuse the existing dialog,
+  scheduler, reservations and storage, with explicit session ownership.
+- Record the user's confirmed policy: closing warns that the tournament will
+  stop and offers Save / Discard / Cancel, with Cancel as the default. Closing
+  one tab leaves other tournaments running; closing the host accounts for all.
+  Preserve existing saved files and protect final results on Save.
+- Proposal only: no application behaviour changed and no build required.
+  Shared ownership/lifecycle changes await review under AGENTS.md.
+
 ### Address Claude's remaining GUI/context review findings — 2026-10-31
 
 Commit: `9606f3b`.
