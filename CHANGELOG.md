@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Audit the remaining tooltip controls — 2026-10-31
 
-Commit: pending.
+Commit: `0baedbf`.
 
 - User confirmed the engine-path hint fix works on Windows and asked: “Perhaps
   we can check if the fix is also needed everywhere else we show hints?”
