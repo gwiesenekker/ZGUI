@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Present completed tournament tabs without visible buildup — 2026-10-31
 
-Commit: pending.
+Commit: `a8a23e4`.
 
 - Address the Windows QA observation that a new tab visibly builds up. Batch
   constructor/host alignment and engine-list population, then finish the active
