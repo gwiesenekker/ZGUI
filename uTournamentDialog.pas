@@ -457,6 +457,8 @@ begin
   CrossTablePanel.BevelOuter := bvNone;
 
   FCrossTableGrid := TStringGrid.Create(Self);
+  FCrossTableGrid.MouseWheelOption := mwGrid;
+  FCrossTableGrid.Options := FCrossTableGrid.Options + [goThumbTracking];
   FCrossTableGrid.Parent := CrossTablePanel;
   FCrossTableGrid.Align := alClient;
   FCrossTableGrid.ColCount := 4;
@@ -471,6 +473,8 @@ begin
   PairingPanel.BevelOuter := bvNone;
 
   FGrid := TStringGrid.Create(Self);
+  FGrid.MouseWheelOption := mwGrid;
+  FGrid.Options := FGrid.Options + [goThumbTracking];
   FGrid.Name := 'TournamentPairings';
   FGrid.Parent := PairingPanel;
   FGrid.Align := alClient;

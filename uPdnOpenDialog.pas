@@ -77,6 +77,8 @@ begin
   FWarningLabel.Visible := False;
 
   FGrid := TStringGrid.Create(Self);
+  FGrid.MouseWheelOption := mwGrid;
+  FGrid.Options := FGrid.Options + [goThumbTracking];
   FGrid.Name := 'PdnGames';
   FGrid.Parent := Self;
   FGrid.Align := alClient;

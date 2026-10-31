@@ -65,6 +65,8 @@ begin
   FRegistryFileName := EnginesJsonFileName;
 
   FGrid := TStringGrid.Create(Self);
+  FGrid.MouseWheelOption := mwGrid;
+  FGrid.Options := FGrid.Options + [goThumbTracking];
   FGrid.Parent := Self;
   FGrid.Align := alClient;
   FGrid.FixedCols := 0;

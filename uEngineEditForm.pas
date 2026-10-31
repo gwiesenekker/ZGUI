@@ -419,6 +419,7 @@ begin
   FParamsGrid.ColCount := 3;
   FParamsGrid.FixedRows := 1;
   FParamsGrid.MouseWheelOption := mwGrid;
+  FParamsGrid.Options := FParamsGrid.Options + [goThumbTracking];
   FParamsGrid.Options := FParamsGrid.Options + [goEditing, goColSizing];
   FParamsGrid.Cells[0, 0] := 'name';
   // The name column remains fixed; only the value column absorbs spare width.

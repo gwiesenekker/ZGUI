@@ -874,6 +874,8 @@ begin
   LAnalyzerStatsPanel.BevelOuter := bvNone;
 
   FMctsStatsGrid := TStringGrid.Create(Self);
+  FMctsStatsGrid.MouseWheelOption := mwGrid;
+  FMctsStatsGrid.Options := FMctsStatsGrid.Options + [goThumbTracking];
   FMctsStatsGrid.Parent := LAnalyzerStatsPanel;
   FMctsStatsGrid.Align := alTop;
   FMctsStatsGrid.BorderStyle := bsSingle;

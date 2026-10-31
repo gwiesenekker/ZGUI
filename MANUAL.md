@@ -1028,6 +1028,11 @@ needs more space. The main FEN field fits a full chess FEN and expands for longe
 displayed positions. The game-moves pane reserves at least ten lines at its active
 notation font. Existing splitters still let you adjust the main panes.
 
+In tables, the mouse wheel scrolls the view without changing the selected row.
+Use a click or the arrow keys to change selection. Dragging a horizontal or
+vertical scrollbar updates the view while you drag, including in tournament
+lists and engine parameters.
+
 The appearance settings control:
 
 - light and dark squares of the main board;

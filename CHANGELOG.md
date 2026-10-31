@@ -4,6 +4,31 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Make table scrolling immediate and consistent — 2026-10-31
+
+Commit: pending.
+
+- Apply the parameter editor's native viewport wheel scrolling to tournament
+  games/cross-table, registered engines, PGN/PDN games, database games/results and
+  analysis statistics. The first wheel event scrolls without changing selection.
+- Enable live horizontal/vertical scrollbar thumb tracking in all eight tables,
+  including engine parameters. Retain native scrollbar arrows/pages, editing,
+  column sizing, click/double-click actions and keyboard navigation in both games.
+- Audit text panes, lists, notation/manual and settings/preferences scroll boxes:
+  they use separate native handling, not the grid cursor-scroll policy. Preserve
+  their existing behavior, including intentional log tailing on new output.
+- User authorisation on 2026-10-31: “QA: does the scrollbar in the Tournament event
+  games list-view have the same issue as the engine parameter scroll-bar? If so,
+  could we revisit the behaviour of all scroll-bars?” Scope: scrollbar/wheel GUI
+  behavior, continuing the previously authorised GUI-only work without approval.
+- Expand the parameter scroll regression to all eight tables for both games:
+  317 checks cover first-event wheel scrolling, bounds, preserved selection/data/
+  widths, scrollbar arrows/pages, horizontal wheel, live dragging and keyboard
+  selection. Application compilation, all seventeen GUI suites (including 9,148
+  layout checks) and both tournament preservation suites pass against an isolated
+  snapshot excluding unfinished feature flags. Native Windows interaction remains
+  untested.
+
 ### Size the tournament setup fields from their content — 2026-10-31
 
 Commit: `8493db9`.

@@ -373,3 +373,9 @@ To run its optional real Scan check, compile `tests/hub_ponder_check.pas` with
 pass one absolute Scan executable path. It temporarily enables `ponder` in that
 executable's parameter file and restores the exact original file in a finally
 block. Run one check at a time, with that engine idle. Repeat for engine6/engine7.
+
+`engine_parameter_scroll_check` now exercises all eight application tables in both
+chess and draughts: immediate wheel scrolling, unchanged selection/data/widths,
+scroll boundaries, scrollbar arrows/pages, horizontal scrolling, live thumb
+tracking and retained keyboard selection (317 checks). It uses synthetic rows
+without starting engines, database imports or tournament games.

@@ -242,6 +242,8 @@ begin
   FApplyFilterButton.OnClick := @ApplyFilterClick;
 
   FGamesGrid := TStringGrid.Create(Self);
+  FGamesGrid.MouseWheelOption := mwGrid;
+  FGamesGrid.Options := FGamesGrid.Options + [goThumbTracking];
   FGamesGrid.Parent := LTopPanel;
   FGamesGrid.Align := alClient;
   FGamesGrid.FixedCols := 0;
@@ -321,6 +323,8 @@ begin
   FBoardControl.PopupMenu := LBoardPopup;
 
   FResultsGrid := TStringGrid.Create(Self);
+  FResultsGrid.MouseWheelOption := mwGrid;
+  FResultsGrid.Options := FResultsGrid.Options + [goThumbTracking];
   FResultsGrid.Parent := LSearchPanel;
   FResultsGrid.Align := alClient;
   FResultsGrid.FixedCols := 0;
