@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Keep tournament visible when changing Game — 2026-10-31
+
+Commit: pending.
+
+- Reproduce the fresh-tournament Chess → Draughts disappearance through the
+  native GTK selector: the old handler destroys its dialog/combo inside the
+  selection callback, while GTK is still using the widget. The previous test
+  called the host directly and missed this access violation.
+- Queue replacement until the native event returns, identifying the existing tab
+  by stable ID. Preserve the same tab, fresh target-game settings, Save / Discard /
+  Cancel and other tournaments. A queued switch cannot recreate a closed tab.
+  Apply the same safe event lifetime to both switch directions and both games.
+- Exercise the native dropdown/change/close-up path, both directions, cancellation,
+  discard and closing before the queued switch runs. Add a reusable hidden Xephyr
+  test launcher; test windows stay off the user's desktop, with child cleanup.
+- Application compilation, all 19 GUI suites and both tournament suites pass on
+  hidden displays. The focused suite passes 143 checks with zero unfreed blocks.
+  Native Windows verification of the repaired selector remains outstanding.
+  Existing game/engine/rules code unchanged.
+
+
 ### Named tournament tabs and oldest-waiting-first engines — 2026-10-31
 
 Commit: `d816265`.

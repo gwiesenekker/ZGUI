@@ -84,5 +84,41 @@ queue between tournaments, not a new scheduler for all application activities.
 
 Unrelated dirty engine feature-flag work, AGENTS.md, engine directories and user
 Windows test binaries are excluded from the implementation commit and release.
-Repository garbage collection is a separate housekeeping action, pending explicit
-user authorisation after automatic approval review rejected an initial request.
+Repository garbage collection was separate housekeeping. After explicit user
+authorisation it completed successfully, reducing object storage from roughly
+1.60 GiB to 15.47 MiB; integrity checks passed.
+
+
+## QA: native Game selector crash — 2026-10-31
+
+User reproduction: launch ZGUI, create a fresh tournament, change Chess to
+Draughts, and the tournament window disappears. The new native GTK regression
+reproduces an EAccessViolation in destruction of the combo's widget. The previous
+test bypassed the combo event by calling the host callback directly, so did not
+exercise the native callback's remaining accesses after OnChange returned.
+
+This is a correction within the approved tab integration. ContextRequested now
+queues game replacement by stable tab ID; the active control remains alive until
+its native event returns. The existing prepare/stop/capture/embed implementation
+then runs unchanged. Pending requests are ignored if the tab has closed, and
+host destruction removes its queued calls. No game/engine/protocol changes.
+
+Tests now open the dropdown and use GTK's native selection signal, close it, and
+process queued replacement. Cover both switch directions, same page/count,
+continued visibility, fresh identity, Cancel and Discard with existing data, and
+closing a tab before a queued switch runs. The old implementation fails the new
+regression; the corrected implementation's final results are in CHANGELOG.md.
+
+The failed reproduction test remained stuck after its access violation; the user
+closed its window and its process exited. No user application was terminated.
+
+Going forward, run automated Linux GUI tests on a hidden display by default:
+
+    python3 tests/run_hidden_gui.py bash tests/run_gui_checks.sh
+
+The reusable launcher uses Xephyr in an unmapped parent window, never maps a
+window on the main desktop, does not fall back to the desktop if unavailable,
+and cleans up the nested server/test process group. It needs an existing parent
+X display (DISPLAY, default :1), but neither takes focus nor changes that display.
+Main-display testing is reserved for desktop-specific scaling/focus/window-manager
+or remote-session issues, explained to the user before testing there.

@@ -9,6 +9,7 @@ type
     LastSelected:Int64;
     Page:TTabSheet;
     Dialog:TTournamentDialog;
+    PendingVariant:TGameVariant;
   end;
   TTournamentClosePlan=record
     Tab:TTournamentTab;
@@ -39,6 +40,8 @@ type
     procedure HostCloseQuery(Sender:TObject;var CanClose:Boolean);
     procedure ChildCloseQuery(Sender:TObject;var CanClose:Boolean);
     procedure AsyncClose(Id:PtrInt);
+    procedure AsyncGameSwitch(Id:PtrInt);
+    procedure SwitchGame(Tab:TTournamentTab;Variant:TGameVariant);
     procedure AsyncLayout(Data:PtrInt);
     procedure PageChanged(Sender:TObject);
     procedure TitleChanged(Sender:TObject);
@@ -373,12 +376,38 @@ begin
   for I:=0 to Count-1 do if Dialogs[I]<>nil then Dialogs[I].BeginShutdown;
 end;
 procedure TTournamentHostForm.ContextRequested(Sender:TObject;Variant:TGameVariant;const FileName:string);
-var Tab:TTournamentTab;D,Old:TTournamentDialog;Plan:TTournamentClosePlan;
+var Tab:TTournamentTab;
 begin
-  if FBusy then Exit;
+  if FDisposing or FBusy then Exit;
   try
     if FileName<>'' then begin OpenFile(FileName,Variant);Exit;end;
-    Tab:=TabFor(Sender);if (Tab=nil) or (Tab.Dialog.Variant=Variant) then Exit;
+    Tab:=TabFor(Sender);
+    if (Tab=nil) or (Tab.Dialog=nil) or (Tab.Dialog.Variant=Variant) then Exit;
+    // Never destroy a combo or its form inside the native selection callback.
+    // Identify the tab by its stable ID: it may close before this call runs.
+    if Tab.PendingVariant=nil then Application.QueueAsyncCall(@AsyncGameSwitch,Tab.Id);
+    Tab.PendingVariant:=Variant;
+  except on E:Exception do ShowGuiOkDialog(Self,'Tournament game',E.Message);end;
+end;
+
+procedure TTournamentHostForm.AsyncGameSwitch(Id:PtrInt);
+var I:Integer;Tab:TTournamentTab;Variant:TGameVariant;
+begin
+  if FDisposing then Exit;
+  for I:=0 to Count-1 do begin
+    Tab:=TTournamentTab(FTabs[I]);
+    if Tab.Id<>Id then Continue;
+    Variant:=Tab.PendingVariant;Tab.PendingVariant:=nil;
+    if (Variant<>nil) and not FBusy and (Tab.Dialog<>nil) and
+      (Tab.Dialog.Variant<>Variant) then SwitchGame(Tab,Variant);
+    Exit;
+  end;
+end;
+
+procedure TTournamentHostForm.SwitchGame(Tab:TTournamentTab;Variant:TGameVariant);
+var D,Old:TTournamentDialog;Plan:TTournamentClosePlan;
+begin
+  try
     D:=CreateDialog(Variant);
     try
       D.TournamentName:=Tab.Dialog.TournamentName;

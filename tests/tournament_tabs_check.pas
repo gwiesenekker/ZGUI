@@ -1,6 +1,7 @@
 program tournament_tabs_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,
+  {$IFDEF LCLgtk2}Gtk2,Gtk2Proc,{$ENDIF} Forms,Classes,SysUtils,Controls,
   StdCtrls,ExtCtrls,ComCtrls,CheckLst,Grids,Dialogs,FPJSON,JSONParser,uMainForm,
   uTournamentHostForm,uTournamentDialog,uTournamentGridModel,uGamePosition,
   uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,uGameSetupTypes,
@@ -96,6 +97,22 @@ var Main:TMainForm;Host:TTournamentHostForm;Defs:TExternalEngineList;
     Directory,SaveName,Before,Published,Identity:string;D,Other:TTournamentDialog;
     Root:TGameTree;Page:TTabSheet;Rejected,CanClose:Boolean;L:TStringList;
     Decisions:TDecisions;Data:TJSONObject;Combo:TComboBox;Starts:TStarts;
+procedure ChangeGame(D:TTournamentDialog;Variant:TGameVariant);
+var C:TComboBox;Index:Integer;
+begin
+ C:=TComboBox(D.FindComponent('TournamentVariant'));
+ Index:=C.Items.IndexOfObject(Variant);Check(Index>=0,'Target game exists in selector');
+ C.SetFocus;
+ C.DroppedDown:=True;Pump;
+ {$IFDEF LCLgtk2}
+ // Use the native signal path: GTK continues accessing its widget after OnChange.
+ gtk_combo_box_set_active(PGtkComboBox(GetWidgetInfo(Pointer(C.Handle))^.CoreWidget),Index);
+ {$ELSE}
+ C.ItemIndex:=Index;C.OnChange(C);
+ {$ENDIF}
+ C.DroppedDown:=False;
+ Pump;
+end;
 procedure Configure(D:TTournamentDialog;TwoRows:Boolean=False);
 var I:Integer;
 begin
@@ -212,6 +229,14 @@ begin
   Button(Main,'Tournament...').Click;Host:=Main.TournamentHost;Check(Host.Count=1,'First open creates one tab');
   Starts.Original:=Host.OnStartGame;
   D:=Host.Dialogs[0];Check(Host.ShowForVariant(Chess)=D,'Reopen selects existing same-game tab');
+  Page:=Host.Pages.ActivePage;Identity:=D.TournamentIdentity;
+  ChangeGame(D,Draughts);D:=Host.Dialogs[0];
+  Check(Host.Visible and D.Visible,'Changing Chess to Draughts keeps tournament visible');
+  Check((Host.Count=1) and (Host.Pages.ActivePage=Page) and (D.Variant=Draughts),
+    'Native selector replaces settings inside the same tab');
+  Check(D.TournamentIdentity<>Identity,'Native game switch receives a fresh identity');
+  ChangeGame(D,Chess);D:=Host.Dialogs[0];
+  Check(Host.Visible and D.Visible and (D.Variant=Chess),'Reverse native switch keeps tournament visible');
   Check(Host.CloseTournament(D),'An empty tab closes directly');
   D:=Host.NewTournament(Chess);D.TournamentName:='Edited draft';
   GuiTestConfirmationResult:=mrCancel;
@@ -281,10 +306,10 @@ begin
   Check(Host.Pages.Pages[0].Caption<>Host.Pages.Pages[1].Caption,'Duplicate names have distinct visible labels');
   Page:=Host.Pages.ActivePage;Identity:=Other.TournamentIdentity;
   GuiTestConfirmationResult:=mrCancel;
-  try Other.OnContextRequested(Other,Draughts,'');finally GuiTestConfirmationResult:=0;end;
+  try ChangeGame(Other,Draughts);finally GuiTestConfirmationResult:=0;end;
   Check((Host.Count=2) and (Other.Variant=Chess),'Cancelled game switch preserves current tab and pairings');
   GuiTestConfirmationResult:=mrNo;
-  try Other.OnContextRequested(Other,Draughts,'');finally GuiTestConfirmationResult:=0;end;
+  try ChangeGame(Other,Draughts);finally GuiTestConfirmationResult:=0;end;
   Other:=Host.Dialogs[1];
   Check((Host.Count=2) and (Host.Pages.ActivePage=Page) and (Other.Variant=Draughts),
     'Game switch updates the same tab, not a new tab');
@@ -315,6 +340,10 @@ begin
   Host.Pages.OnCloseTabClicked(Host.Pages.ActivePage);Pump;
   Check(Host.Count=0,'Tab X removes its session rather than hiding it');
   Host.Font.Size:=10;
+  D:=Host.NewTournament(Chess);D.OnContextRequested(D,Draughts,'');
+  Check(Host.Dialogs[0]=D,'A game request keeps its sender alive until the native event returns');
+  Check(Host.CloseTournament(D),'A tab with a queued game switch can close safely');Pump;
+  Check(Host.Count=0,'A queued switch cannot recreate a closed tab');
   D:=Host.NewTournament(Chess);Configure(D);
   Other:=Host.NewTournament(Draughts);Configure(Other);
   GuiTestConfirmationResult:=mrCancel;CanClose:=True;
