@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Refresh the built-in manual and show complete engine path hints — 2026-10-31
 
-Commit: pending.
+Commit: `4553021`.
 
 - Replace the accumulated chess-port addendum with a current combined manual.
   Add a dedicated UCI subsection to the engine chapter alongside Hub and DXP;
