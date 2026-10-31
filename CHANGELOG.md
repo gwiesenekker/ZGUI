@@ -4,9 +4,23 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
-### Preserve DXP termination reasons in tournament rows — 2026-10-31
+### Audit the remaining tooltip controls — 2026-10-31
 
 Commit: pending.
+
+- User confirmed the engine-path hint fix works on Windows and asked: “Perhaps
+  we can check if the fix is also needed everywhere else we show hints?”
+- Audit engine argument/INI help, analysis time, game-tree help, game-file
+  warnings, score-history tooltips and disabled-feature hints. These already
+  supply explicit hint text; no other grid uses truncation-only cell hints.
+- No further tooltip code changes are needed for the reported mechanism. Keep
+  board-move highlights and menu Hint values used as engine keys unchanged.
+  Record findings in chatgpt/HINT_CONTROL_AUDIT.md; this is a source audit,
+  not a claim that every native Windows tooltip was exercised.
+
+### Preserve DXP termination reasons in tournament rows — 2026-10-31
+
+Commit: `2ad2512`.
 
 - Carry a separate, lock-protected engine termination reason through the existing
   engine interface, orchestrator, runner snapshot and running-game view. The DXP
