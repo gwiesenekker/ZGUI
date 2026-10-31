@@ -30,6 +30,7 @@ type
     procedure OpenEngineEditor(AIndex: Integer);
     procedure RefreshGrid;
     procedure MeasureColumns;
+    procedure GridCellHint(Sender:TObject;ACol,ARow:Integer;var HintText:string);
   protected
     procedure FontChanged(Sender: TObject); override;
     procedure DoShow;override;
@@ -83,8 +84,9 @@ begin
   for Col:=1 to FGrid.ColCount-1 do FGrid.Columns[Col].SizePriority:=0;
   FGrid.Columns[0].SizePriority:=1;
   FGrid.AutoFillColumns:=True;
-  FGrid.Options:=FGrid.Options+[goColSizing,goTruncCellHints];
+  FGrid.Options:=FGrid.Options+[goColSizing,goCellHints];
   FGrid.ShowHint:=True;
+  FGrid.OnGetCellHint:=@GridCellHint;
 
   LPopup := TPopupMenu.Create(Self);
   LItem := TMenuItem.Create(Self);
@@ -265,6 +267,15 @@ procedure TEnginesDialog.FontChanged(Sender: TObject);
 begin
   inherited FontChanged(Sender);
   MeasureColumns;
+end;
+
+procedure TEnginesDialog.GridCellHint(Sender:TObject;ACol,ARow:Integer;
+  var HintText:string);
+begin
+  HintText:='';
+  if (ARow>=FGrid.FixedRows) and (ARow<FGrid.RowCount) and
+     (ACol>=0) and (ACol<FGrid.ColCount) then
+    HintText:=FGrid.Cells[ACol,ARow];
 end;
 
 procedure TEnginesDialog.MeasureColumns;

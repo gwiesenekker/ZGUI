@@ -24,6 +24,28 @@ begin
  if Horizontal then M.Msg:=LM_HSCROLL else M.Msg:=LM_VSCROLL;
  M.ScrollCode:=Code;M.Pos:=Position;G.Dispatch(M);
 end;
+procedure TestEngineHints(G:TStringGrid);
+const Path1='C:\Chess engines\échecs\Stockfish\stockfish-windows-x86-64.exe';
+      Path2='D:\External engines\ZZZZZZ4\engine.exe';
+var R:TRect;W:Integer;Fill:Boolean;
+ procedure Hover(Col,Row:Integer;const Expected:string);
+ begin
+  R:=G.CellRect(Col,Row);
+  TGridAccess(G).ShowCellHintWindow(Point(R.Left+4,R.Top+4));
+  Check(G.Hint=Expected,'Engine cell hover supplies full expected hint');
+ end;
+begin
+ Check(G.ShowHint and (goCellHints in G.Options),'Explicit data-cell hints enabled');
+ Check(Assigned(G.OnGetCellHint),'Engine data-cell hint handler assigned');
+ G.Cells[0,1]:=Path1;G.Cells[0,2]:=Path2;
+ W:=G.ColWidths[0];Fill:=G.AutoFillColumns;G.AutoFillColumns:=False;
+ try
+  G.ColWidths[0]:=120;Hover(0,1,Path1);Hover(0,2,Path2);
+  G.ColWidths[0]:=2000;Hover(0,1,Path1);
+  Hover(0,0,'');
+  G.Cells[0,2]:='';Hover(0,2,'');
+ finally G.ColWidths[0]:=W;G.AutoFillColumns:=Fill;Application.CancelHint;end;
+end;
 procedure TestGrid(G:TStringGrid;const Context:string);
 var I,Top,Selected,Column,WidthBefore:Integer;Value:string;Key:Word;P:TPoint;
 begin
@@ -34,6 +56,7 @@ begin
  G.RowCount:=301;
  for I:=G.FixedRows to G.RowCount-1 do
   G.Cells[G.FixedCols,I]:='row-'+IntToStr(I);
+ if Pos('TEnginesDialog/',Context)=1 then TestEngineHints(G);
  G.Col:=G.FixedCols;G.Row:=G.FixedRows;G.TopRow:=G.FixedRows;Pump;
  Top:=G.TopRow;Selected:=G.Row;Column:=G.Col;
  Value:=G.Cells[Column,Selected];WidthBefore:=G.ColWidths[0];

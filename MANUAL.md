@@ -1,188 +1,11 @@
 # ZGUI User Manual
 
-ZGUI restores the last selected game in the existing GWDGUI layout. On the
-8×8 chess board, click a source and destination, or click a move in
-**Legal moves**. Promotion choices use the existing move-choice dialog. Notation
-uses SAN; the legal-moves list uses UCI coordinates. **F** flips the board.
+Updated 31 October 2026.
 
-Right-click the FEN field to paste a chess FEN from the clipboard. The main
-board's context menu copies the displayed position as FEN. For a new standard
-position, paste:
-
-```text
-rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
-```
-
-Explore mainlines and variations through the existing notation and game-tree
-views. **Ctrl+O** opens a PGN collection in the existing game browser; double-click
-a game to load it at its mainline tip. Games are checked on selection, with import warnings shown
-in the browser. **Ctrl+S** appends the displayed game to a PGN file. Replacing
-or closing an exploration offers **Yes / No / Cancel** to save first. Cancel or
-a failed save keeps the current tree and display. A PGN file is never partially
-loaded because of an invalid move or malformed variation.
-
-PGN preserves tag values (including custom tags), comments, NAGs and nested
-variations. Repeated moves from the same position merge their comments, NAGs
-and continuations, with a warning. Formatting and comment delimiters may be
-normalized. Comments after a variation are associated with the preceding move
-and may be printed before that variation on saving. Orthodox chess PGN is supported; null moves are rejected, and an
-optional **e.p.** suffix is accepted after en passant. Legacy CP1252 files are
-converted to UTF-8 with a warning; saved PGN uses UTF-8 without a BOM.
-
-The chess reader accepts a spelling only when it identifies one legal move.
-It tolerates redundant source file/rank/square disambiguation (`Ngf3`, `N1f3`,
-`Ng1f3`), missing or incorrect `+`/`#`, promotion without `=`, long algebraic
-or UCI coordinates (`e2-e4`, `e2e4`), a missing capture `x`, and lower-case
-`n`, `r`, `q` or `k`. Lower-case `b` always means the b-file, never a bishop;
-use upper-case `B` for bishops. Castling may use zeroes (`0-0`). Ambiguous or
-illegal moves, a spurious capture `x` on a non-capture and an invalid promotion
-piece remain errors. A different legal promotion piece means a different move;
-the reader never substitutes one for another.
-
-File/Open and database import report **Non-standard SAN normalised** at most once
-per game, including spellings in variations. Normal GUI saving writes canonical
-SAN with correct check/mate suffixes, so opening and saving cleans up those
-spellings without changing the played moves.
-
-Standard `[%eval ...]`, `[%clk ...]` and `[%emt ...]` annotations are read and
-written as typed evaluation/clock data; unknown commands stay in the comments.
-The standard evaluation command includes depth when known and reloads as the
-engine score, including when its source was an annotator. The lossless export
-option retains the original source. The normal export omits ZGUI-specific PV/depth and secondary annotator metadata.
-An optional lossless mode is available through the export API using the existing
-node-data extension. Analysis PVs never become played variations. Movetext wraps
-at token boundaries near column 80; an indivisible comment or token may be longer.
-Each imported game is limited to 16 MiB, individual tokens to 1 MiB and variation
-nesting to 128 levels. Large collections are indexed a game at a time, with move
-validation deferred until selection.
-
-UCI configuration and analysis are connected through the existing editor,
-annotator, PV/hint views and score history:
-
-1. Open **Engines...**, add an engine, choose **UCI**, and select its executable.
-2. Leave initialization empty. Use the existing arguments and INI/config fields
-   when required by the engine; the INI editor remains available.
-3. Click **Launch engine**. Discovery runs in the background; **Cancel** interrupts
-   an unresponsive handshake. The parameter grid retains saved values and shows
-   advertised check, spin, combo, string and button options. Double-click a button
-   option's value cell to invoke it once. Buttons are never replayed on startup.
-4. Click **Launched correctly** to save, then right-click the analysis area and
-   select the engine under **Open Annotator**. The existing seconds field controls
-   each finite analysis search. Browsing a different position stops the old search
-   before starting another. Use **Close Annotator** to release the engine.
-
-The line above the annotator PV shows its score, depth and time using the same
-information format as the engine PV. It follows the displayed PV and clears
-when the annotator closes.
-
-Scores are from White's point of view: pawn units for ordinary evaluations and
-`#N` for mate. Mate scores stay textual rather than becoming invented chart
-values. Only exact primary-line scores with a legal PV are stored; bounded and
-secondary lines remain in the engine log. A score/depth update still appears when
-its PV is unchanged. PVs and hints use existing navigation and never become
-played moves or variations. Ponder is forced off for discovery and analysis;
-UCI_Chess960 stays off, MultiPV is 1, and UCI_AnalyseMode is on for analysis and
-off for games when advertised. Other saved options match
-names without case sensitivity, while commands use the engine's spelling.
-Unknown saved options are retained but not sent. Initialization accepts only
-empty lines, `debug on`, `debug off` or `register later`; use the grid for options.
-Hub, DXP and UCI settings remain in separate JSON sections.
-
-Clocked games now use the existing **New game** dialog. Choose Human or a
-registered UCI engine for each colour and enter a chess FEN if a custom start is
-wanted. Chess defaults to **5 minutes + 3 seconds**, with zero moves per period
-(sudden death). Positive moves per period retain the existing repeating equal
-periods. The fullmove number in a custom FEN does not count as moves already
-played in the new clock session. Unreadable or invalid time fields are reported;
-they are not silently replaced by defaults. Busy engine registrations stay out
-of the player lists, including an engine already used as an annotator.
-
-The existing board, legal-moves list, promotion chooser, game list, clocks,
-**Stop**, replay and PGN save paths are reused. Engine PVs can update during a
-search with raw stdout hidden; they remain analysis rather than played moves.
-Both human and engine clocks count down, including for an engine that emits no
-output. Viewing clocks never changes game-tree data or adjudicates a flag.
-
-The inherited clock policy adds the increment due on a completed move before
-checking expiry; the idle-human allowance uses that same policy. **After move
-limit** starts increment credit at the threshold move and keeps it thereafter.
-A new period is earned only by an on-time completed move. Human flags are checked
-on the existing polling cadence. Stopping a search retains an unfinished `*`
-result and accounts for elapsed engine time without accepting a move. An engine
-crash or invalid protocol response stops the game with an error and `*`, with
-the reason in the game log; it is not awarded as a time loss. Ordinary flag
-results use the existing chess timeout/material rules.
-
-Initial terminal positions finish without waiting for a move. The existing chess
-rules automatically accept threefold/50-move draw claims as soon as available,
-including a legal intended move; there is no new claim dialog. Conservative
-insufficient-material/dead-position limitations remain as documented.
-
-To enable pondering for a game engine, save **Ponder = true** in its existing
-parameter grid. Without a saved true value, pondering is off even when the
-engine advertises a true default. An engine must advertise the Ponder check
-option. This choice is per engine; discovery and analysis never ponder and do
-not replace the saved choice with their runtime false value.
-
-Pondering searches a predicted opponent reply in the background. A matching
-actual reply reuses that search through `ponderhit`; a different reply stops the
-old search before starting from the actual position. A valid early ponder result
-is retained for a hit and discarded for a miss. Predictions and speculative
-scores/PVs never become played moves or annotations. Ponder time is not charged
-to the engine's clock; actual-turn time, including stopping a missed search, is.
-
-Pondering is most useful against a human or engines on separate machines. Two
-engines pondering on one computer compete for CPU resources; leave it off for
-ordinary engine comparisons unless resources are deliberately separated.
-At very fast time controls, the engine's advertised **Move Overhead** option
-can leave a margin for communication and scheduling.
-
-Chess engine tournaments now use the existing **Tournament...** dialog. Select
-registered UCI engines, a starting FEN, time control, pairing type and concurrent
-game count, then use **Create pairing** and **Play**. The default is 5+3 sudden
-death. Single and double round-robin and the existing Swiss pairing heuristic
-are available. Every game uses the one supplied FEN; opening files and paired
-opening variety are a separate future feature.
-
-Chess standings show one point for a win and half a point for a draw. The
-existing tie-break order is points, wins, Sonneborn-Berger, then name. A Swiss
-BYE awards one point and counts as a win in that tie-break; it starts no engine
-and creates no played PGN. This retains the existing tournament conventions,
-which are not a claim of compliance with FIDE Swiss regulations. Finish or
-resolve the current Swiss round before creating the next one.
-
-Tournament games force Ponder off at runtime, even when an engine has it saved
-as true. Saved options and ordinary games keep their own choice. UCI options
-are currently shared by all registrations using the same executable; different
-IDs do not give them different Threads, Hash or strength settings. Start warns
-about shared executable paths. Use separate executable paths when comparing
-different configurations; per-registration options are a separate future change.
-
-Concurrency respects existing engine reservations: five participants permit at
-most two games at once. Rows waiting for a busy engine say so. Concurrent active
-searches still share CPU capacity, and both players' processes retain their Hash
-memory. Choose Threads, Hash and concurrency to fit the machine; ZGUI does not
-allocate cores automatically or claim that such games are isolated measurements.
-
-Completed games, manual results and attempt history use the existing recovery
-workflow. Chess saves a versioned JSON tournament and a companion **PGN** with
-the game's start date, actual moves, comments and variations. Externally changed
-PGNs are preserved. Loading restores records without starting processes; use
-**Play** to continue pending rows. A stopped or failed row remains unfinished
-with an explicit reason. Use a manual result or **Reschedule selected game**;
-errors are not silently retried or awarded as forfeits. A flag fall remains a
-normal rules-based result. Draughts tournament files remain separate and cannot
-be loaded into the chess tournament dialog.
-
-Chess databases are available through the existing **Database** menu and window;
-see section 9. Chess Auto Play uses the existing annotator and controls (section
-5.5). The MCTS annotator remains disabled for chess.
-
-The numbered sections below are retained reference documentation for the
-inherited draughts features. They do not imply those features are enabled for
-chess. The score-history view and shared navigation infrastructure are retained.
-Chess pieces use original GPLv3 vector artwork embedded in the source and do not
-require a chess font.
+ZGUI plays, analyses and stores orthodox chess and international 10×10 draughts.
+Chess uses UCI engines and PGN files; draughts uses Hub/DXP engines and PDN files.
+The shared windows provide game clocks, analysis, tournaments and databases.
+Choose the game through Game History or the Game choice in the game dialogs.
 
 ## Chess and draughts in one window
 
@@ -223,13 +46,19 @@ are independent for chess and draughts. ZGUI restores the last selected game on 
 
 When ZGUI starts, the main window shows:
 
-- the main draughts board and clocks;
+- the selected chess or draughts board and clocks;
 - **Game History** and the legal moves for the displayed position;
 - player names, result, FEN, and the game notation;
 - the engine and annotator analysis areas;
 - a score-history graph and evaluation bar;
 - buttons for **Engines...**, **New game...**, **Tournament...**, analysis time,
   and **Auto Play**.
+
+Chess uses an 8×8 board and SAN game notation; its legal-moves list uses UCI
+coordinates. Draughts uses a 10×10 board and numbered-square notation. Click a
+piece and destination to play, or choose a legal move. Chess promotion opens the
+existing move chooser. Press **F** to flip the board. Chess artwork is embedded;
+draughts uses the supplied `draughts.ttf` font.
 
 Before playing against an engine or running a tournament, register the engine
 through **Engines...**. Human-versus-human games can be started immediately.
@@ -245,7 +74,8 @@ W:W31-50:B1-20
 Open **Engines...** from the toolbar. The engine list shows each executable and
 its Hub, UCI or DXP identity. The executable and ID columns fit
 their titles and values using their respective fonts, plus a margin; the path column fills the remaining width. Resize the
-window or columns as needed, and hover over clipped text to see its full value.
+window or columns as needed. Hover over a data cell to see its complete value,
+including the engine path even when it fits in the column.
 
 Right-click the list to:
 
@@ -256,7 +86,48 @@ Double-click an existing entry to edit it. Engine identities must be unique
 within the same protocol. DXP engines must not be configured to use the same
 local port at the same time.
 
-### 2.1 Hub engines
+Engine executables may live outside the ZGUI directory. ZGUI launches the
+registered path, with the engine's own directory as its working directory.
+Separate registrations of one executable share its parameter file; use separate
+executable paths for independent saved configurations.
+
+### 2.1 UCI engines (chess)
+
+Register a chess engine through the existing editor:
+
+1. Open **Engines...**, add an engine, choose **UCI**, and select its executable.
+2. Enter any required launch arguments. Use the INI/configuration editor if the
+   engine needs a configuration file; ordinary UCI engines need no startup script.
+3. Click **Launch engine**. Discovery runs in the background; **Cancel** interrupts
+   an unresponsive handshake. The parameter grid retains saved values and shows
+   advertised check, spin, combo, string and button options. Double-click a button
+   option's value cell to invoke it once. Buttons are never replayed on startup.
+4. Click **Launched correctly** to save, then right-click the analysis area and
+   select the engine under **Open Annotator**. The existing seconds field controls
+   each finite analysis search. Browsing a different position stops the old search
+   before starting another. Use **Close Annotator** to release the engine.
+
+The line above the annotator PV shows its score, depth and time using the same
+information format as the engine PV. It follows the displayed PV and clears
+when the annotator closes.
+
+Scores are from White's point of view: pawn units for ordinary evaluations and
+`#N` for mate. The score history maps positive/negative mate scores to its configured
+maximum/minimum while preserving their mate distance in tooltips. Only exact primary-line scores with a legal PV are stored; bounded and
+secondary lines remain in the engine log. A score/depth update still appears when
+its PV is unchanged. PVs and hints use existing navigation and never become
+played moves or variations. Ponder is forced off for discovery and analysis;
+UCI_Chess960 stays off, MultiPV is 1, and UCI_AnalyseMode is on for analysis and
+off for games when advertised. Other saved options match
+names without case sensitivity, while commands use the engine's spelling.
+Unknown saved options are retained but not sent. Initialization accepts only
+empty lines, `debug on`, `debug off` or `register later`; use the grid for options.
+Hub, DXP and UCI settings remain in separate JSON sections.
+
+Pondering in ordinary games is described in section 5.7. Tournament policy is
+covered in section 7.
+
+### 2.2 Hub engines (draughts)
 
 In the engine editor:
 
@@ -277,7 +148,7 @@ Closing the editor stops an engine that was launched for this test.
 Hub engines can be used as players and annotators. A Hub engine can also be
 offered as an MCTS annotator when `gui-engine-supports-mcts` is enabled.
 
-### 2.2 DXP engines
+### 2.3 DXP engines (draughts)
 
 For a DXP engine:
 
@@ -302,10 +173,24 @@ DXP host fields accept dotted IPv4 addresses and `localhost` (mapped to
 accepts only local peers. `gui-dxp-peer-ip` can further restrict the peer of a
 live game listener and the registration connection test.
 
-DXP is used for game communication. DXP game messages do not currently supply
-the Hub-style analysis score and PV data used by the score history.
+For a client engine such as Scan, choose ZGUI's **listen** role: ZGUI opens its
+listener before starting the executable. Configure Scan to connect as a client;
+Scan's `dxp-server = true` mode is not supported by Scan. In ZGUI's **connect**
+role, the peer must provide the listening socket. Consult the engine's own
+configuration for its DXP command-line arguments or startup mode.
 
-### 2.3 Launch arguments and configuration files
+DXP is for playing games and cannot be selected as an annotator. DXP game
+messages do not themselves carry analysis PVs.
+
+A received DXP game-end reason means: `0` unspecified, `1` resignation,
+`2` draw claim, `3` win claim. Stop code `0` permits another game; `1` requests
+that the session end. Only resignation directly concedes a result. Other claims
+are checked by the shared game rules; a log entry with `result=*` means no final
+result was assigned by the DXP adapter. The tournament Reason column currently
+uses general result/error descriptions; it does not show the peer's reason as
+“Draw claimed” or “Win claimed”. The raw reason remains in the game log.
+
+### 2.4 Launch arguments and configuration files
 
 An engine may have an associated INI or configuration file. The editor can
 open and edit its contents. The following placeholders are expanded in launch
@@ -317,17 +202,20 @@ arguments and supported configuration text:
 This is useful for engines that need their socket settings in a command-line
 argument or generated configuration file.
 
-### 2.4 Engine parameters
+### 2.5 Engine parameters
 
-Parameters reported by a Hub engine are shown in the parameter grid. Their
-values are sent to the engine when it is initialized, except for names starting
-with `gui-`. Those are ZGUI settings and are never sent as Hub parameters.
+Hub and UCI options appear in the parameter grid after a successful launch.
+Values are applied through the selected engine protocol. Names beginning with
+`gui-` belong to ZGUI and are never sent as engine options. Hub, DXP and UCI
+settings are stored in separate protocol sections of the parameter file.
 
 Important GUI parameters include:
 
 | Parameter | Meaning |
 | --- | --- |
-| `gui-engine-type` | `hub` or `dxp` |
+| `gui-engine-type` | Engine protocol: `hub`, `dxp` or `uci` |
+| `gui-uci-id` | UCI identity used by ZGUI |
+| `gui-uci-launch-arguments` | UCI command-line arguments |
 | `gui-hub-id` | Hub identity used by ZGUI |
 | `gui-hub-launch-argument` | Hub command-line arguments |
 | `gui-dxp-id` | DXP identity used by ZGUI |
@@ -357,7 +245,8 @@ causes the evaluation graph to change sign on the wrong moves.
 Hub parameter values cannot contain a double quote (`"`); the protocol has no
 escape for it. ZGUI rejects double quotes and line breaks in Hub parameters
 before saving the engine settings and names the parameter to correct. Command-line
-arguments and initialization commands are separate settings and may contain quotes.
+arguments are separate settings and may contain quotes. Hub initialization is
+automatic; there is no configurable Hub initialization field.
 
 Older parameter files may contain `gui-single-captures-include-captured-square`;
 it does not control current capture notation. Capture paths are determined from
@@ -368,7 +257,7 @@ The current score graph takes its display maximum and scale from **File >
 Preferences**. The seeded per-engine `gui-evaluation-bar-*` values are retained
 in parameter files for compatibility but are not the current graph controls.
 
-### 2.5 Where engine settings are stored
+### 2.6 Where engine settings are stored
 
 ZGUI stores the engine registry in `engines.json` beside the ZGUI
 executable. Parameter values for an engine are stored beside that engine, using
@@ -385,10 +274,17 @@ Click **New game...**. Configure:
 
 - the starting FEN;
 - White and Black as **Human** or a registered engine;
-- moves per period, default `75`;
-- minutes per period, default `5`;
-- increment in seconds, default `0`;
+- moves per period (`0` means sudden death);
+- minutes per period;
+- increment in seconds;
 - increment mode, **From start** or **After move limit**.
+
+Defaults depend on the game: chess starts at **0 moves / 5 minutes / 3 seconds
+increment**; draughts starts at **75 moves / 5 minutes / 0 seconds increment**.
+“0 moves in 5 minutes” gives five minutes for the whole game, plus the configured
+increment after each completed move. A positive move count uses repeating periods.
+The Starting FEN field selects the initial position; leave the game's default
+FEN for the normal start. Only compatible engines are offered.
 
 The same engine instance cannot play both sides, and an engine that is already
 busy is not available. Click the dialog's start button to create the game.
@@ -396,6 +292,31 @@ busy is not available. Click the dialog's start button to create the game.
 Engine startup and initialization happen before the game clock is charged. The
 playing clock starts when the game itself starts, so engine load time is also
 excluded in tournament games.
+
+The fullmove number in a custom chess FEN does not count as moves already
+played in the new clock session. Unreadable or invalid time fields are reported;
+they are not silently replaced by defaults. Busy engine registrations stay out
+of the player lists, including an engine already used as an annotator.
+
+The existing board, legal-moves list, promotion chooser, game list, clocks,
+**Stop**, replay and PGN save paths are reused. Engine PVs can update during a
+search with raw stdout hidden; they remain analysis rather than played moves.
+Both human and engine clocks count down, including for an engine that emits no
+output. Viewing clocks never changes game-tree data or adjudicates a flag.
+
+The inherited clock policy adds the increment due on a completed move before
+checking expiry; the idle-human allowance uses that same policy. **After move
+limit** starts increment credit at the threshold move and keeps it thereafter.
+A new period is earned only by an on-time completed move. Human flags are checked
+on the existing polling cadence. Stopping a search retains an unfinished `*`
+result and accounts for elapsed engine time without accepting a move. An engine
+crash or invalid protocol response stops the game with an error and `*`, with
+the reason in the game log; it is not awarded as a time loss. Ordinary flag
+results use the existing chess timeout/material rules.
+
+Initial terminal positions finish without waiting for a move. The existing chess
+rules automatically accept threefold/50-move draw claims as soon as available,
+including a legal intended move; there is no new claim dialog. The dead-position limits are explained below.
 
 ### 3.1 Making a human move
 
@@ -430,11 +351,20 @@ finished game lets you inspect its game tree and move history.
 
 ### 3.3 How games end
 
-ZGUI decides results from the legal position and clocks. A side with no legal
-move loses. A player that exhausts its allotted time loses; engine search limits
-follow the game clock. The game log records why play ended.
+ZGUI uses the selected game's legal position and clocks. The game log records
+why play ended. Stopping a game leaves it unfinished unless a final result was
+already established; engine/protocol errors are reported rather than silently
+awarded as time losses.
 
-The implemented draw rules are:
+In **chess**, checkmate wins and stalemate draws. Fivefold repetition and the
+75-move rule are automatic draws. ZGUI also accepts available threefold and
+50-move claims immediately, including claims through an intended legal move;
+there is no separate claim button. Checkmate takes precedence on the last move.
+A timeout is a draw if the opponent cannot mate under the implemented material
+checks. Insufficient-material checks cover the supported simple dead positions;
+arbitrary locked-pawn fortresses and all possible dead positions are not solved.
+
+In **draughts**, having no legal move loses. The implemented draw rules are:
 
 - the same position, including the side to move, occurring three times;
 - 25 moves by each side consisting only of non-capturing king moves; a capture
@@ -465,7 +395,7 @@ While the move list has focus:
 - `Right Arrow` moves to the next game position;
 - `Escape` returns to the live or final game position.
 
-Engine PVs, annotator PVs, and imported PDN variations are displayed between
+Engine PVs, annotator PVs, and imported PGN/PDN variations are displayed between
 parentheses with move numbers. Clicking a move in a variation enters variation
 browsing. The arrow keys then cycle through all variation positions, including
 the position before its first move. Press `Escape` to leave variation browsing.
@@ -497,7 +427,7 @@ Analysis lines, including first-move-only displays, appear **after the actual mo
 played** from their source position. If no continuation has been played yet, the
 analysis remains at the end of the notation (or at the initial position for an
 empty game). Clicking a displayed PV still replays from its original source
-position; moving its text does not change the game or saved PDN data.
+position; moving its text does not change the game or saved game data.
 
 ### 4.2 The Game Tree window
 
@@ -515,7 +445,7 @@ notation. The tree window, notation and board share the same selection. Use
 Left/Right to follow parents and continuations; stepping back and forward retains
 the chosen branch. Press `Escape` to resume following the current game. If a
 selected branch is removed, selection returns to its nearest surviving ancestor.
-The tree window's context menu can copy the tree as PDN.
+The tree window's context menu can copy the tree in its PGN or PDN format.
 
 ## 5. Analysis
 
@@ -555,7 +485,7 @@ the saved option file is unchanged.
 
 The engine PV belongs to the engine playing the game. The annotator PV belongs
 to the separately loaded annotator. Both are attached to their source nodes and
-can be displayed as browsable PDN variations.
+can be displayed as browsable notation variations.
 
 Right-click the main board and choose **Show hints from main PV**, **Show hints
 from annotator PV**, or **Do not show hints**. These three options are mutually
@@ -575,7 +505,8 @@ selection stop at the last legal position.
 
 ### 5.4 MCTS annotator
 
-Right-click the MCTS analysis area to open or close an MCTS annotator. The
+MCTS annotation is available for draughts, not chess. Right-click the MCTS
+analysis area to open or close an MCTS annotator. The
 selection lists Hub engines whose `gui-engine-supports-mcts` parameter is true.
 Statistics reported by that engine are displayed in the MCTS panel.
 
@@ -637,6 +568,27 @@ Right-click the engine mini-board and choose **Pop out mini-board**, or right-cl
 the annotator mini-board and choose **Pop out annotator mini-board**. Double-clicking
 one of these boards opens the same larger view. The pop-out follows that browser's
 selected analysis position and offers copying its FEN from the context menu.
+
+### 5.7 Pondering in chess games
+
+To enable pondering for a game engine, save **Ponder = true** in its existing
+parameter grid. Without a saved true value, pondering is off even when the
+engine advertises a true default. An engine must advertise the Ponder check
+option. This choice is per engine; discovery and analysis never ponder and do
+not replace the saved choice with their runtime false value.
+
+Pondering searches a predicted opponent reply in the background. A matching
+actual reply reuses that search through `ponderhit`; a different reply stops the
+old search before starting from the actual position. A valid early ponder result
+is retained for a hit and discarded for a miss. Predictions and speculative
+scores/PVs never become played moves or annotations. Ponder time is not charged
+to the engine's clock; actual-turn time, including stopping a missed search, is.
+
+Pondering is most useful against a human or engines on separate machines. Two
+engines pondering on one computer compete for CPU resources; leave it off for
+ordinary engine comparisons unless resources are deliberately separated.
+At very fast time controls, the engine's advertised **Move Overhead** option
+can leave a margin for communication and scheduling.
 
 ## 6. Scores, score history, and evaluation bar
 
@@ -702,7 +654,18 @@ their existing key handling.
 
 ## 7. Running a tournament
 
-Click **Tournament...**.
+Click **Tournament...**. Chess and draughts keep separate tournament windows;
+the Game choice opens the corresponding window. Chess offers UCI engines;
+draughts offers Hub/DXP engines.
+
+An engine label such as **Name (Engine 11 dxp engine)** uses its one-based
+position in the complete engine registry, followed by its protocol. It is not
+an engine-directory number or a participant count. Filtering by game can leave
+gaps, and adding/removing registrations can change these display numbers.
+Tournament records identify engines using their saved configuration identity.
+
+The tournament name and Starting FEN occupy full-width rows. The FEN minimum
+width follows its text and font; clock, pairing and action groups wrap as needed.
 
 ### 7.1 Tournament settings
 
@@ -749,12 +712,18 @@ available for review or rescheduling.
 
 ### 7.3 Results and rescheduling
 
-Right-click a pairing to set its result manually to:
+Right-click a pairing to set its result manually. The result spelling depends
+on the tournament's game:
 
-- `*` for unknown;
-- `2-0` for a White win;
-- `1-1` for a draw;
-- `0-2` for a Black win.
+| Result | Chess | Draughts |
+|---|---|---|
+| White wins | `1-0` | `2-0` |
+| Draw | `1/2-1/2` | `1-1` |
+| Black wins | `0-1` | `0-2` |
+| Unfinished/unknown | `*` | `*` |
+
+Chess standings award one point for a win and half a point for a draw.
+Draughts standings award two points for a win and one point for a draw.
 
 **Clear pairing** starts a fresh pairing/tournament after confirmation and keeps
 the earlier tournament files. It is unavailable while games are running or
@@ -770,9 +739,9 @@ name. It also shows the individual matchup results.
 
 - Changes and results save automatically. Use **Save** to choose the JSON file;
   **Load** resumes a saved tournament while no tournament is running.
-- The tournament PDN is created beside the JSON when first saved outside recovery.
-  Move the JSON and its linked PDN together.
-- An older or externally changed PDN is preserved rather than overwritten.
+- The tournament PGN/PDN is created beside the JSON when first saved outside recovery.
+  Move the JSON and its linked PGN/PDN together.
+- An older or externally changed PGN/PDN is preserved rather than overwritten.
 - Engine definitions must match the saved identities. Renaming an engine is safe;
   changing its executable, protocol ID, arguments or INI contents can leave old
   rows without a matching engine. See the details below.
@@ -781,7 +750,46 @@ Before a file is chosen, recovery files live in the per-user application
 configuration directory. Save errors appear in the tournament title and pause
 scheduling so the error can be resolved without losing results.
 
-### 7.5 Tournament files in detail
+### 7.5 Chess tournament details
+
+Chess engine tournaments use **Tournament...**. Select
+registered UCI engines, a starting FEN, time control, pairing type and concurrent
+game count, then use **Create pairing** and **Play**. The default is 5+3 sudden
+death. Single and double round-robin and the existing Swiss pairing heuristic
+are available. Every game uses the one supplied FEN; opening files and paired
+opening variety are a separate future feature.
+
+Chess standings show one point for a win and half a point for a draw. The
+existing tie-break order is points, wins, Sonneborn-Berger, then name. A Swiss
+BYE awards one point and counts as a win in that tie-break; it starts no engine
+and creates no played PGN. This retains the existing tournament conventions,
+which are not a claim of compliance with FIDE Swiss regulations. Finish or
+resolve the current Swiss round before creating the next one.
+
+Tournament games force Ponder off at runtime, even when an engine has it saved
+as true. Saved options and ordinary games keep their own choice. UCI options
+are currently shared by all registrations using the same executable; different
+IDs do not give them different Threads, Hash or strength settings. Start warns
+about shared executable paths. Use separate executable paths when comparing
+different configurations; per-registration options are a separate future change.
+
+Concurrency respects existing engine reservations: five participants permit at
+most two games at once. Rows waiting for a busy engine say so. Concurrent active
+searches still share CPU capacity, and both players' processes retain their Hash
+memory. Choose Threads, Hash and concurrency to fit the machine; ZGUI does not
+allocate cores automatically or claim that such games are isolated measurements.
+
+Completed games, manual results and attempt history use the existing recovery
+workflow. Chess saves a versioned JSON tournament and a companion **PGN** with
+the game's start date, actual moves, comments and variations. Externally changed
+PGNs are preserved. Loading restores records without starting processes; use
+**Play** to continue pending rows. A stopped or failed row remains unfinished
+with an explicit reason. Use a manual result or **Reschedule selected game**;
+errors are not silently retried or awarded as forfeits. A flag fall remains a
+normal rules-based result. Draughts tournament files remain separate and cannot
+be loaded into the chess tournament dialog.
+
+### 7.6 Tournament files in detail
 
 Tournament changes and results are saved automatically. Until you choose a file,
 ZGUI uses a recovery file in its application configuration directory; **Load**
@@ -791,7 +799,7 @@ running or stopping.
 
 Applying changed settings, recreating round-robin pairings, or clearing pairings
 starts a new tournament ID with separate files beside the previous JSON. The
-previous tournament JSON and PDN remain available to load later. An unnamed
+previous tournament JSON and PGN/PDN remain available to load later. An unnamed
 tournament gets a separate recovery file instead. These actions are blocked
 until any save error has been resolved, so unsaved results are retained.
 
@@ -809,54 +817,100 @@ result override, and earlier attempts of rescheduled pairings. Manual correction
 change the standings while retaining the original played result. Rescheduling
 archives the previous attempt and clears the current result.
 
-ZGUI regenerates the tournament PDN from these saved records, with one game
+ZGUI regenerates the tournament PGN/PDN from these saved records, with one game
 per current pairing attempt, including games ending before their first move.
-Byes do not create PDN games. The PDN path is chosen beside the first JSON file
+Byes do not create PGN/PDN games. The PGN/PDN path is chosen beside the first JSON file
 and remains fixed when you rename the tournament or save the JSON elsewhere.
-On the first save outside the recovery directory, the PDN moves beside the chosen
+On the first save outside the recovery directory, the PGN/PDN moves beside the chosen
 JSON; the old recovery files are removed after both new files are saved. A failed
 save keeps the recovery files available.
-An existing file or directory is never adopted as a new PDN target: ZGUI uses
+An existing file or directory is never adopted as a new PGN/PDN target: ZGUI uses
 a unique filename instead. Its first write also refuses to replace a file that
-appeared after the name was chosen. Later saves update the PDN created for that
+appeared after the name was chosen. Later saves update the PGN/PDN created for that
 tournament. Saving over an existing JSON file asks for overwrite confirmation.
-Older JSON files without the PDN ownership marker preserve any existing PDN as
+Older JSON files without the PGN/PDN ownership marker preserve any existing PGN/PDN as
 an archive and generate a separate projection from the saved records.
-Manual overrides are identified in the PDN headers along with the played result.
-Loading the JSON repairs a stale or missing PDN. Paths are saved relative to the
-JSON, so move the JSON and PDN together. If an older path points to a missing
-directory, ZGUI generates a new PDN beside the JSON and preserves any existing
+Manual overrides are identified in the PGN/PDN headers along with the played result.
+Loading the JSON repairs a stale or missing PGN/PDN. Paths are saved relative to the
+JSON, so move the JSON and PGN/PDN together. If an older path points to a missing
+directory, ZGUI generates a new PGN/PDN beside the JSON and preserves any existing
 archive there. Earlier attempts remain in JSON.
 
 Older tournament files did not contain the played games. When loading one with
-an existing PDN archive, ZGUI preserves that archive and creates a separate PDN
+an existing PGN/PDN archive, ZGUI preserves that archive and creates a separate PGN/PDN
 for the linked records. Missing older moves cannot be recovered from standings.
 Preserve the older archive along with the tournament JSON. ZGUI prompts to save
 tournament state when closing if unsaved tournament data exists.
 
-## 8. PDN and FEN
+## 8. PGN, PDN and FEN
 
-### 8.1 Opening PDN
+### 8.1 Opening game files
 
-Choose **File > Open PDN**. ZGUI lists the games in the file with White,
-Black, event, and result. A warnings column marks games with malformed
-variations; select a marked game to see what was skipped. A variation whose
-numbered start lies outside its parent line is skipped without moving it to a
-different position. The surrounding game and later games remain available. Double-click a game to load it into the main window.
+Choose **File > Open game** (**Ctrl+O**) for PGN or PDN. If the game cannot be
+determined unambiguously, choose Chess or Draughts. ZGUI lists games with White,
+Black, event, and result. Double-click a game to load it into the main window.
+Games are validated on selection, with import warnings shown in the browser.
 
-The loader reconstructs the starting position, mainline, and PDN variations in
+For draughts PDN, a malformed variation may be skipped while preserving the
+surrounding game and later games. A variation whose numbered start lies outside
+its parent line is skipped rather than moved to another position. For chess PGN,
+an illegal move or malformed variation rejects that game; the current document
+is retained rather than being partly replaced.
+
+The loader reconstructs the starting position, mainline, and variations in
 the game tree. Invalid moves are reported with their ply so a damaged game can
 be located.
 
-### 8.2 Saving PDN
+### 8.2 Saving game files
 
-Choose **File > Save PDN** to save the displayed game tree. ZGUI appends the
-game to the selected PDN file; it does not replace games already in that file.
+Choose **File > Save PGN** for chess or **Save PDN** for draughts (**Ctrl+S**)
+to save the displayed game tree. ZGUI appends the game to the selected file; it does not replace games already in that file.
 Choose a new filename when a one-game file is required.
 
-The Game Tree window can also copy the current tree as PDN to the clipboard.
+The Game Tree window can also copy the current tree in its game file format.
+Closing or replacing a changed standalone document offers to save it; Cancel or
+a failed save keeps the current game and display.
 
-### 8.3 Compatibility with other PDN programs
+### 8.3 PGN and PDN compatibility
+
+For chess:
+
+PGN preserves tag values (including custom tags), comments, NAGs and nested
+variations. Repeated moves from the same position merge their comments, NAGs
+and continuations, with a warning. Formatting and comment delimiters may be
+normalized. Comments after a variation are associated with the preceding move
+and may be printed before that variation on saving. Orthodox chess PGN is supported; null moves are rejected, and an
+optional **e.p.** suffix is accepted after en passant. Legacy CP1252 files are
+converted to UTF-8 with a warning; saved PGN uses UTF-8 without a BOM.
+
+The chess reader accepts a spelling only when it identifies one legal move.
+It tolerates redundant source file/rank/square disambiguation (`Ngf3`, `N1f3`,
+`Ng1f3`), missing or incorrect `+`/`#`, promotion without `=`, long algebraic
+or UCI coordinates (`e2-e4`, `e2e4`), a missing capture `x`, and lower-case
+`n`, `r`, `q` or `k`. Lower-case `b` always means the b-file, never a bishop;
+use upper-case `B` for bishops. Castling may use zeroes (`0-0`). Ambiguous or
+illegal moves, a spurious capture `x` on a non-capture and an invalid promotion
+piece remain errors. A different legal promotion piece means a different move;
+the reader never substitutes one for another.
+
+File/Open and database import report **Non-standard SAN normalised** at most once
+per game, including spellings in variations. Normal GUI saving writes canonical
+SAN with correct check/mate suffixes, so opening and saving cleans up those
+spellings without changing the played moves.
+
+Standard `[%eval ...]`, `[%clk ...]` and `[%emt ...]` annotations are read and
+written as typed evaluation/clock data; unknown commands stay in the comments.
+The standard evaluation command includes depth when known and reloads as the
+engine score, including when its source was an annotator. The lossless export
+option retains the original source. The normal export omits ZGUI-specific PV/depth and secondary annotator metadata.
+An optional lossless mode is available through the export API using the existing
+node-data extension. Analysis PVs never become played variations. Movetext wraps
+at token boundaries near column 80; an indivisible comment or token may be longer.
+Each imported game is limited to 16 MiB, individual tokens to 1 MiB and variation
+nesting to 128 levels. Large collections are indexed a game at a time, with move
+validation deferred until selection.
+
+For draughts:
 
 ZGUI exports standard result spellings `1-0`, `1/2-1/2` and `0-1`; the tournament
 window uses draughts point results `2-0`, `1-1` and `0-2`. Both forms are accepted
@@ -870,6 +924,19 @@ are merged; conflicting metadata keeps the first value and generates a warning
 naming the discarded fields. Comments and different continuations are retained.
 
 ### 8.4 Working with FEN
+
+Chess FEN includes piece placement, side to move, castling rights, en passant,
+and halfmove/fullmove counters. The normal chess starting position is:
+
+```text
+rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+```
+
+Draughts FEN lists the side to move and occupied numbered squares; for example:
+
+```text
+W:W31-50:B1-20
+```
 
 The FEN field shows the displayed position. Right-click the main board to:
 
@@ -1067,7 +1134,7 @@ application's general UI font.
 
 The moves window uses SynEdit with wrapping and one font family/size. Changing
 these settings affects only presentation: move/variation/PV clicks, Left/Right navigation, selection/copy and
-saved PDN keep their existing meaning. Colours and styles apply when you choose
+saved game files keep their existing meaning. Colours and styles apply when you choose
 **Save**; editing the dialog or choosing **Defaults** alone does not apply them.
 
 Use **Chess defaults** or **Draughts defaults** to reset only the selected game's
@@ -1085,7 +1152,8 @@ Board orientation remains shared.
 
 ### An engine does not appear in a game dialog
 
-The engine may already be reserved by another game or loaded as an annotator.
+Check the selected game first: UCI engines are offered for chess; Hub/DXP for
+draughts. The engine may also be reserved by another game or loaded as an annotator.
 Stop the other use or register a separate engine instance. Also check that the
 engine test was completed with **Launched correctly**.
 
@@ -1115,8 +1183,9 @@ White's perspective.
 
 ### The score history is empty
 
-DXP games do not currently provide the analysis score stream used by this
-display. For Hub engines, confirm that the engine reports score information and
+For chess, use a UCI engine that reports a scored legal PV. DXP games do not
+provide the analysis score stream used by this display. For Hub engines, confirm
+that the engine reports score information and
 that `gui-score-perspective` matches its output. Loading a Hub annotator can
 provide a separate annotator score.
 
@@ -1133,9 +1202,9 @@ or press Escape to stop and restore the Auto Play caption.
 The concurrency value is an upper limit. Actual concurrency is also restricted
 by available engine instances and DXP port conflicts.
 
-### A saved PDN contains more than one game
+### A saved PGN or PDN contains more than one game
 
-**Save PDN** appends. Select a new file when you do not want to add the current
+**Save PGN** and **Save PDN** append. Select a new file when you do not want to add the current
 game to an existing collection.
 
 ## 12. Installation and developer notes
@@ -1185,8 +1254,8 @@ The source separates the game from the rest of the program. Game-neutral units
 the game only through `uGamePosition`; international draughts is implemented in
 units named `uDraughts*`. `tests/source_audit_check.sh` enforces the separation.
 
-For protocol details, see [DXP Protocol.md](DXP%20Protocol.md) and
-[`protocol.txt`](protocol.txt) in the source tree.
+For DXP details, see [DXP Protocol.md](DXP%20Protocol.md). A local Scan
+distribution includes `protocol.txt` for its Hub handshake and commands.
 
 ### 12.1 File locations and portability
 
@@ -1207,8 +1276,8 @@ shortcuts are also shown beside their menu items:
 
 | Action | Shortcut |
 |---|---|
-| Open PDN | Ctrl+O |
-| Save PDN | Ctrl+S |
+| Open game (PGN/PDN) | Ctrl+O |
+| Save game (PGN/PDN) | Ctrl+S |
 | Preferences | Ctrl+, |
 | Create database | Ctrl+Shift+N |
 | Open database | Ctrl+Shift+O |

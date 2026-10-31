@@ -252,6 +252,7 @@ end;
 procedure EnginesDialogSizes;
 var Engines:TExternalEngineList;D:TExternalEngineDefinition;Form:TEnginesDialog;
     Grid:TStringGrid;Saved:TMemoryStream;HadRegistry:Boolean;I,J,Col,OldPathWidth:Integer;
+    HintText:string;
 begin
   Saved:=TMemoryStream.Create;Engines:=TExternalEngineList.Create;Form:=nil;
   HadRegistry:=FileExists(EnginesJsonFileName);
@@ -281,7 +282,9 @@ begin
       Check(Grid.ColWidths[0]=OldPathWidth,'Path column shrinks with dialog');
       Check((goRowSelect in Grid.Options) and not (goEditing in Grid.Options) and
         (Grid.OnDblClick<>nil),'Existing row selection and edit action remain');
-      Check((goTruncCellHints in Grid.Options) and Grid.ShowHint,'Clipped paths expose full text in hints');
+      Check(Grid.ShowHint and Assigned(Grid.OnGetCellHint),'Engine cell hints enabled');
+      HintText:='';Grid.OnGetCellHint(Grid,0,1,HintText);
+      Check(HintText=Engines[0].ExePath,'Clipped paths expose full text in hints');
       Check((Grid.Cells[0,1]=Engines[0].ExePath) and (Grid.Cells[2,1]=Engines[0].UciId),
         'Layout keeps complete path and identity data');
     end;

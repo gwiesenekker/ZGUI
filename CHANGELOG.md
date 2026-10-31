@@ -4,6 +4,38 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Refresh the built-in manual and show complete engine path hints — 2026-10-31
+
+Commit: pending.
+
+- Replace the accumulated chess-port addendum with a current combined manual.
+  Add a dedicated UCI subsection to the engine chapter alongside Hub and DXP;
+  move PGN, chess clocks, ending rules, pondering and tournament details into
+  their corresponding chapters. Correct draughts-only defaults/menu/file wording
+  that previously appeared to describe both games.
+- Cover automatic Hub initialization, DXP game-end reasons, engine labels and
+  external engine paths, current preferences/setup/database support and table
+  scrolling. Rebuild the embedded Help manual; the requested format is built-in
+  Help only, with no new PDF.
+- Supply explicit full data-cell hints in the Engines grid, regardless of column
+  width, using native LCL hint handling. This avoids relying on the platform's
+  truncated-text detection and preserves headers, selection and grid sizing.
+  Both chess and draughts benefit.
+- User authorisation on 2026-10-31: “QA: hovering over the engine path does not
+  show a hint text on Windows.”; “I think the manual is out of date BTW? Could
+  you generate a new manual?”; “Built-in Help manual”; “For example UCI engines
+  were missing in the manual.” Further QA identified draughts-only tournament
+  result labels; the manual now lists both games' results and points.
+  Scope: GUI hints and documentation, continuing
+  the authorised GUI-only fixes without prior approval.
+- Extend the existing engine table suite with clipped/fitting Windows-style paths,
+  Unicode/external paths, empty cells and headers (331 checks including scrolling).
+  The manual rendering checks and all seventeen GUI suites pass (including 9,148
+  layout checks and Help contents/search). Application compilation passes on an
+  isolated snapshot excluding unfinished feature flags. One unrelated transient
+  setup-draft assertion passed on recheck and the final full suite passed.
+  Native Windows interaction remains untested.
+
 ### Make table scrolling immediate and consistent — 2026-10-31
 
 Commit: `966bb10`.

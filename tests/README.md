@@ -377,5 +377,7 @@ block. Run one check at a time, with that engine idle. Repeat for engine6/engine
 `engine_parameter_scroll_check` now exercises all eight application tables in both
 chess and draughts: immediate wheel scrolling, unchanged selection/data/widths,
 scroll boundaries, scrollbar arrows/pages, horizontal scrolling, live thumb
-tracking and retained keyboard selection (317 checks). It uses synthetic rows
+tracking and retained keyboard selection. Engine-list hover hints are checked
+for clipped/fitting Windows-style and Unicode paths, external locations, empty
+cells and headers (331 checks overall). It uses synthetic rows
 without starting engines, database imports or tournament games.
