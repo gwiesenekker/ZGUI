@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Keep tournament visible when changing Game — 2026-10-31
 
-Commit: pending.
+Commit: `eea92df`.
 
 - Reproduce the fresh-tournament Chess → Draughts disappearance through the
   native GTK selector: the old handler destroys its dialog/combo inside the
