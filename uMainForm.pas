@@ -5,7 +5,7 @@ unit uMainForm;
 interface
 
 uses
-  uGuiLayout, Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
+  uGuiLayout, uTournamentEngineQueue, uTournamentHostForm, Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uGameGuiProfile, uGameFileReader,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
   uGameOrchestrator, uGameRunnerThread, uRunningGame, uGameSetupForm, uGameSetupTypes,
@@ -46,7 +46,6 @@ type
     FDatabaseForm:TDatabaseForm;
     FSetupForm:TGameSetupForm;
     FPositionSetupForm:TPositionSetupForm;
-    FTournamentDialog:TTournamentDialog;
     FAnalyzerRunner:TAnalyzerRunnerThread;
     FAnalyzerEngineKey:string;
     FAnalyzerEngineName:string;
@@ -63,6 +62,7 @@ type
 
   TMainForm = class(TGuiLayoutForm)
   private
+    FTournamentEngineQueue: TTournamentEngineQueue;
     FGameContexts,FDocumentViews:TList;
     FActiveContext:TGameUiContext;
     FFeatureBindings:array of TFeatureBinding;
@@ -79,7 +79,6 @@ type
     procedure FenTextChanged(Sender:TObject);
     function CurrentVariant:TGameVariant;
     function StandaloneListIndex:Integer;
-    procedure TournamentContextRequested(Sender:TObject;Variant:TGameVariant;const FileName:string);
     function AnalysisMessageContext(Message:TAnalysisGuiMessage):TGameUiContext;
     procedure UseDocument(Tree:TGameTree);
     procedure UpdateContextFeatures;
@@ -205,7 +204,7 @@ type
     FStandaloneBlackPlayerName: string;
     FStandaloneEventName: string;
     FStandaloneWhitePlayerName: string;
-    FTournamentDialog: TTournamentDialog;
+    FTournamentHost:TTournamentHostForm;
     FViewedGameId: Integer;
 
     FDisplayBoardFailed: Boolean;
@@ -550,7 +549,11 @@ type
     procedure RemoveGame(AGame: TRunningGame);
     procedure AppendRunningGameToPdn(AGame: TRunningGame;
       const AFileName, AEventName: string);
+    property TournamentEngineQueue: TTournamentEngineQueue read FTournamentEngineQueue;
     procedure CollectBusyEngineKeys(AKeys: TStrings);
+    function EngineReservationDescription(const Key:string):string;
+    procedure DrainTournamentClose;
+    property TournamentHost:TTournamentHostForm read FTournamentHost;
     function FindGameById(AGameId: Integer): TRunningGame;
     procedure MarkGameStopped(AGame: TRunningGame; const AReason: string);
     function StartGameFromSetup(const ASetup: TGameSetup;
@@ -677,6 +680,7 @@ begin
   FGameTree := TGameTree.Create(DefaultGameVariant);
   FGameTreeActor := TGameTreeActor.Create(FGameTree, False);
   FGames := TList.Create;
+  FTournamentEngineQueue := TTournamentEngineQueue.Create;
   FGuiEventQueue := TThreadMessageQueue.Create(True);
   FGuiEventTimer := TTimer.Create(Self);
   FGuiEventTimer.Interval := 50;
@@ -1455,14 +1459,10 @@ var I:Integer;C:TGameUiContext;View:TDocumentView;
 begin
   FClosing := True;
   CaptureGameContext;
-  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
-    C:=TGameUiContext(FGameContexts[I]);if C.FTournamentDialog<>nil then C.FTournamentDialog.BeginShutdown;
-  end;
+  if FTournamentHost<>nil then FTournamentHost.BeginShutdown;
   Application.RemoveAsyncCalls(Self);
   if FGuiEventTimer <> nil then
     FGuiEventTimer.Enabled := False;
-  if FTournamentDialog <> nil then
-    FTournamentDialog.BeginShutdown;
   StopAllGames;
   FreeAndNil(FMctsRunner);
   FreeAndNil(FAnalyzerRunner);
@@ -1481,7 +1481,7 @@ begin
   FreeAndNil(FPendingEngineProblems);
   FreeAndNil(FTestEngineProblems);
   FreeAndNil(FScoreHistoryForm);
-  FreeAndNil(FTournamentDialog);
+  FreeAndNil(FTournamentHost);
   FreeAndNil(FPdnOpenDialog);
   FreeAndNil(FMiniBoardForm);
   FreeAndNil(FAnalyzerMiniBoardForm);
@@ -1490,7 +1490,7 @@ begin
   if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
     C:=TGameUiContext(FGameContexts[I]);
     if C=FActiveContext then Continue;
-    FreeAndNil(C.FTournamentDialog);FreeAndNil(C.FDatabaseForm);
+    FreeAndNil(C.FDatabaseForm);
     FreeAndNil(C.FSetupForm);FreeAndNil(C.FPositionSetupForm);
     FreeAndNil(C.FMiniBoardForm);FreeAndNil(C.FAnalyzerMiniBoardForm);
   end;
@@ -1524,6 +1524,7 @@ begin
   FGameTree.Free;
   FGameLog.Free;
   FreeAndNil(FGames);
+  FreeAndNil(FTournamentEngineQueue);
   FBoard.Free;
   inherited Destroy;
 end;
@@ -1621,7 +1622,6 @@ begin
   C.FDatabaseForm:=FDatabaseForm;
   C.FSetupForm:=FSetupForm;
   C.FPositionSetupForm:=FPositionSetupForm;
-  C.FTournamentDialog:=FTournamentDialog;
   C.FAnalyzerRunner:=FAnalyzerRunner;
   C.FAnalyzerEngineKey:=FAnalyzerEngineKey;
   C.FAnalyzerEngineName:=FAnalyzerEngineName;
@@ -1705,7 +1705,6 @@ begin
     FDatabaseForm:=C.FDatabaseForm;
     FSetupForm:=C.FSetupForm;
     FPositionSetupForm:=C.FPositionSetupForm;
-    FTournamentDialog:=C.FTournamentDialog;
     FAnalyzerRunner:=C.FAnalyzerRunner;
     FAnalyzerEngineKey:=C.FAnalyzerEngineKey;
     FAnalyzerEngineName:=C.FAnalyzerEngineName;
@@ -3269,7 +3268,7 @@ begin
 end;
 
 procedure TMainForm.CloseQueryHandler(Sender:TObject;var CanClose:Boolean);
-var I,Response,Live:Integer;C:TGameUiContext;RunningTournament:Boolean;Tree:TGameTree;
+var I,Response,Live:Integer;C:TGameUiContext;Tree:TGameTree;
   function SaveQuestion(ATree:TGameTree;const Description:string):Boolean;
   begin
     Result:=True;if not GameTreeHasContent(ATree) then Exit;
@@ -3283,20 +3282,11 @@ var I,Response,Live:Integer;C:TGameUiContext;RunningTournament:Boolean;Tree:TGam
   end;
 begin
   CanClose:=False;if FClosing then begin CanClose:=True;Exit;end;
-  CaptureGameContext;RunningTournament:=False;
+  CaptureGameContext;
   if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
     C:=TGameUiContext(FGameContexts[I]);
     if (C.FDatabaseForm<>nil) and C.FDatabaseForm.ImportBusy then begin
       ShowGuiOkDialog(Self,'Close ZGUI','Finish or stop the database import before closing ZGUI');Exit;
-    end;
-    if C.FTournamentDialog<>nil then begin
-      RunningTournament:=RunningTournament or C.FTournamentDialog.IsRunning;
-      if C.FTournamentDialog.HasTournamentData then begin
-        Response:=ShowGuiConfirmationDialog(Self,'Close ZGUI','Save the '+C.Variant.Name+' tournament JSON before closing?',
-          'Yes','No',mrNo);
-        if Response=mrCancel then Exit;
-        if (Response=mrYes) and not C.FTournamentDialog.SaveTournamentWithDialog then Exit;
-      end;
     end;
   end;
   if HasDisplayedGameToSave and (SelectedDisplayedGame<>nil) then
@@ -3307,10 +3297,18 @@ begin
       if not SaveQuestion(Tree,'the '+Tree.Variant.Name+' standalone board') then Exit;
     end;
   end else if not SaveQuestion(FGameTree,'the standalone board') then Exit;
-  Live:=LiveGameCount;
-  if (Live>0) or RunningTournament then
+  Live:=0;
+  for I:=0 to FGames.Count-1 do
+    if (TRunningGame(FGames[I]).Lifecycle<>rglFinished) and (TRunningGame(FGames[I]).TournamentOwner=nil) then Inc(Live);
+  if Live>0 then
     if ShowGuiConfirmationDialog(Self,'Close ZGUI','Closing will stop '+IntToStr(Live)+
-      ' running game(s) and any running tournament schedulers. Close anyway?','Yes','No',mrNo)<>mrYes then Exit;
+      ' other running game(s). Close anyway?','Yes','No',mrNo)<>mrYes then Exit;
+  try
+    if FTournamentHost<>nil then begin
+      if not FTournamentHost.PrepareCloseAll then Exit;
+      if not FTournamentHost.FinishCloseAll then Exit;
+    end;
+  except on E:Exception do begin ShowGuiOkDialog(Self,'Close ZGUI',E.Message);Exit;end;end;
   CanClose:=True;
 end;
 
@@ -6040,41 +6038,37 @@ begin
     TGameRunnerThread(Sender).GameId, ASnapshot));
 end;
 
-procedure TMainForm.TournamentContextRequested(Sender:TObject;Variant:TGameVariant;const FileName:string);
-var C:TGameUiContext;Response:Integer;
-begin
-  C:=ContextForVariant(Variant);
-  if C=FActiveContext then C.FTournamentDialog:=FTournamentDialog;
-  if C.FTournamentDialog=nil then begin
-    C.FTournamentDialog:=TTournamentDialog.Create(Self,Variant);
-    C.FTournamentDialog.OnStartGame:=@TournamentStartGame;C.FTournamentDialog.OnSelectGame:=@TournamentSelectGame;
-    C.FTournamentDialog.OnContextRequested:=@TournamentContextRequested;
-  end;
-  if FileName<>'' then begin
-    if C.FTournamentDialog.IsRunning then raise EInvalidOperation.Create('Stop this tournament before loading another');
-    if C.FTournamentDialog.HasTournamentData then begin
-      Response:=ShowGuiConfirmationDialog(Self,'Load tournament','Save the existing '+Variant.Name+' tournament first?',
-        'Yes','No',mrNo);
-      if Response=mrCancel then Exit;
-      if (Response=mrYes) and not C.FTournamentDialog.SaveTournamentWithDialog then Exit;
-    end;
-    C.FTournamentDialog.LoadTournamentFromFile(FileName);
-  end;
-  if C=FActiveContext then FTournamentDialog:=C.FTournamentDialog;
-  ShowFormCenteredOnOwner(C.FTournamentDialog,Self);
-end;
-
-procedure TMainForm.TournamentClick(Sender: TObject);
+procedure TMainForm.TournamentClick(Sender:TObject);
 begin
   if not GameSupports(gfTournament) then Exit;
-  if FTournamentDialog = nil then
-  begin
-    FTournamentDialog := TTournamentDialog.Create(Self,CurrentVariant);
-    FTournamentDialog.OnSelectGame := @TournamentSelectGame;
-    FTournamentDialog.OnStartGame := @TournamentStartGame;
-    FTournamentDialog.OnContextRequested:=@TournamentContextRequested;
+  if FTournamentHost=nil then begin
+    FTournamentHost:=TTournamentHostForm.Create(Self);
+    FTournamentHost.OnStartGame:=@TournamentStartGame;
+    FTournamentHost.OnSelectGame:=@TournamentSelectGame;
   end;
-  ShowFormCenteredOnOwner(FTournamentDialog, Self);
+  FTournamentHost.ShowForVariant(CurrentVariant);
+  ShowFormCenteredOnOwner(FTournamentHost,Self);
+end;
+
+procedure TMainForm.DrainTournamentClose;
+begin
+  GuiEventTimerTick(nil);CheckSynchronize(10);
+end;
+
+function TMainForm.EngineReservationDescription(const Key:string):string;
+var I:Integer;Keys:TStringList;Game:TRunningGame;
+begin
+  Keys:=TStringList.Create;
+  try
+    for I:=0 to FGames.Count-1 do begin
+      Game:=TRunningGame(FGames[I]);if Game.Lifecycle=rglFinished then Continue;
+      Keys.Clear;Game.AddReservationKeysTo(Keys);
+      if Keys.IndexOf(Key)<0 then Continue;
+      if Game.TournamentOwner is TTournamentDialog then Exit(TTournamentDialog(Game.TournamentOwner).TournamentName);
+      Exit(Game.Title);
+    end;
+    Result:='another game or annotator';
+  finally Keys.Free;end;
 end;
 
 procedure TMainForm.TournamentSelectGame(Sender: TObject; AGame: TObject);
@@ -6190,16 +6184,13 @@ begin
 end;
 
 procedure TMainForm.Notification(AComponent:TComponent;Operation:TOperation);
-var I:Integer;C:TGameUiContext;
+var I:Integer;
 begin
   inherited Notification(AComponent,Operation);
   if FClosing or (Operation<>opRemove) or not (AComponent is TTournamentDialog) then Exit;
   if FGames<>nil then for I:=0 to FGames.Count-1 do
     if TRunningGame(FGames[I]).TournamentOwner=AComponent then TRunningGame(FGames[I]).TournamentOwner:=nil;
-  if FTournamentDialog=AComponent then FTournamentDialog:=nil;
-  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
-    C:=TGameUiContext(FGameContexts[I]);if C.FTournamentDialog=AComponent then C.FTournamentDialog:=nil;
-  end;
+
 end;
 
 function TMainForm.TournamentOwnerFor(Game:TRunningGame):TTournamentDialog;

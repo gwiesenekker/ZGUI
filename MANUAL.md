@@ -29,9 +29,9 @@ Speculative evaluations do not enter game history. Engines that do not advertise
 the option continue with ordinary clocked searches. UCI retains its existing
 Ponder option and protocol-specific handling.
 
-Each game also has its own tournament window. Its Game choice opens the other
-window; scheduling and standings stay within one game. Both tournaments can run
-at once. Set concurrency and engine thread counts with available CPU and memory
+The Tournaments window holds named tabs, each with its own settings, pairings
+and standings. Several chess and draughts tournaments can run at once. The Game
+choice changes the current tab after protecting its existing data. Set concurrency and engine thread counts with available CPU and memory
 in mind: games, annotators and tournaments can all be active together.
 
 Open accepts PGN and PDN. When a file's game is ambiguous, choose it explicitly.
@@ -660,9 +660,15 @@ their existing key handling.
 
 ## 7. Running a tournament
 
-Click **Tournament...**. Chess and draughts keep separate tournament windows;
-the Game choice opens the corresponding window. Chess offers UCI engines;
-draughts offers Hub/DXP engines.
+Click **Tournament...** to open the shared Tournaments window. It selects the
+last-used tab for the main board's game, or creates one if needed. **New tournament**
+creates another named tab (Tournament1, Tournament2, and so on). Edit its tournament
+name to rename the tab. Each tab has independent pairings, standings and files.
+Chess offers UCI engines; draughts offers Hub/DXP engines.
+
+The Game choice changes the settings in the current tab. Save / Discard / Cancel
+protects existing data and running games before replacing incompatible settings.
+Other tabs and the main board's selected game remain unchanged.
 
 An engine label such as **Name (Engine 11 dxp engine)** uses its one-based
 position in the complete engine registry, followed by its protocol. It is not
@@ -708,6 +714,16 @@ Click **Play** to start pending games. ZGUI starts games up to the configured
 concurrency limit while respecting engine availability. Each simultaneous game
 needs its own available engine instances and non-conflicting DXP resources.
 
+Reservations apply across all tournaments, ordinary games and annotators. A busy
+row identifies its engine and the tournament using it. Competing tournaments use
+**oldest-waiting-first** allocation: a waiting turn keeps its place through timer
+updates. Both engines must be available together. After starting one game, that
+tournament rejoins behind existing waiters for its next game. A younger turn
+cannot take an engine needed by an older waiting turn; games using unrelated
+engines can continue. Stop or Close removes the tournament's waiting turn.
+Separate engine registrations represent separate instances; DXP endpoint conflicts
+still count as shared resources.
+
 The pairing grid shows game number, round, White, Black, result, and reason.
 Click a running row to display and follow that game's current tree in the main
 window. Finished games can be selected and browsed in the same way as other
@@ -748,7 +764,10 @@ name. It also shows the individual matchup results.
 ### 7.4 Saving and loading tournaments
 
 - Changes and results save automatically. Use **Save** to choose the JSON file;
-  **Load** resumes a saved tournament while no tournament is running.
+  **Load** opens a saved tournament in its own tab without starting it. Opening
+  the same file or tournament identity again selects its existing tab. Other
+  tournaments may continue running; two tabs cannot write the same JSON or
+  publication file.
 - The tournament PGN/PDN is created beside the JSON when first saved outside recovery.
   Move the JSON and its linked PGN/PDN together.
 - An older or externally changed PGN/PDN is preserved rather than overwritten.
@@ -759,6 +778,22 @@ name. It also shows the individual matchup results.
 Before a file is chosen, recovery files live in the per-user application
 configuration directory. Save errors appear in the tournament title and pause
 scheduling so the error can be resolved without losing results.
+
+Closing a tab (its X or **Close tournament**) offers **Save / Discard / Cancel**
+and warns that its running tournament will stop. Save chooses a file, then stops
+and captures the games before writing the final state. Discard stops and closes
+without an explicit save; existing recovery and published files remain. Cancel,
+including cancelling the save-file picker, leaves the tournament running.
+A final save failure leaves the stopped tab open so you can recover its data.
+
+Closing the Tournaments window applies this to every tab. All choices and save
+locations are collected before any tournament is stopped; cancelling any prompt
+leaves them all open. Minimize keeps tournaments running. Closing ZGUI also
+protects every tournament. There are no hidden tournament sessions after closing.
+
+Close-stopped games retain result `*` and reason **Stopped: tournament closed**.
+Explicitly loading their JSON and clicking Play resumes stopped/unplayed rows;
+completed results remain. Discarded files are not offered for automatic resume.
 
 ### 7.5 Chess tournament details
 
@@ -796,8 +831,8 @@ PGNs are preserved. Loading restores records without starting processes; use
 **Play** to continue pending rows. A stopped or failed row remains unfinished
 with an explicit reason. Use a manual result or **Reschedule selected game**;
 errors are not silently retried or awarded as forfeits. A flag fall remains a
-normal rules-based result. Draughts tournament files remain separate and cannot
-be loaded into the chess tournament dialog.
+normal rules-based result. Loading a draughts file opens/selects a draughts tab;
+loading a chess file opens/selects a chess tab.
 
 ### 7.6 Tournament files in detail
 
@@ -815,8 +850,8 @@ until any save error has been resolved, so unsaved results are retained.
 
 Use **Save** to write the tournament state as JSON. The file contains the
 settings, selected engine names, pairings, results, reasons, and concurrency
-limit. Use **Load** to resume it later. Loading is available only while the
-tournament is not running. Engines are matched by saved identity keys based on
+limit. Use **Load** to open it later in its own tab, then **Play** to resume.
+Engines are matched by saved identity keys based on
 the executable, protocol ID, arguments, initialization text, INI path/contents
 and DXP connection settings. A display-name change is
 harmless. Changing those settings can leave older rows showing **Missing engine**;

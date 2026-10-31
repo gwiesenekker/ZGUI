@@ -20,6 +20,7 @@ type
   end;
 
   TTournamentContextEvent=procedure(Sender:TObject;Variant:TGameVariant;const FileName:string) of object;
+  TTournamentTargetsEvent=procedure(Sender:TObject;const JsonFile,Publication,Identity:string) of object;
   TTournamentStartGameEvent = procedure(Sender: TObject; const ASetup: TGameSetup;
     const ATitlePrefix: string; out AGame: TObject) of object;
   TTournamentSelectGameEvent = procedure(Sender: TObject; AGame: TObject) of object;
@@ -27,13 +28,20 @@ type
   TTournamentDialog = class(TGuiLayoutForm)
   private
     FOnContextRequested:TTournamentContextEvent;
+    FOnTargets:TTournamentTargetsEvent;
+    FOnTitleChanged:TNotifyEvent;
+    FCloseStopped:Boolean;
     FGameCombo:TComboBox;
+    procedure NameChanged(Sender:TObject);
+    function GetTournamentName:string;
+    procedure SetTournamentName(const Value:string);
     procedure GameContextChanged(Sender:TObject);
     procedure StartingFENChanged(Sender:TObject);
   private
     FVariant:TGameVariant;
     FProfile:TGameGuiProfile;
     FAcceptedTournamentSignature: string;
+    FInitialSettingsSignature: string;
     FBlackEngines: TStringList;
     FClosing: Boolean;
     FCrossTableGrid: TStringGrid;
@@ -118,10 +126,12 @@ type
     procedure SetSelectedResultClick(Sender: TObject);
     procedure StartStopClick(Sender: TObject);
     procedure StartPendingGames;
+    procedure LeaveEngineQueue;
     procedure StartFailure(ARow: Integer; const AReason: string);
     procedure StopRunningGames;
     procedure TimerTick(Sender: TObject);
     function TournamentSignature: string;
+    function SettingsSignature: string;
     procedure UpdateButtons;
     procedure UpdateCrossTable;
   protected
@@ -143,9 +153,18 @@ type
     procedure GameStopped(AGame: TObject);
     procedure GameRemoved(AGame: TObject);
     procedure RegisterRunningGame(ARow: Integer; AGame: TObject);
+    procedure AcceptInitialSettings;
     function HasTournamentData: Boolean;
     function IsRunning: Boolean;
     function SaveTournamentWithDialog: Boolean;
+    function ChooseSaveFileName(out FileName:string):Boolean;
+    procedure StopForClose;
+    function DrainClose:Boolean;
+    property TournamentName:string read GetTournamentName write SetTournamentName;
+    property TournamentIdentity:string read FTournamentId;
+    property PublicationFileName:string read FPdnFileName;
+    property OnTargets:TTournamentTargetsEvent read FOnTargets write FOnTargets;
+    property OnTitleChanged:TNotifyEvent read FOnTitleChanged write FOnTitleChanged;
     property OnContextRequested:TTournamentContextEvent read FOnContextRequested write FOnContextRequested;
     property OnSelectGame: TTournamentSelectGameEvent read FOnSelectGame write FOnSelectGame;
     property OnStartGame: TTournamentStartGameEvent read FOnStartGame write FOnStartGame;
@@ -157,7 +176,7 @@ uses
   uGameDocumentContext, Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
-  uAtomicFile, uGameTreePdn, uDraughtsPdn, LazLoggerBase;
+  uAtomicFile, uGameTreePdn, uDraughtsPdn, LazLoggerBase, uTournamentEngineQueue;
 
 procedure DrawGridText(AGrid: TStringGrid; ACol, ARow: Integer;
   const ARect: TRect);
@@ -176,7 +195,8 @@ end;
 function TournamentReasonIsTransient(const AReason: string): Boolean;
 begin
   Result := SameText(Trim(AReason), 'Running') or
-    SameText(Trim(AReason), 'Stopping') or SameText(Trim(AReason),'Waiting for a free engine');
+    SameText(Trim(AReason), 'Stopping') or SameText(Trim(AReason),'Waiting for a free engine') or
+    (Copy(AReason,1,19)='Waiting for engine ') or SameText(Trim(AReason),'Stopped: tournament closed');
 end;
 
 const
@@ -282,6 +302,7 @@ begin
   TopPos := 4;
   FTournamentNameEdit := TEdit.Create(Self);
   FTournamentNameEdit.Name := 'TournamentName';
+  FTournamentNameEdit.OnChange:=@NameChanged;
   FTournamentNameEdit.Text := 'Tournament';
   AddLabelledEdit(ButtonPanel, 'Tournament name', FTournamentNameEdit, TopPos);
 
@@ -536,6 +557,7 @@ begin
   FTimer.Enabled := False;
   FTimer.OnTimer := @TimerTick;
   FAcceptedTournamentSignature := TournamentSignature;
+  AcceptInitialSettings;
   NameLabel:=TLabel(ButtonPanel.Controls[0]);FenLabel:=TLabel(ButtonPanel.Controls[2]);
   SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]);
   SettingsColumn.Top:=0;
@@ -582,19 +604,69 @@ begin
   RefreshMinimum;
 end;
 
+function TTournamentDialog.GetTournamentName:string;
+begin Result:=FTournamentNameEdit.Text;end;
+procedure TTournamentDialog.SetTournamentName(const Value:string);
+begin FTournamentNameEdit.Text:=Value;end;
+procedure TTournamentDialog.NameChanged(Sender:TObject);
+begin if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);end;
+
+procedure TTournamentDialog.StopForClose;
+begin
+  FCloseStopped:=True;FRunning:=False;
+  StopRunningGames;FTimer.Enabled:=ActiveRunningGameCount>0;UpdateButtons;
+end;
+
+function TTournamentDialog.DrainClose:Boolean;
+var I:Integer;
+begin
+  while ActiveRunningGameCount>0 do begin
+    if not (Owner is TMainForm) then Exit(False);
+    TMainForm(Owner).DrainTournamentClose;
+    TimerTick(nil);
+  end;
+  // Do not drop an unrecorded final game on a Save-and-close operation.
+  for I:=0 to FRunningGames.Count-1 do
+    if TTournamentRunningGame(FRunningGames[I]).PendingCapture then Exit(False);
+  Result:=True;
+end;
+
+procedure TTournamentDialog.LeaveEngineQueue;
+begin
+  if (Owner is TMainForm) and (TMainForm(Owner).TournamentEngineQueue <> nil) then
+    TMainForm(Owner).TournamentEngineQueue.RemoveOwner(Self);
+end;
+
 procedure TTournamentDialog.BeginShutdown;
 begin
+  LeaveEngineQueue;
   FClosing := True;
   FRunning := False;
   if FTimer <> nil then
     FTimer.Enabled := False;
 end;
 
+function TTournamentDialog.SettingsSignature: string;
+var Selected: TStringList;
+begin
+  Selected := TStringList.Create;
+  try
+    CollectSelectedEngines(Selected);
+    Result := TournamentSignature + '|' + FTournamentNameEdit.Text + '|' +
+      FConcurrentGamesEdit.Text + '|' + Selected.Text;
+  finally Selected.Free; end;
+end;
+
+procedure TTournamentDialog.AcceptInitialSettings;
+begin
+  FInitialSettingsSignature := SettingsSignature;
+end;
+
 function TTournamentDialog.HasTournamentData: Boolean;
 begin
   Result := (Trim(FFileName) <> '') or
     (not TournamentPairingGridIsEmpty(FGrid)) or
-    HasNonByeResults;
+    HasNonByeResults or (SettingsSignature <> FInitialSettingsSignature);
 end;
 
 function TTournamentDialog.IsRunning: Boolean;
@@ -603,6 +675,13 @@ begin
 end;
 
 function TTournamentDialog.SaveTournamentWithDialog: Boolean;
+var SaveName:string;
+begin
+  Result:=ChooseSaveFileName(SaveName);
+  if Result then SaveTournamentToFile(SaveName);
+end;
+
+function TTournamentDialog.ChooseSaveFileName(out FileName:string):Boolean;
 var
   Dialog: TSaveDialog;
 begin
@@ -617,10 +696,9 @@ begin
       Dialog.FileName := FFileName
     else
       Dialog.FileName := SafeFileNameText(FTournamentNameEdit.Text) + '.json';
-    if not Dialog.Execute then
-      Exit;
-
-    SaveTournamentToFile(Dialog.FileName);
+    if not ExecuteGuiFileDialog(Dialog) then Exit;
+    FileName:=ExpandFileName(Dialog.FileName);
+    if Assigned(FOnTargets) then FOnTargets(Self,FileName,FPdnFileName,FTournamentId);
     Result := True;
   finally
     Dialog.Free;
@@ -844,6 +922,7 @@ begin
     FPdnFileName := ChangeFileExt(ExpandFileName(FFileName), GameFileExtension);
   if not FPdnFileOwned then
     FPdnFileName := UnusedTournamentPdnPath(FPdnFileName,FProfile.FileFormat);
+  if Assigned(FOnTargets) then FOnTargets(Self,FFileName,FPdnFileName,FTournamentId);
 end;
 
 function TTournamentDialog.PdnFileName: string;
@@ -870,6 +949,7 @@ begin
     begin
       FStorageError := E.Message;
       FRunning := False;
+      LeaveEngineQueue;
       if FTimer <> nil then
         FTimer.Enabled := ActiveRunningGameCount > 0;
     end;
@@ -1291,7 +1371,9 @@ var
   BlackKey: string;
   BlackEngine: TExternalEngineDefinition;
   CandidateKeys: TStringList;
-  I: Integer;
+  I,SideIndex: Integer;
+  Candidate:TExternalEngineDefinition;
+  Description:string;
   WhiteKey: string;
   WhiteEngine: TExternalEngineDefinition;
 begin
@@ -1325,11 +1407,18 @@ begin
   begin
     CandidateKeys := TStringList.Create;
     try
-      AddEngineReservationKeys(WhiteEngine, CandidateKeys);
-      AddEngineReservationKeys(BlackEngine, CandidateKeys);
-      for I := 0 to CandidateKeys.Count - 1 do
-        if ABusyEngineKeys.IndexOf(CandidateKeys[I]) >= 0 then
-        begin FGrid.Cells[TournamentColReason,ARow]:='Waiting for a free engine'; Exit; end;
+      for SideIndex:=0 to 1 do begin
+        if SideIndex=0 then Candidate:=WhiteEngine else Candidate:=BlackEngine;
+        CandidateKeys.Clear;AddEngineReservationKeys(Candidate,CandidateKeys);
+        for I:=0 to CandidateKeys.Count-1 do
+          if ABusyEngineKeys.IndexOf(CandidateKeys[I])>=0 then begin
+            Description:='';
+            if Owner is TMainForm then Description:=TMainForm(Owner).EngineReservationDescription(CandidateKeys[I]);
+            FGrid.Cells[TournamentColReason,ARow]:='Waiting for engine '+DisplayNameForEngine(Candidate);
+            if Description<>'' then FGrid.Cells[TournamentColReason,ARow]:=FGrid.Cells[TournamentColReason,ARow]+', in use by '+Description;
+            Exit;
+          end;
+      end;
     finally
       CandidateKeys.Free;
     end;
@@ -1460,9 +1549,9 @@ var
   Dialog: TOpenDialog;
   TargetVariant:TGameVariant;
 begin
-  if IsRunning then
+  if IsRunning and not Assigned(FOnContextRequested) then
     Exit;
-  if FRunning then
+  if FRunning and not Assigned(FOnContextRequested) then
     Exit;
   Dialog := TOpenDialog.Create(Self);
   try
@@ -1476,7 +1565,7 @@ begin
     if ExecuteGuiFileDialog(Dialog) then
     try
       TargetVariant:=TournamentFileVariant(Dialog.FileName,FVariant);
-      if (TargetVariant<>FVariant) and Assigned(FOnContextRequested) then FOnContextRequested(Self,TargetVariant,Dialog.FileName)
+      if Assigned(FOnContextRequested) then FOnContextRequested(Self,TargetVariant,Dialog.FileName)
       else LoadTournamentFromFile(Dialog.FileName);
     except on E:Exception do ShowGuiOkDialog(Self,'Load tournament',E.Message);end;
   finally
@@ -1493,6 +1582,7 @@ var
   Game: TRunningGame;
 begin
   ReadSettings;MaxConcurrentGames;
+  if Assigned(FOnTargets) then FOnTargets(Self,AFileName,FPdnFileName,FTournamentId);
   for I := 0 to FRunningGames.Count - 1 do
   begin
     Running := TTournamentRunningGame(FRunningGames[I]);
@@ -1774,6 +1864,7 @@ begin
     Data.Free;
   end;
   AutoSaveTournament;
+  if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);
 end;
 
 procedure TTournamentDialog.InvalidateTournamentResults(Sender: TObject);
@@ -1936,6 +2027,7 @@ begin
   if FStorageError <> '' then
     Exit;
   ClearStaleRunningReasons;
+  FCloseStopped:=False;
   FRunning := True;
   FLastGameStartTick := 0;
   StartPendingGames;
@@ -1949,6 +2041,7 @@ var
   I: Integer;
   RunningGame: TTournamentRunningGame;
 begin
+  LeaveEngineQueue;
   for I := FRunningGames.Count - 1 downto 0 do
   begin
     RunningGame := TTournamentRunningGame(FRunningGames[I]);
@@ -1966,7 +2059,8 @@ begin
       else
       begin
         if Owner is TMainForm then
-          TMainForm(Owner).MarkGameStopped(Game, 'Tournament stopped')
+          if FCloseStopped then TMainForm(Owner).MarkGameStopped(Game,'Stopped: tournament closed')
+          else TMainForm(Owner).MarkGameStopped(Game, 'Tournament stopped')
         else
           Game.Runner.PostStop;
         if (RunningGame.Row > 0) and (RunningGame.Row < FGrid.RowCount) then
@@ -2041,7 +2135,8 @@ begin
           (TRunningGame(AGame).Lifecycle <> rglFinished) then
           FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopping'
         else
-          FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopped';
+          if FCloseStopped then FGrid.Cells[TournamentColReason, RunningGame.Row]:='Stopped: tournament closed'
+          else FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopped';
       end;
     end;
     if (not (AGame is TRunningGame)) or
@@ -2095,84 +2190,104 @@ end;
 
 procedure TTournamentDialog.StartPendingGames;
 var
-  BusyEngineKeys: TStringList;
+  BusyEngineKeys, RequestKeys: TStringList;
+  Queue: TTournamentEngineQueue;
+  Blocker: TObject;
   GameObject: TObject;
-  LatestRound: Integer;
-  MaxGames: Integer;
-  Row: Integer;
+  LatestRound, MaxGames, Row: Integer;
   Setup: TGameSetup;
   StartedAny: Boolean;
-begin
-  if not FRunning then
-    Exit;
-  if not Assigned(FOnStartGame) then
-    Exit;
 
+  function Eligible(ARow: Integer): Boolean;
+  begin
+    Result := (not TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) or
+      (StrToIntDef(FGrid.Cells[TournamentColRound, ARow], 0) = LatestRound)) and
+      IsRowStartable(ARow, nil);
+  end;
+begin
+  if not FRunning or not Assigned(FOnStartGame) then begin
+    LeaveEngineQueue;
+    Exit;
+  end;
   ClearStaleRunningReasons;
   StartedAny := False;
   try
     MaxGames := MaxConcurrentGames;
-  except on E:Exception do begin
-    // An edit while games run pauses scheduling; it must not escape every tick.
-    FStorageError:=E.Message;FRunning:=False;UpdateButtons;Exit;
-  end;end;
+  except on E: Exception do begin
+    FStorageError := E.Message; FRunning := False;
+    LeaveEngineQueue; UpdateButtons; Exit;
+  end; end;
+  if ActiveRunningGameCount >= MaxGames then begin LeaveEngineQueue; Exit; end;
   if (FLastGameStartTick > 0) and
-    (GetTickCount64 - FLastGameStartTick < TournamentLaunchStaggerMs) then
-    Exit;
+    (GetTickCount64 - FLastGameStartTick < TournamentLaunchStaggerMs) then Exit;
 
+  Queue := nil;
+  if Owner is TMainForm then Queue := TMainForm(Owner).TournamentEngineQueue;
   BusyEngineKeys := TStringList.Create;
+  RequestKeys := TStringList.Create;
   try
     BusyEngineKeys.Sorted := True;
     BusyEngineKeys.Duplicates := dupIgnore;
     if Owner is TMainForm then
       TMainForm(Owner).CollectBusyEngineKeys(BusyEngineKeys);
-
     LatestRound := 0;
     if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) then
       for Row := 1 to FGrid.RowCount - 1 do
         if StrToIntDef(FGrid.Cells[TournamentColRound, Row], 0) > LatestRound then
           LatestRound := StrToIntDef(FGrid.Cells[TournamentColRound, Row], 0);
 
-    for Row := 1 to FGrid.RowCount - 1 do
-    begin
-      if not FRunning then Break;
-      if ActiveRunningGameCount >= MaxGames then
-        Break;
-      if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) and
-        (StrToIntDef(FGrid.Cells[TournamentColRound, Row], 0) <> LatestRound) then
-        Continue;
-      if not IsRowStartable(Row, BusyEngineKeys) then
-        Continue;
-      if not GameSetupForRow(Row, Setup) then
-        Continue;
+    // Publish this turn's candidates before checking precedence. Busy engines
+    // still enter the queue; their wait survives subsequent timer ticks.
+    if Queue <> nil then begin
+      Queue.BeginUpdate(Self);
+      try
+        for Row := 1 to FGrid.RowCount - 1 do if Eligible(Row) and GameSetupForRow(Row, Setup) then begin
+          RequestKeys.Clear;
+          AddEngineReservationKeys(Setup.WhiteEngine, RequestKeys);
+          AddEngineReservationKeys(Setup.BlackEngine, RequestKeys);
+          Queue.Request(Self, Row, RequestKeys);
+        end;
+      finally Queue.EndUpdate(Self); end;
+    end;
 
+    for Row := 1 to FGrid.RowCount - 1 do begin
+      if not FRunning then Break;
+      if not Eligible(Row) or not IsRowStartable(Row, BusyEngineKeys) then Continue;
+      Blocker := nil;
+      if Queue <> nil then Blocker := Queue.BlockingOwner(Self, Row);
+      if Blocker <> nil then begin
+        FGrid.Cells[TournamentColReason, Row] := 'Waiting for engine allocation';
+        if Blocker is TTournamentDialog then
+          FGrid.Cells[TournamentColReason, Row] := 'Waiting for engine allocation: '+
+            TTournamentDialog(Blocker).TournamentName+' has waited longer';
+        Continue;
+      end;
+      if not GameSetupForRow(Row, Setup) then Continue;
       GameObject := nil;
       try
         FOnStartGame(Self, Setup, 'Tournament game', GameObject);
-      except
-        on E:Exception do begin StartFailure(Row,E.Message); Continue; end;
+      except on E: Exception do begin StartFailure(Row, E.Message); Continue; end; end;
+      if not (GameObject is TRunningGame) then begin
+        StartFailure(Row, 'Game start was rejected'); Continue;
       end;
-      if not (GameObject is TRunningGame) then
-      begin StartFailure(Row,'Game start was rejected'); Continue; end;
-
       RegisterRunningGame(Row, GameObject);
       FGrid.Invalidate;
       HighlightRow(Row);
       StartedAny := True;
       FLastGameStartTick := GetTickCount64;
-
-      AddEngineReservationKeys(Setup.WhiteEngine, BusyEngineKeys);
-      AddEngineReservationKeys(Setup.BlackEngine, BusyEngineKeys);
+      // Both engines are now reserved by the existing game infrastructure.
+      // Rejoin at the back for this tournament's next game.
+      LeaveEngineQueue;
       Break;
     end;
   finally
+    RequestKeys.Free;
     BusyEngineKeys.Free;
   end;
-
   if (not StartedAny) and (ActiveRunningGameCount = 0) and
-    (FindNextUnplayedRow = 0) then
-  begin
+    (FindNextUnplayedRow = 0) then begin
     FRunning := False;
+    LeaveEngineQueue;
     FTimer.Enabled := False;
     HighlightRow(0);
   end;
@@ -2216,7 +2331,8 @@ begin
     else if (RunningGame.Row > 0) and (RunningGame.Row < FGrid.RowCount) then
     begin
       FGrid.Cells[TournamentColResult, RunningGame.Row] := '*';
-      if SameText(FGrid.Cells[TournamentColReason, RunningGame.Row], 'Stopping') then
+      if FCloseStopped then FGrid.Cells[TournamentColReason, RunningGame.Row]:='Stopped: tournament closed'
+      else if SameText(FGrid.Cells[TournamentColReason, RunningGame.Row], 'Stopping') then
         FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopped'
       else
         FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Unknown result';
@@ -2249,7 +2365,8 @@ begin
   begin
     Button := FindComponent(PairingActions[I]);
     if Button is TButton then
-      TButton(Button).Enabled := (not IsRunning) and
+      TButton(Button).Enabled := ((not IsRunning) or
+        ((PairingActions[I]='LoadTournament') and Assigned(FOnContextRequested))) and
         ((PairingActions[I] = 'LoadTournament') or (FStorageError = ''));
   end;
   Caption := 'Tournament';

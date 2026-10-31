@@ -43,6 +43,8 @@ run_check "init_colour_gui_check (GTK2, Hub initialization and preferences previ
 run_check "main_readability_gui_check (GTK2, full FEN and ten notation lines)" main_readability_gui_check "/main-readability" 30s
 run_check "engine_end_reason_gui_check (GTK2, engine reason snapshots and tournament persistence)" engine_end_reason_gui_check "/end-reason" 45s
 
+XDG_CONFIG_HOME="$OUT_DIR/tabs-recovery" run_check "tournament_tabs_check (GTK2, tab lifecycle and fair cross-tournament allocation)" tournament_tabs_check "/tournament-tabs" 100s
+
 echo "GUI suites passed: $PASSED; failed: ${#FAILED[@]}"
 if ((${#FAILED[@]})); then
   printf 'FAILED: %s\n' "${FAILED[@]}"

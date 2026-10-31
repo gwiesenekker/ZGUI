@@ -58,6 +58,7 @@ CHECKS=(
   atomic_file_check.pas
   tournament_record_check.pas
   chess_tournament_record_check.pas
+  tournament_engine_queue_check.pas
   tournament_pairing_check.pas
 )
 

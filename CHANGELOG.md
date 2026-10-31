@@ -4,6 +4,40 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Named tournament tabs and oldest-waiting-first engines — 2026-10-31
+
+Commit: pending.
+
+- Implement the approved tabbed-tournament proposal after the user's successful
+  native Windows embedding check (“No errors on Windows!”). Embed existing
+  tournament dialogs in named tabs; retain existing pairing, game, clock,
+  standings, publication and engine infrastructure for chess and draughts.
+- New creates a tab; changing Game updates the current tab after protecting
+  existing data. Reopening Tournament selects the last-used matching-game tab.
+  Loading opens/selects the file's own tab; conflicting file/identity ownership
+  is refused before writing. Protect edited empty drafts and disambiguate names.
+- Close explicitly stops with Save / Discard / Cancel. Window/application Close
+  collects all decisions before stopping any tournament. Capture final state
+  before saving/removing tabs; save failure leaves stopped tabs open. Discard
+  retains existing files without automatic recovery offers. Closed unfinished
+  rows save `*` and `Stopped: tournament closed`; resume preserves completed rows.
+- User's additional named shared-code authorisation, 2026-10-31:
+  “Please implement oldest-waiting-first!” Queue competing tournament turns by
+  arrival, preserving age across refreshes and giving the whole engine pair
+  together through existing reservations. After one start, the next turn rejoins
+  at the back. Unrelated engines can proceed; stopped/closed turns leave the
+  queue. Applies equally to chess and draughts, including DXP reservation aliases.
+- Update the built-in manual with tabs, close/recovery semantics and allocation.
+  Record approval, scope and limitations in
+  `chatgpt/TABBED_TOURNAMENTS_IMPLEMENTATION.md`.
+- Validation: application build, 14 checked queue assertions, and 132 checked
+  GTK tab/lifecycle assertions pass with no unfreed blocks. Three competing
+  double-round-robin tournaments per game launch 1, 2, 3, 1, 2, 3 despite reversed
+  timer order. Full headless regressions, all 19 GUI suites, and both existing
+  tournament suites pass. Native Windows production-host QA remains outstanding; the embedding
+  spike itself passed there. Unrelated unfinished feature flags are excluded.
+
+
 ### Fix U26: let the main window fit laptop screens — 2026-10-31
 
 Commit: `844853d`.
