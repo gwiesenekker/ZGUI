@@ -4,120 +4,47 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
 OUT_DIR="${TMPDIR:-/tmp}/gwdgui-gui-checks"
 mkdir -p "$OUT_DIR/config" "$OUT_DIR/units"
+FAILED=()
+PASSED=0
 
-echo "==> standalone_preservation_check (GTK2, hidden main form)"
-if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/standalone_preservation_check.lpi" > "$OUT_DIR/build.log" 2>&1; then
-  cat "$OUT_DIR/build.log"
+run_check() {
+  local title="$1" project="$2" subdir="$3" limit="$4"
+  local output="$OUT_DIR$subdir" log="$OUT_DIR/$project-build.log"
+  echo "==> $title"
+  if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$output" \
+      "$ROOT_DIR/tests/$project.lpi" > "$log" 2>&1; then
+    cat "$log"
+    FAILED+=("$project (build)")
+    return
+  fi
+  if (cd "$output" && timeout "$limit" "./$project"); then
+    PASSED=$((PASSED + 1))
+  else
+    FAILED+=("$project (run)")
+  fi
+}
+
+run_check "standalone_preservation_check (GTK2, hidden main form)" standalone_preservation_check "" 60s
+run_check "main_form_boundaries_check (GTK2, interaction and analysis lifecycle)" main_form_boundaries_check "" 60s
+run_check "gui_delivery_check (GTK2, queue consumption and shutdown)" gui_delivery_check "" 60s
+run_check "help_menu_check (GTK2, shortcuts and application help)" help_menu_check "" 60s
+run_check "notation_preferences_check (GTK2, styles and SynEdit ranges)" notation_preferences_check "" 60s
+run_check "chess_board_check (GTK2, chess board/PV and preserved layout)" chess_board_check "" 60s
+run_check "uci_gui_check (GTK2, existing editor and annotator)" uci_gui_check "" 60s
+run_check "setup_preferences_check (GTK2, chess setup and score colours)" setup_preferences_check "" 60s
+run_check "chess_database_gui_check (GTK2, shared database dialog and selection)" chess_database_gui_check "" 60s
+run_check "multi_game_gui_check (GTK2, concurrent chess/draughts contexts)" multi_game_gui_check "/multi" 60s
+run_check "game_preferences_check (GTK2, per-game appearance and U22)" game_preferences_check "/game-prefs" 60s
+run_check "engine_ini_viewport_check (GTK2, INI editor bounds for both games)" engine_ini_viewport_check "/ini-viewport" 60s
+run_check "gui_layout_check (GTK2, font/window/DPI resizing for both games)" gui_layout_check "/layout" 60s
+run_check "dxp_editor_launch_check (GTK2, listener before client process)" dxp_editor_launch_check "/dxp-launch" 30s
+run_check "engine_parameter_scroll_check (GTK2, all-grid scrolling/hints and tournament Play viewport)" engine_parameter_scroll_check "/parameter-scroll" 45s
+run_check "init_colour_gui_check (GTK2, Hub initialization and preferences previews)" init_colour_gui_check "/init-colour" 30s
+run_check "main_readability_gui_check (GTK2, full FEN and ten notation lines)" main_readability_gui_check "/main-readability" 30s
+run_check "engine_end_reason_gui_check (GTK2, engine reason snapshots and tournament persistence)" engine_end_reason_gui_check "/end-reason" 45s
+
+echo "GUI suites passed: $PASSED; failed: ${#FAILED[@]}"
+if ((${#FAILED[@]})); then
+  printf 'FAILED: %s\n' "${FAILED[@]}"
   exit 1
 fi
-cd "$OUT_DIR"
-"$OUT_DIR/standalone_preservation_check"
-
-echo "==> main_form_boundaries_check (GTK2, interaction and analysis lifecycle)"
-if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/main_form_boundaries_check.lpi" > "$OUT_DIR/boundaries-build.log" 2>&1; then
-  cat "$OUT_DIR/boundaries-build.log"
-  exit 1
-fi
-"$OUT_DIR/main_form_boundaries_check"
-
-
-echo "==> gui_delivery_check (GTK2, queue consumption and shutdown)"
-if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/gui_delivery_check.lpi" > "$OUT_DIR/delivery-build.log" 2>&1; then
-  cat "$OUT_DIR/delivery-build.log"
-  exit 1
-fi
-"$OUT_DIR/gui_delivery_check"
-
-
-echo "==> help_menu_check (GTK2, shortcuts and application help)"
-if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/help_menu_check.lpi" > "$OUT_DIR/help-build.log" 2>&1; then
-  cat "$OUT_DIR/help-build.log"
-  exit 1
-fi
-"$OUT_DIR/help_menu_check"
-
-
-echo "==> notation_preferences_check (GTK2, styles and SynEdit ranges)"
-if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/notation_preferences_check.lpi" > "$OUT_DIR/notation-preferences-build.log" 2>&1; then
-  cat "$OUT_DIR/notation-preferences-build.log"
-  exit 1
-fi
-"$OUT_DIR/notation_preferences_check"
-
-
-echo "==> chess_board_check (GTK2, chess board/PV and preserved layout)"
-if ! python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/chess_board_check.lpi" > "$OUT_DIR/chess-build.log" 2>&1; then
-  cat "$OUT_DIR/chess-build.log"
-  exit 1
-fi
-"$OUT_DIR/chess_board_check"
-
-
-echo "==> uci_gui_check (GTK2, existing editor and annotator)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/uci_gui_check.lpi" > "$OUT_DIR/uci-build.log" 2>&1
-"$OUT_DIR/uci_gui_check"
-
-
-echo "==> setup_preferences_check (GTK2, chess setup and score colours)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/setup_preferences_check.lpi" > "$OUT_DIR/setup-preferences-build.log" 2>&1
-"$OUT_DIR/setup_preferences_check"
-
-
-echo "==> chess_database_gui_check (GTK2, shared database dialog and selection)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR" \
-  "$ROOT_DIR/tests/chess_database_gui_check.lpi" > "$OUT_DIR/chess-database-build.log" 2>&1
-"$OUT_DIR/chess_database_gui_check"
-
-echo "==> multi_game_gui_check (GTK2, concurrent chess/draughts contexts)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/multi" \
-  "$ROOT_DIR/tests/multi_game_gui_check.lpi" > "$OUT_DIR/multi-build.log" 2>&1
-"$OUT_DIR/multi/multi_game_gui_check"
-
-echo "==> game_preferences_check (GTK2, per-game appearance and U22)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/game-prefs" \
-  "$ROOT_DIR/tests/game_preferences_check.lpi" > "$OUT_DIR/game-prefs-build.log" 2>&1
-"$OUT_DIR/game-prefs/game_preferences_check"
-
-echo "==> engine_ini_viewport_check (GTK2, INI editor bounds for both games)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/ini-viewport" \
-  "$ROOT_DIR/tests/engine_ini_viewport_check.lpi" > "$OUT_DIR/ini-viewport-build.log" 2>&1
-"$OUT_DIR/ini-viewport/engine_ini_viewport_check"
-
-echo "==> gui_layout_check (GTK2, font/window/DPI resizing for both games)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/layout" \
-  "$ROOT_DIR/tests/gui_layout_check.lpi" > "$OUT_DIR/layout-build.log" 2>&1
-timeout 60s "$OUT_DIR/layout/gui_layout_check"
-
-echo "==> dxp_editor_launch_check (GTK2, listener before client process)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/dxp-launch" \
-  "$ROOT_DIR/tests/dxp_editor_launch_check.lpi" > "$OUT_DIR/dxp-launch-build.log" 2>&1
-timeout 30s "$OUT_DIR/dxp-launch/dxp_editor_launch_check"
-
-echo "==> engine_parameter_scroll_check (GTK2, all-grid scrolling/hints and tournament Play viewport)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/parameter-scroll" \
-  "$ROOT_DIR/tests/engine_parameter_scroll_check.lpi" > "$OUT_DIR/parameter-scroll-build.log" 2>&1
-timeout 45s "$OUT_DIR/parameter-scroll/engine_parameter_scroll_check"
-
-echo "==> init_colour_gui_check (GTK2, Hub initialization and preferences previews)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/init-colour" \
-  "$ROOT_DIR/tests/init_colour_gui_check.lpi" > "$OUT_DIR/init-colour-build.log" 2>&1
-timeout 30s "$OUT_DIR/init-colour/init_colour_gui_check"
-
-echo "==> main_readability_gui_check (GTK2, full FEN and ten notation lines)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/main-readability" \
-  "$ROOT_DIR/tests/main_readability_gui_check.lpi" > "$OUT_DIR/main-readability-build.log" 2>&1
-timeout 30s "$OUT_DIR/main-readability/main_readability_gui_check"
-
-
-echo "==> engine_end_reason_gui_check (GTK2, engine reason snapshots and tournament persistence)"
-python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/end-reason" \
-  "$ROOT_DIR/tests/engine_end_reason_gui_check.lpi" > "$OUT_DIR/end-reason-build.log" 2>&1
-timeout 45s "$OUT_DIR/end-reason/engine_end_reason_gui_check"

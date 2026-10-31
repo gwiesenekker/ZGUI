@@ -4,6 +4,32 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Address Claude's remaining GUI/context review findings — 2026-10-31
+
+Commit: pending.
+
+- Address A2, U25, C7, T6, F5, U24 and U23 from Claude's latest review:
+  restore each game's PV memo/label and browsing selection on switching;
+  measure setup radio-button sizes; capture colour previews inside their
+  scroll viewport; destroy hidden dialogs before shared state; release removed
+  games' display objects; save hidden boards with their own event names; and
+  remove the stray annotator-log control name.
+- Apply the fixes to both chess and draughts, retaining the existing GUI layout
+  and game, tournament, database, engine, tree and clock infrastructure.
+- Continue the GUI test sweep after failures and report all failing suites.
+  Add regression coverage for both contexts, repeated display removal,
+  shutdown ordering, hidden close-prompt saves, frozen/pending PVs, native
+  radio-button metrics and scrolled colour swatches.
+- User authorisation, 2026-10-31: “Could you address all these findings?”
+  Scope: the seven review findings listed above and C7's test-runner change.
+  Preserve the separate unfinished feature-flag work and local engine files.
+- Validation: application compilation, full headless regression, all eighteen
+  GUI suites (140 mixed, 9,460 Inter-font layout, 476 colour/init checks), and
+  both tournament suites pass on an isolated source snapshot. Old PV attachment
+  fails the new regression; disabling preview scrolling fails the new viewport
+  assertion. Fault injection confirms the runner reports both build/run failures
+  after attempting all suites. Native Windows interaction remains untested.
+
 ### Keep visible tournament rows in view when starting games — 2026-10-31
 
 Commit: `239f666`.

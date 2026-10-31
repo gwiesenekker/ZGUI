@@ -72,6 +72,7 @@ type
     procedure ActivateGameContext(Variant:TGameVariant);
     function ContextForVariant(Variant:TGameVariant):TGameUiContext;
     function DocumentDisplay(Tree:TGameTree):TDisplayedPosition;
+    procedure RemoveDocumentDisplay(TreeId:Int64);
     procedure FenTextChanged(Sender:TObject);
     function CurrentVariant:TGameVariant;
     function StandaloneListIndex:Integer;
@@ -529,6 +530,8 @@ type
     property TestAutoPlay: TAutoPlayCoordinator read FAutoPlay;
     property TestAnalyzerRunner: TAnalyzerRunnerThread read FAnalyzerRunner;
     property TestMctsRunner: TAnalyzerRunnerThread read FMctsRunner;
+    function TestDocumentViewCount:Integer;
+    function TestGameCount:Integer;
     // Engine problems reported while no test dialog result is set
     // (caption, #1, text per item); shown as dialogs in the application.
     property TestEngineProblems: TStringList read FTestEngineProblems;
@@ -939,6 +942,7 @@ begin
 
   FAnalyzerMemo := TMemo.Create(Self);
   FAnalyzerMemo.Name:='AnnotatorLogMemo';
+  FAnalyzerMemo.Lines.Clear;
   FAnalyzerMemo.Parent := LAnalyzerTextPanel;
   FAnalyzerMemo.Align := alClient;
   FAnalyzerMemo.ParentFont := True;
@@ -1425,6 +1429,14 @@ begin
   FreeAndNil(FMiniBoardForm);
   FreeAndNil(FAnalyzerMiniBoardForm);
   FreeAndNil(FGameTreeForm);
+  // Destroy hidden dialogs before any shared display/model state or game list.
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);
+    if C=FActiveContext then Continue;
+    FreeAndNil(C.FTournamentDialog);FreeAndNil(C.FDatabaseForm);
+    FreeAndNil(C.FSetupForm);FreeAndNil(C.FPositionSetupForm);
+    FreeAndNil(C.FMiniBoardForm);FreeAndNil(C.FAnalyzerMiniBoardForm);
+  end;
   FreeAndNil(FAnalyzerPvBrowser);
   FreeAndNil(FPvBrowser);
   FAutoPlay.Free;
@@ -1454,7 +1466,7 @@ begin
   FGameTreeActor.Free;
   FGameTree.Free;
   FGameLog.Free;
-  FGames.Free;
+  FreeAndNil(FGames);
   FBoard.Free;
   inherited Destroy;
 end;
@@ -1512,6 +1524,25 @@ begin
   View:=TDocumentView.Create;View.TreeId:=Tree.GameTreeId;View.Display:=TDisplayedPosition.Create;
   FDocumentViews.Add(View);Result:=View.Display;
 end;
+
+procedure TMainForm.RemoveDocumentDisplay(TreeId:Int64);
+var I:Integer;View:TDocumentView;
+begin
+  if FDocumentViews=nil then Exit;
+  for I:=FDocumentViews.Count-1 downto 0 do begin
+    View:=TDocumentView(FDocumentViews[I]);
+    if View.TreeId<>TreeId then Continue;
+    if FDisplayedPosition=View.Display then FDisplayedPosition:=nil;
+    FDocumentViews.Delete(I);View.Display.Free;View.Free;
+  end;
+end;
+
+{$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+function TMainForm.TestDocumentViewCount:Integer;
+begin Result:=FDocumentViews.Count;end;
+function TMainForm.TestGameCount:Integer;
+begin if FGames=nil then Result:=-1 else Result:=FGames.Count;end;
+{$ENDIF}
 
 procedure TMainForm.CaptureGameContext;
 var C:TGameUiContext;
@@ -3811,12 +3842,22 @@ begin
 end;
 
 function TMainForm.EventNameForTree(AGameTree: TGameTree): string;
+var I:Integer;C:TGameUiContext;
 begin
   Result := '';
   if AGameTree <> nil then
     Result := Trim(AGameTree.EventName);
-  if Result = '' then
-    Result := PlayerNameOrFallback(FStandaloneEventName, '?');
+  if Result<>'' then Exit;
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    C:=TGameUiContext(FGameContexts[I]);
+    if C.FGameTree=AGameTree then begin
+      if C=FActiveContext then Result:=FStandaloneEventName
+      else Result:=C.FStandaloneEventName;
+      Exit(PlayerNameOrFallback(Result,'?'));
+    end;
+  end;
+  // A running game without an Event must not inherit the selected board's name.
+  Result:='?';
 end;
 
 function TMainForm.ClockValuesForTree(AGameTree: TGameTree;
@@ -6113,6 +6154,7 @@ end;
 procedure TMainForm.RemoveGame(AGame: TRunningGame);
 var
   LIndex: Integer;
+  TreeId:Int64;
 begin
   if AGame = nil then
     Exit;
@@ -6133,10 +6175,10 @@ begin
   FGames.Remove(AGame);
   if LIndex >= 0 then
     FGamesListBox.Items.Delete(LIndex);
+  TreeId:=AGame.GameTree.GameTreeId;
   AGame.Free;
 
-  if FClosing then
-    Exit;
+  if FClosing then begin RemoveDocumentDisplay(TreeId);Exit;end;
 
   if FGamesListBox.Items.Count > 0 then
   begin
@@ -6151,6 +6193,7 @@ begin
   end
   else
     ApplyGameToDisplay(nil);
+  RemoveDocumentDisplay(TreeId);
 end;
 
 procedure TMainForm.RemoveSelectedGame(Sender: TObject);

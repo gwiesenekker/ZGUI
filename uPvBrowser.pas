@@ -121,9 +121,14 @@ begin
 end;
 
 procedure TPvBrowser.AttachViews;
+var Text:string;
 begin
   if FPvMemo<>nil then begin FPvMemo.OnClick:=@MemoClick;FPvMemo.OnKeyDown:=@MemoKeyDown;end;
+  BuildMoveText(Text,FMoveStarts,FMoveLengths);
+  RenderMemo(Text);
+  if FInfoLabel<>nil then FInfoLabel.Caption:=FormatInfo;
   RenderBoard;
+  HighlightSelection(False);
 end;
 
 procedure TPvBrowser.Clear;

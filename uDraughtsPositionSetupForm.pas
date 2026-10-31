@@ -372,20 +372,28 @@ var
   PaletteWidth: Integer;
   SquareSize: Integer;
   SideMargin: Integer;
-  TopPos,TileSize,Row,Col: Integer;
+  TopPos,TileSize,Row,Col,ItemWidth,ItemHeight,SideHeight: Integer;
 begin
-  if (FBoardControl = nil) or (FPalettePanel = nil) then
+  if (FBoardControl = nil) or (FPalettePanel = nil) or (FSideGroup = nil) then
     Exit;
 
   SquareSize := Max(32, FBoardControl.BoardSquareSize);
   PaletteWidth := Max(Max(SquareSize + 8, 96),MeasureGuiText('Side to move',Font).cx+16);
+  // Native radio buttons can be taller than their caption's text metrics.
+  SideHeight:=MeasureGuiText(FSideGroup.Caption,FSideGroup.Font).cy+16;
+  for I:=0 to FSideGroup.ControlCount-1 do
+    if FSideGroup.Controls[I].Visible and (FSideGroup.Controls[I] is TRadioButton) then begin
+      FSideGroup.Controls[I].GetPreferredSize(ItemWidth,ItemHeight,True);
+      Inc(SideHeight,ItemHeight);
+      PaletteWidth:=Max(PaletteWidth,ItemWidth+16);
+    end;
   SideMargin := Max(0, (PaletteWidth - SquareSize) div 2);
   FPalettePanel.Width := PaletteWidth;
 
   TopPos := 0;
   if FSideGroup <> nil then
   begin
-    FSideGroup.SetBounds(0, TopPos, PaletteWidth,MeasureGuiText('Side to move'+LineEnding+'White'+LineEnding+'Black',Font).cy+16);
+    FSideGroup.SetBounds(0, TopPos, PaletteWidth,SideHeight);
     Inc(TopPos, FSideGroup.Height + 8);
   end;
   if FPaletteLabel <> nil then

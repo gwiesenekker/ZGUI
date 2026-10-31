@@ -14,7 +14,7 @@ var Checks,Failures:Integer;Errors:TErrors;
 procedure Check(B:Boolean;const Msg:string);
 begin Inc(Checks);if not B then begin Inc(Failures);WriteLn('FAIL: ',Msg);end;end;
 procedure Inspect(C:TWinControl;Root:TForm);
-var I:Integer;Child:TControl;W,H:Integer;Path:string;
+var I,J:Integer;Child:TControl;W,H:Integer;Path:string;
 begin
  for I:=0 to C.ControlCount-1 do begin
   Child:=C.Controls[I];if not Child.Visible then Continue;
@@ -36,6 +36,15 @@ begin
    Check(Child.Width>=W,Path+' complete starting FEN plus margin');
    Check(Child.Parent.Width>=Root.ClientWidth-32,Path+' full-width settings rows');
   end;
+  if (C is TRadioGroup) and (Child is TRadioButton) then begin
+   Child.GetPreferredSize(W,H,True);
+   Check(Child.Height>=H,Path+' native radio button height');
+   for J:=0 to I-1 do if C.Controls[J].Visible and (C.Controls[J] is TRadioButton) then
+    Check((Child.Top>=C.Controls[J].Top+C.Controls[J].Height) or
+      (C.Controls[J].Top>=Child.Top+Child.Height) or
+      (Child.Left>=C.Controls[J].Left+C.Controls[J].Width) or
+      (C.Controls[J].Left>=Child.Left+Child.Width),Path+' radio buttons do not overlap');
+  end;
   if Child is TWinControl then Inspect(TWinControl(Child),Root);
  end;
 end;
@@ -44,6 +53,7 @@ var Size,I,Mode,Tab:Integer;Pages:TPageControl;Img:TBitmap;Png:TPortableNetworkG
 begin
  try
   if F is TPreferencesForm then TPreferencesForm(F).StartEdit(DefaultGuiPreferences);
+  if GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT')<>'' then F.Font.Name:=GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT');
   WriteLn('Testing ',F.ClassName);Flush(Output);
   F.Show;for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
   if F is TTournamentDialog then begin

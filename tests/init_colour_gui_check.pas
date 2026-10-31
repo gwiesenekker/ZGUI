@@ -1,7 +1,7 @@
 program init_colour_gui_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
- ExtCtrls,Graphics,ComCtrls,Math,Grids,uEngineEditForm,uEngineRegistry,uEngineParamsJson,
+ ExtCtrls,Graphics,ComCtrls,Math,Grids,Types,uEngineEditForm,uEngineRegistry,uEngineParamsJson,
  uPreferencesForm,uPreferences,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,uGuiDialogs;
 type
  TTestPreferences=class(TPreferencesForm)
@@ -58,6 +58,7 @@ var D:TExternalEngineDefinition;F:TEngineEditForm;M:TMemo;P,Loaded:TEngineParamA
  Grid:TStringGrid;Row:Integer;
  Pref:TTestPreferences;Panel:TPanel;C:TCheckBox;Pages:TPageControl;
  Edits:TGamePreferencesEdits;I,J,K,N,Size,W,H:Integer;Errors:TErrors;Bitmap:TBitmap;Trace:TStringList;TraceName:string;
+ Ancestor:TWinControl;Location:TPoint;
 begin
  if ParamStr(1)='--fake-hub-init' then begin FakeHub;Halt(0);end;
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
@@ -112,12 +113,28 @@ begin
     end;
    for Size:=0 to 1 do begin
     if Size=0 then Pref.Font.Size:=10 else Pref.Font.Size:=16;
+    Pref.Height:=Pref.Constraints.MinHeight;
     for K:=0 to Pages.PageCount-1 do begin
      Pages.ActivePageIndex:=K;Pump;N:=0;
      for I:=0 to Pref.ComponentCount-1 do begin
       if (Pref.Components[I] is TPanel) and (TPanel(Pref.Components[I]).BevelOuter=bvLowered) and
        TPanel(Pref.Components[I]).IsVisible then begin
        Panel:=TPanel(Pref.Components[I]);Inc(N);
+       Ancestor:=Panel.Parent;
+       while Ancestor<>nil do begin
+        if Ancestor is TScrollBox then TScrollBox(Ancestor).ScrollInView(Panel);
+        Ancestor:=Ancestor.Parent;
+       end;
+       Pump;
+       Ancestor:=Panel.Parent;
+       while Ancestor<>nil do begin
+        if Ancestor is TScrollBox then begin
+         Location:=Ancestor.ScreenToClient(Panel.ClientToScreen(Point(0,0)));
+         Check((Location.Y>=0) and (Location.Y+Panel.Height<=Ancestor.ClientHeight),
+           'Captured preview is completely inside its scroll viewport');
+        end;
+        Ancestor:=Ancestor.Parent;
+       end;
        Check((Panel.Width>=20) and (Panel.Height>=16),'Colour preview has usable dimensions');
        Check((Panel.Caption='') and not Panel.ParentBackground,'Colour preview paints its own colour without text');
        Bitmap:=TBitmap.Create;

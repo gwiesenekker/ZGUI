@@ -7,7 +7,25 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,
   uChessUciEngine,uDraughtsHubEngine,uDraughtsDxpEngine,uDraughtsEngine,uEngineBase,
   uGameGuiMessages,uAnalyzerRunnerThread,uGuiDialogs,uGameTree,uGameTreeActor,uGameTreePdn,
   uChessPgn,uGameDocumentContext,uGameDatabase,uPreferences,Graphics,Grids,ExtCtrls,
-  uTournamentDialog,uTournamentGridModel,uDatabaseForm,SQLite3Conn,SQLDB,uEnginesDialog;
+  uTournamentDialog,uTournamentGridModel,uDatabaseForm,SQLite3Conn,SQLDB,uEnginesDialog,
+  uPvBrowser,uDraughtsPdn,uDraughtsPositionSetupForm;
+type TDialogLifetimeProbe=class(TComponent)
+public
+  Main:TMainForm;
+  Removed:Integer;
+  TooLate:Boolean;
+  procedure Notification(AComponent:TComponent;Operation:TOperation);override;
+end;
+procedure TDialogLifetimeProbe.Notification(AComponent:TComponent;Operation:TOperation);
+begin
+  inherited Notification(AComponent,Operation);
+  if (Operation=opRemove) and (AComponent is TForm) then begin
+    Inc(Removed);
+    TooLate:=TooLate or (Main.TestGameCount<0);
+    // Dialog destruction is allowed to query the still-live shared game list.
+    if Main.TestGameCount>=0 then Main.FindGameById(-123);
+  end;
+end;
 var Chess,Draughts:TGameVariant;Checks:Integer=0;RealEngines:Boolean=False;
 procedure Check(Value:Boolean;const Msg:string);
 begin Inc(Checks);if not Value then raise Exception.Create(Msg);end;
@@ -153,6 +171,103 @@ begin
       ((A.Lifecycle=rglFinished) and (B.Lifecycle=rglFinished)) or (GetTickCount64-Tick>5000);
     Check((A.Lifecycle=rglFinished) and (B.Lifecycle=rglFinished),'Both game workers finish');
   finally Main.Free;end;
+end;
+
+procedure ReviewRemaining;
+var Main:TMainForm;History:TListBox;Game:TRunningGame;Setup:TGameSetup;
+    I,J,BaseCount:Integer;V,Other:TGameVariant;Probe:TDialogLifetimeProbe;
+    Imported:TPdnGame;Lines:TStringList;Name:string;CanClose:Boolean;
+begin
+  Main:=TMainForm.Create(nil);Probe:=TDialogLifetimeProbe.Create(nil);Probe.Main:=Main;
+  try
+    Main.Show;Pump;
+    Check(Trim(TMemo(Main.FindComponent('AnnotatorLogMemo')).Text)='Annotator closed',
+      'U23 initial annotator log contains only its status');
+    Main.SelectGameVariant(Draughts);Main.SelectGameVariant(Chess);
+    Check(Pos('AnnotatorLogMemo',TMemo(Main.FindComponent('AnnotatorLogMemo')).Text)=0,
+      'U23 switching back does not restore the control name');
+    BaseCount:=Main.TestDocumentViewCount;
+    History:=TListBox(Main.FindComponent('GameHistoryList'));
+    for I:=0 to 19 do begin
+      if Odd(I) then V:=Chess else V:=Draughts;
+      Setup:=Default(TGameSetup);Setup.Variant:=V;Setup.StartingFEN:=V.DefaultStartingFEN;
+      Game:=TRunningGame.Create(100+I,'Finished fixture',nil,pkHuman,pkHuman,'','','White','Black',nil,Setup);
+      Game.MarkFinished;Main.TestRegisterGame(Game);
+      History.ItemIndex:=History.Items.IndexOfObject(Game);History.OnClick(History);Pump;
+      Check(Main.TestDocumentViewCount=BaseCount+1,'F5 selected running game adds one display');
+      if Odd(I) then Main.SelectGameVariant(Draughts); // exercise hidden and selected removal
+      Main.RemoveGame(Game);Pump;
+      Check(Main.TestDocumentViewCount=BaseCount,'F5 removing a game releases its display');
+    end;
+    for I:=0 to 1 do begin
+      if I=0 then V:=Chess else V:=Draughts;
+      Main.SelectGameVariant(V);
+      Button(Main,'Tournament...').Click;Button(Main,'New game...').Click;
+      // Position setup is normally reached through the board menu.
+      Menu(Main,'Setup position...').Click;
+    end;
+    for I:=0 to Main.ComponentCount-1 do
+      if (Main.Components[I] is TTournamentDialog) or
+         (Main.Components[I] is TGameSetupForm) or
+         (Main.Components[I] is TPositionSetupForm) then
+        Main.Components[I].FreeNotification(Probe);
+    Main.Free;Main:=nil;
+    Check(Probe.Removed=6,'T6 frees both games'' setup and tournament dialogs');
+    Check(not Probe.TooLate,'T6 frees hidden dialogs while the game list is alive');
+  finally Main.Free;Probe.Free;end;
+  // Each game is the hidden close-prompt save target in turn.
+  for J:=0 to 1 do begin
+    if J=0 then begin V:=Chess;Other:=Draughts;end
+    else begin V:=Draughts;Other:=Chess;end;
+    RegisterDefaultGameVariant(Other);Main:=TMainForm.Create(nil);
+    Imported:=TPdnGame.Create;Lines:=TStringList.Create;Name:=GetTempFileName(GetTempDir,'event');
+    try
+      Main.SelectGameVariant(V);Imported.StartingFEN:=V.DefaultStartingFEN;
+      Imported.EventName:='Hidden '+V.Name;
+      if V=Chess then Imported.MovesText:='e2e4' else Imported.MovesText:='32-28';
+      Main.LoadPdnGameToDisplay(Imported);
+      Main.ActiveGameTree.SetHeader('','White','Black','*',V.DefaultStartingFEN);
+      Main.SelectGameVariant(Other);
+      GuiTestConfirmationResult:=mrYes;GuiTestFileDialogResult:=1;GuiTestFileName:=Name;
+      Main.OnCloseQuery(Main,CanClose);Lines.LoadFromFile(Name);
+      Check(CanClose,'U24 both contexts permit the explicit close/save');
+      Check(Pos('[Event "Hidden '+V.Name+'"]',Lines.Text)>0,
+        'U24 hidden board save uses its own remembered event name');
+    finally
+      GuiTestConfirmationResult:=0;GuiTestFileDialogResult:=-1;
+      Main.Free;Imported.Free;Lines.Free;DeleteFile(Name);RegisterDefaultGameVariant(Chess);
+    end;
+  end;
+end;
+
+procedure ReviewPvAttach;
+var F:TForm;Memo:TMemo;Info:TLabel;C,D:TPvBrowser;CP,DP:TGamePosition;
+    Text,Caption,Fen,Selected:string;Key:Word;
+begin
+  F:=TForm.CreateNew(nil);Memo:=TMemo.Create(F);Memo.Parent:=F;
+  Memo.Enabled:=False;Info:=TLabel.Create(F);
+  C:=TPvBrowser.Create(Chess,nil,Info,Memo);D:=TPvBrowser.Create(Draughts,nil,Info,Memo);
+  CP:=Chess.CreatePosition;DP:=Draughts.CreatePosition;
+  try
+    CP.LoadFromFEN(Chess.DefaultStartingFEN);DP.LoadFromFEN(Draughts.DefaultStartingFEN);
+    C.SetData(CP,0,CP.ToFEN,'e2e4 e7e5 e1e8','0.42','8','1');
+    Memo.SelStart:=Pos('e4',Memo.Text)-1;Memo.OnClick(Memo);
+    C.SetData(CP,0,CP.ToFEN,'d2d4','0.5','9','2');
+    Text:=Memo.Text;Caption:=Info.Caption;Fen:=C.Position.ToFEN;Selected:=Memo.SelText;
+    D.AttachViews;
+    Check((Trim(Memo.Text)='No PV') and (Info.Caption='PV: no info'),
+      'A2 empty destination clears the previous game''s memo and label');
+    C.AttachViews;
+    Check((Memo.Text=Text) and (Info.Caption=Caption) and (Memo.SelText=Selected),
+      'A2 restores invalid-tail text, browsing selection and pending status');
+    Check(C.Position.ToFEN=Fen,'A2 restoring views preserves the browsing position');
+    Key:=27;Memo.OnKeyDown(Memo,Key,[]);
+    Check((Pos('d4',Memo.Text)>0) and (Pos('score 0.5',Info.Caption)>0),
+      'A2 Escape still applies the pending PV after reattachment');
+    D.SetData(DP,0,DP.ToFEN,'32-28','-0.2','7','3');Text:=Memo.Text;Caption:=Info.Caption;
+    C.AttachViews;D.AttachViews;
+    Check((Memo.Text=Text) and (Info.Caption=Caption),'A2 restores draughts PV and evaluation');
+  finally C.Free;D.Free;CP.Free;DP.Free;F.Free;end;
 end;
 
 procedure DraughtsStartup;
@@ -452,6 +567,7 @@ begin
   try WriteLn('Registry');Flush(Output);RegistryAndContexts;
     WriteLn('Preferences/files');Flush(Output);PreferencesAndFiles;
     WriteLn('Views');Flush(Output);MixedViews;DraughtsStartup;
+    WriteLn('Review follow-up');Flush(Output);ReviewPvAttach;ReviewRemaining;
     WriteLn('Databases');Flush(Output);DatabaseContexts;
     WriteLn('Engines/sessions');Flush(Output);EnginesAndSessions;WriteLn('Multi-game checks passed (',Checks,' checks)');
   finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;end;

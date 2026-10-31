@@ -329,6 +329,14 @@ concurrent UCI and Hub games through the existing main window and runners, then
 saves both formats. It checks separate standalone documents, preferences, strict
 file classification, loaded annotator slots, stale session rejection, cancelled
 close, simultaneous tournaments and independent publication/save ownership.
+Review regressions also cover PV view reattachment with frozen/pending analysis,
+clean annotator startup text, twenty selected/hidden running-game display removals,
+both contexts' dialog destruction before the game list, and each game's hidden
+close-prompt event metadata (140 mixed checks). The layout suite accepts
+`ZGUI_LAYOUT_TEST_FONT=Inter` to repeat font-dependent findings and checks native
+radio-button heights/nonoverlap. Colour-preview capture scrolls each swatch into
+view at the minimum dialog height and verifies its viewport bounds.
+The GUI runner attempts every suite and reports all build/run failures.
 Fake peers are built into the test executable. Build/run it alone:
 
 ```sh
