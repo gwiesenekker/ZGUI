@@ -55,3 +55,15 @@ None of that is a new tournament scheduler or game controller.
 This machine has Wine but no native Windows host and no FPC Win64 units
 (the compiler probe fails with “Can't find unit system”). Wine is not claimed
 as satisfying the requested native Windows check.
+
+## First Windows result
+
+The user ran the spike natively in Lazarus 4.8 on Windows and supplied an
+exception screenshot: “Embedded button caption fits”. This is a failed native
+run, not approval to start full integration. The assertion compared native
+preferred button width (which can include a standard minimum preference) with
+actual width. It now measures actual caption text plus a focus margin and names
+the button, actual/required widths, tab and font on failure. Caption clipping
+remains checked; a preferred width is not itself proof that a caption is clipped.
+Rebuild the updated spike and repeat both the automatic and interactive checks.
+The untracked Windows .exe/.obj supplied by the user are left untouched.

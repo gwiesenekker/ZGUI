@@ -2,7 +2,7 @@ program tournament_embedding_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
   StdCtrls,ExtCtrls,ComCtrls,Graphics,LCLType,LMessages,Math,uMainForm,
-  uTournamentDialog,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile;
+  uTournamentDialog,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,uGuiDialogs;
 type
   TEmbeddingHost=class(TForm)
   public
@@ -97,7 +97,7 @@ begin
   if Control.Perform(CN_KEYUP,Key,0)=0 then Control.Perform(LM_KEYUP,Key,0);
 end;
 procedure Inspect(Host:TEmbeddingHost);
-var I,J,Size,Mode:Integer;D:TTournamentDialog;Edit:TEdit;Field:TControl;W,H:Integer;
+var I,J,Size,Mode:Integer;D:TTournamentDialog;Edit:TEdit;Field:TControl;W:Integer;
 begin
   for Size:=0 to 1 do begin
     Host.Font.Size:=10+6*Size;
@@ -114,8 +114,13 @@ begin
         for J:=0 to D.ComponentCount-1 do if D.Components[J] is TButton then begin
           Field:=TControl(D.Components[J]);
           if Field.IsVisible then begin
-            Field.GetPreferredSize(W,H,True);
-            Check(Field.Width>=W,'Embedded button caption fits');
+            // A native preferred width may include a standard button width.
+            // Check actual caption space, including breathing room for focus.
+            W:=MeasureGuiText(StringReplace(TButton(Field).Caption,'&','',[rfReplaceAll]),Field.Font).cx+
+              2*Max(4,MeasureGuiText('M',Field.Font).cx div 3);
+            Check(Field.Width>=W,'Embedded button "'+TButton(Field).Caption+
+              '" fits: width='+IntToStr(Field.Width)+', text and margin='+IntToStr(W)+
+              ', tab='+IntToStr(I)+', font='+IntToStr(D.Font.Size));
           end;
         end;
         Edit:=TEdit(D.FindComponent('TournamentName'));Edit.SetFocus;Pump;

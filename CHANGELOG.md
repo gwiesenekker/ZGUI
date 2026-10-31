@@ -4,9 +4,25 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
-### Prepare the approved tournament-tab embedding spike — 2026-10-31
+### Correct the Windows embedding spike's caption check — 2026-10-31
 
 Commit: pending.
+
+- The user's native Windows/Lazarus 4.8 run stopped at the generic button
+  caption assertion. A platform's preferred button width can include a
+  standard width beyond the space its text needs; measure actual caption
+  text plus a focus margin instead. Retain clipping detection and report
+  the button, actual/required widths, tab and font when it fails.
+- The corrected spike still passes 160 GTK2 checks with no unfreed blocks.
+  Native Windows rerun remains required; the first failed run is not approval
+  to start production tournament-tab integration. User chose to run that check.
+- Missing Git in build.bat is a warning about commit metadata, not a compile
+  failure; no build-script change was necessary. Leave the user's Windows
+  test executable/object files untouched.
+
+### Prepare the approved tournament-tab embedding spike — 2026-10-31
+
+Commit: `8cb24be`.
 
 - Review `claude/review-559f6aa.md`: the previous seven findings are verified
   fixed; U26 is new, and tournament tabs are approved with four conditions.
