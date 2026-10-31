@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reveal new tournament tabs after assembly; preserve normal window size — 2026-10-31
 
-Commit: pending.
+Commit: `fdcd5a6`.
 
 - Address the user's Windows follow-up: redraw suppression alone still exposed
   buildup when adding another tab. Keep its page hidden while native controls
