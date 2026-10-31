@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Scroll engine parameters immediately with the mouse wheel — 2026-10-31
 
-Commit: pending.
+Commit: `6bbaa04`.
 
 - Set the existing parameter grid's native MouseWheelOption to mwGrid. Previously
   wheel events moved the selected row until it reached the viewport edge, giving
