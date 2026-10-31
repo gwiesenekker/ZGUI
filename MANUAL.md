@@ -709,6 +709,10 @@ Click a running row to display and follow that game's current tree in the main
 window. Finished games can be selected and browsed in the same way as other
 completed games.
 
+Starting a game selects its row. Rows that already fit stay in their current
+place; the grid scrolls only when needed to reveal a started row. Between starts,
+you can scroll the list manually without it snapping back on each timer update.
+
 Click **Stop** to stop the tournament's active games. Incomplete games remain
 available for review or rescheduling.
 

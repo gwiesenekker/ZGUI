@@ -379,7 +379,9 @@ chess and draughts: immediate wheel scrolling, unchanged selection/data/widths,
 scroll boundaries, scrollbar arrows/pages, horizontal scrolling, live thumb
 tracking and retained keyboard selection. Engine-list hover hints are checked
 for clipped/fitting Windows-style and Unicode paths, external locations, empty
-cells and headers (331 checks overall). It uses synthetic rows
+cells and headers. Round-robin Play/selection checks cover both games, single/
+double round-robin, two fonts, already-visible and offscreen starts, and manual
+scrolling between starts (419 checks overall). It uses synthetic rows
 without starting engines, database imports or tournament games.
 
 `engine_end_reason_gui_check` covers the optional engine termination reason through

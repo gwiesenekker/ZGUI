@@ -1897,11 +1897,21 @@ begin
 end;
 
 procedure TTournamentDialog.HighlightRow(ARow: Integer);
+var
+  Bounds: TRect;
+  FixedBottom: Integer;
 begin
   if (ARow > 0) and (ARow < FGrid.RowCount) then
   begin
+    // Native row selection scrolls only as far as needed to reveal the row.
     FGrid.Row := ARow;
-    FGrid.TopRow := ARow;
+    // Selecting the same row is a no-op in LCL, even after manual scrolling.
+    Bounds := FGrid.CellRect(FGrid.Col, ARow);
+    FixedBottom := 0;
+    if FGrid.FixedRows > 0 then
+      FixedBottom := FGrid.CellRect(FGrid.Col, FGrid.FixedRows - 1).Bottom;
+    if (Bounds.Top < FixedBottom) or (Bounds.Bottom > FGrid.ClientHeight) then
+      FGrid.TopRow := ARow;
   end;
 end;
 

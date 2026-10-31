@@ -1,11 +1,18 @@
 program engine_parameter_scroll_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
- Grids,Types,LMessages,LCLType,uEngineEditForm,uChessPosition,uDraughtsPosition,
+ Grids,Types,LMessages,LCLType,StdCtrls,ExtCtrls,uEngineRegistry,uRunningGame,
+ uGameSetupTypes,uGameTreeActor,uGameTreeBuilder,uGameOrchestrator,uEngineEditForm,uChessPosition,uDraughtsPosition,
  uGamePosition,uGameGuiProfile,uTournamentDialog,uEnginesDialog,uDatabaseForm,
- uPdnOpenDialog,uMainForm;
+ uPdnOpenDialog,uMainForm,uGuiDialogs;
 type
  TGridAccess=class(TStringGrid);
+ TStartProbe=class
+ public Games:TList;Main:TMainForm;
+  constructor Create;
+  destructor Destroy;override;
+  procedure Start(Sender:TObject;const Setup:TGameSetup;const Title:string;out Game:TObject);
+ end;
  TErrors=class
   procedure Report(Sender:TObject;E:Exception);
  end;
@@ -100,6 +107,85 @@ begin
  Check(G.Row=G.FixedRows+1,Context+': keyboard down still selects the next row');
  WriteLn('PASS: ',Context);
 end;
+constructor TStartProbe.Create;
+begin inherited Create;Games:=TList.Create;Main:=TMainForm.Create(nil);end;
+destructor TStartProbe.Destroy;
+var I:Integer;
+begin
+ for I:=0 to Games.Count-1 do TRunningGame(Games[I]).MarkFinished;
+ Main.Free;Games.Free;inherited Destroy;
+end;
+procedure TStartProbe.Start(Sender:TObject;const Setup:TGameSetup;const Title:string;out Game:TObject);
+begin
+ Game:=TRunningGame.Create(Games.Count+1,Title,nil,Setup.WhitePlayer,Setup.BlackPlayer,
+   '','','White','Black',nil,Setup);
+ Games.Add(Game);Main.TestRegisterGame(TRunningGame(Game));
+end;
+procedure TournamentViewport(V:TGameVariant;Pairing,FontSize:Integer);
+var D:TTournamentDialog;P:TStartProbe;Engines:TExternalEngineList;E:TExternalEngineDefinition;
+ G:TStringGrid;Timer:TTimer;Play:TButton;Saved:TMemoryStream;Had:Boolean;
+ I,Top,Last:Integer;Id:TGUID;Directory,FileName:string;Search:TSearchRec;
+ C:TGameTreeCommand;Game:TRunningGame;
+begin
+ D:=nil;P:=TStartProbe.Create;Engines:=TExternalEngineList.Create;Saved:=TMemoryStream.Create;
+ Had:=FileExists(EnginesJsonFileName);if Had then Saved.LoadFromFile(EnginesJsonFileName);
+ CreateGUID(Id);Directory:=GetTempDir+'tournament-view-'+GUIDToString(Id);ForceDirectories(Directory);
+ FileName:=Directory+'/tournament.json';
+ try
+  for I:=1 to 8 do begin
+   E:=TExternalEngineDefinition.Create;
+   if GameVariantId(V)='chess' then E.Kind:=eekUci else E.Kind:=eekHub;
+   E.ExePath:=ExpandFileName(ParamStr(0));E.UciId:='Viewport '+IntToStr(I);E.HubId:=E.UciId;Engines.Add(E);
+  end;
+  SaveExternalEngines(EnginesJsonFileName,Engines);D:=TTournamentDialog.Create(P.Main,V);
+  D.Font.Size:=FontSize;D.Width:=1100;D.Height:=900;D.Show;Pump;
+  Timer:=nil;Play:=nil;
+  for I:=0 to D.ComponentCount-1 do begin
+   if D.Components[I] is TRadioGroup then TRadioGroup(D.Components[I]).ItemIndex:=Pairing;
+   if D.Components[I] is TTimer then Timer:=TTimer(D.Components[I]);
+   if (D.Components[I] is TButton) and (TButton(D.Components[I]).Caption='Play') then Play:=TButton(D.Components[I]);
+  end;
+  Check((Timer<>nil) and (Play<>nil),'Tournament Play/timer controls exist');
+  TEdit(D.FindComponent('TournamentConcurrentGames')).Text:='2';
+  D.OnStartGame:=@P.Start;TButton(D.FindComponent('CreatePairing')).Click;
+  D.SaveTournamentToFile(FileName);G:=TStringGrid(D.FindComponent('TournamentPairings'));Last:=G.RowCount-1;
+  Check(Last>=28,'Round-robin schedule has enough rows to scroll');
+  G.Row:=1;G.TopRow:=1;Top:=G.TopRow;
+  if FontSize=16 then begin
+   if Pairing=0 then G.TopRow:=Last
+   else Scroll(G,False,SB_THUMBTRACK,G.DefaultRowHeight div 2);
+  end;
+  GuiTestConfirmationResult:=mrYes;
+  try Play.Click;finally GuiTestConfirmationResult:=0;end;
+  Timer.Enabled:=False;
+  Check((P.Games.Count=1) and (G.Row=1) and (G.TopRow=Top),'Play keeps the first row visible');
+  Check(G.CellRect(G.Col,1).Top>=G.CellRect(G.Col,0).Bottom,'Play fully reveals a hidden/partly clipped selected first row');
+  Sleep(1100);Timer.OnTimer(Timer);Timer.Enabled:=False;
+  Check((P.Games.Count=2) and (G.Row=2),'Second concurrent game is selected');
+  Check(G.TopRow=Top,'Selecting a visible round-robin row must not scroll row one away');
+  Check(G.IsCellVisible(G.Col,1),'First row remains visible after starting row two');
+  // Exercise following a new start that really is outside the viewport.
+  for I:=3 to Last-1 do G.Cells[5,I]:='Skipped fixture';
+  Game:=TRunningGame(P.Games[0]);
+  C:=Game.GameTreeActor.CreateSetHeaderCommand(GameTreeHeaderInput('complete','Viewport',
+   'White','Black',V.ResultText(goWhiteWins),V.DefaultStartingFEN,False,DefaultTimeControl,gosGameOver));
+  try Game.GameTreeActor.ExecuteCommand(C);Check(C.Accepted,'Fixture completion accepted');finally C.Free;end;
+  Game.MarkFinished;D.GameStopped(Game);Timer.Enabled:=False;
+  Sleep(1100);Timer.OnTimer(Timer);Timer.Enabled:=False;
+  Check((P.Games.Count=3) and (G.Row=Last),'Offscreen pending game still starts and is selected');
+  Check(G.IsCellVisible(G.Col,Last) and (G.TopRow>Top),'Offscreen started row is brought into view');
+  // Scrolling while no further start is possible must stay under user control.
+  G.TopRow:=1;Timer.OnTimer(Timer);Timer.Enabled:=False;
+  Check(G.TopRow=1,'Idle scheduling tick preserves a manually scrolled viewport');
+  WriteLn('PASS: tournament viewport ',V.Name,' pairing=',Pairing,' font=',FontSize);
+ finally
+  D.Free;P.Free;Engines.Free;
+  if Had then Saved.SaveToFile(EnginesJsonFileName) else DeleteFile(EnginesJsonFileName);Saved.Free;
+  if FindFirst(Directory+'/*',faAnyFile,Search)=0 then begin
+   repeat if (Search.Name<>'.') and (Search.Name<>'..') then DeleteFile(Directory+'/'+Search.Name);until FindNext(Search)<>0;
+   FindClose(Search);end;RemoveDir(Directory);
+ end;
+end;
 procedure TestForm(F:TForm);
 var I,Found:Integer;
 begin
@@ -112,7 +198,7 @@ begin
   Check(Found>0,F.ClassName+': existing grid found');
  finally F.Free;end;
 end;
-var F:TEngineEditForm;V:TGameVariant;J:Integer;
+var F:TEngineEditForm;V:TGameVariant;J,Pairing,Size:Integer;
 begin
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  Errors:=TErrors.Create;Application.OnException:=@Errors.Report;
@@ -126,6 +212,7 @@ begin
    TestForm(TDatabaseForm.Create(nil,V));
    TestForm(TPdnOpenDialog.Create(nil));
    TestForm(TMainForm.Create(nil));
+   for Pairing:=0 to 1 do for Size:=0 to 1 do TournamentViewport(V,Pairing,10+6*Size);
   end;
   Check(GridsChecked=16,'All eight application grids checked for both games');
  finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;Application.OnException:=nil;Errors.Free;end;

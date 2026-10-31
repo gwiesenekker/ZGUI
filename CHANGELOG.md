@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Keep visible tournament rows in view when starting games — 2026-10-31
+
+Commit: pending.
+
+- Stop placing every newly started game at the top of the tournament grid.
+  Keep the current viewport when its selected row is already visible; let native
+  row selection reveal an offscreen start. Also reveal an already-selected row
+  if manual scrolling has hidden or partly clipped it.
+- Apply the same view-only behavior to chess and draughts; scheduling, results,
+  engines, clocks, storage and the dialog layout are unchanged.
+- User request on 2026-10-31: “QA: when you create a tournament using round-robin
+  pairing and click play, the first row scrolls out of view?” Scope: tournament
+  viewport presentation under the earlier GUI-only authorisation without approval.
+- Reproduce the old row-two jump and extend the existing scroll suite with actual
+  round-robin Create pairing/Play/timer flows, fake games and no engine processes.
+  Cover single/double round-robin, both games, two fonts, hidden/clipped selections,
+  offscreen starts and manual scrolling between starts (419 checks overall).
+  Application compilation, all eighteen GUI suites (including 9,148 layout
+  checks) and both tournament preservation suites pass on an isolated snapshot
+  excluding unfinished feature flags. Native Windows interaction remains untested.
+
 ### Audit the remaining tooltip controls — 2026-10-31
 
 Commit: `0baedbf`.
