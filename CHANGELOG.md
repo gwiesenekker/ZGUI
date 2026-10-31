@@ -4,6 +4,24 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Scroll engine parameters immediately with the mouse wheel — 2026-10-31
+
+Commit: pending.
+
+- Set the existing parameter grid's native MouseWheelOption to mwGrid. Previously
+  wheel events moved the selected row until it reached the viewport edge, giving
+  the appearance of a delay. The first event now scrolls the viewport and leaves
+  the selected parameter/value unchanged, for both chess and draughts.
+- User authorisation on 2026-10-31: “Please fix!” following the reproduced wheel
+  behaviour and explanation of the shared-GUI review gate. Scope: this one-line
+  parameter-grid scrolling fix; Claude can review the resulting commit afterwards.
+- Add a regression for the first downward/upward wheel event, unchanged selection,
+  value and measured column width, and top/bottom boundaries in both games.
+  The check fails on the baseline and passes with the fix (18 checks). Application
+  compilation and all fifteen chess/draughts GUI suites pass on an independent
+  snapshot excluding unfinished feature flags. Native Windows interaction remains
+  untested.
+
 ### Start the DXP launch-test listener before its client — 2026-10-30
 
 Commit: `961ae95`.

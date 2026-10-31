@@ -100,3 +100,8 @@ echo "==> dxp_editor_launch_check (GTK2, listener before client process)"
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/dxp-launch" \
   "$ROOT_DIR/tests/dxp_editor_launch_check.lpi" > "$OUT_DIR/dxp-launch-build.log" 2>&1
 timeout 30s "$OUT_DIR/dxp-launch/dxp_editor_launch_check"
+
+echo "==> engine_parameter_scroll_check (GTK2, immediate wheel scrolling for both games)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/parameter-scroll" \
+  "$ROOT_DIR/tests/engine_parameter_scroll_check.lpi" > "$OUT_DIR/parameter-scroll-build.log" 2>&1
+timeout 15s "$OUT_DIR/parameter-scroll/engine_parameter_scroll_check"
