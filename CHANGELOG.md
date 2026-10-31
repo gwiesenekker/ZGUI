@@ -4,6 +4,23 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Propose specific tournament termination reasons — 2026-10-31
+
+Commit: pending.
+
+- Trace generic “Game finished” / “Draw” rows: rule and clock causes already reach
+  the orchestrator log, but only engine-supplied reasons survive through snapshots.
+- Propose forwarding the existing game-end reason through the existing snapshot
+  and running-game path, retaining result policies, DXP metadata, manual/error
+  precedence and existing row storage. Include source engine name/colour and raw
+  protocol reason code alongside its interpretation, as additionally requested.
+  Cover both chess and draughts. Note that DXP GAMEREQ's move count is a whole-game
+  cap, unlike the GUI's recurring clock period; changing that mapping is separate.
+- Document scope and verification in
+  `chatgpt/TOURNAMENT_GAME_END_REASON_PROPOSAL.md`. No production source changes;
+  shared metadata requires Claude review or a named user waiver under AGENTS.md.
+
+
 ### Reveal new tournament tabs after assembly; preserve normal window size — 2026-10-31
 
 Commit: `fdcd5a6`.
