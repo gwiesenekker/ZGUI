@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Remove the configurable Hub initialization script — 2026-10-31
 
-Commit: pending.
+Commit: `2b6afa2`.
 
 - Remove the Hub initialization field and retire `gui-hub-init`. Both the editor
   launch test and the Hub adapter now send the mandatory `init` command directly
