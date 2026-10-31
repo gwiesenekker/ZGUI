@@ -31,6 +31,11 @@ begin
    H:=MeasureGuiText(TLabel(Child).Caption,Child.Font).cy;
    Check((W<=Child.Width+2) and (H<=Child.Height+2),Path+' text clipped '+TLabel(Child).Caption+' width='+IntToStr(Child.Width)+' required='+IntToStr(W)+' min='+IntToStr(Child.Constraints.MinWidth)+' max='+IntToStr(Child.Constraints.MaxWidth));
   end;
+  if Child.Name='TournamentStartingFEN' then begin
+   W:=MeasureGuiText(TEdit(Child).Text,Child.Font).cx+MeasureGuiText('MM',Child.Font).cx;
+   Check(Child.Width>=W,Path+' complete starting FEN plus margin');
+   Check(Child.Parent.Width>=Root.ClientWidth-32,Path+' full-width settings rows');
+  end;
   if Child is TWinControl then Inspect(TWinControl(Child),Root);
  end;
 end;
@@ -41,6 +46,13 @@ begin
   if F is TPreferencesForm then TPreferencesForm(F).StartEdit(DefaultGuiPreferences);
   WriteLn('Testing ',F.ClassName);Flush(Output);
   F.Show;for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
+  if F is TTournamentDialog then begin
+   Inspect(F,F);
+   if ParamStr(2)='--images' then begin
+    Img:=F.GetFormImage;Png:=TPortableNetworkGraphic.Create;
+    try Png.Assign(Img);Png.SaveToFile('/tmp/tournament-layout-initial.png');finally Png.Free;Img.Free;end;
+   end;
+  end;
   for Size:=0 to 2 do begin
    if Size=1 then F.Font.Size:=16 else F.Font.Size:=10;
    F.Width:=Max(F.Constraints.MinWidth,1000);F.Height:=Max(F.Constraints.MinHeight,800);
@@ -67,6 +79,12 @@ begin
     Img:=F.GetFormImage;Png:=TPortableNetworkGraphic.Create;
     try Png.Assign(Img);Png.SaveToFile('/tmp/layout-'+F.ClassName+'-'+IntToStr(Size)+'.png');finally Png.Free;Img.Free;end;
    end;
+  end;
+  if F is TTournamentDialog then begin
+   TEdit(F.FindComponent('TournamentStartingFEN')).Text:=
+     TEdit(F.FindComponent('TournamentStartingFEN')).Text+' 12345678901234567890';
+   for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
+   Inspect(F,F);
   end;
   F.AutoAdjustLayout(lapAutoAdjustForDPI,96,144,F.Width,Round(F.Width*1.5));
   for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;Inspect(F,F);

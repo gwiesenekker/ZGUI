@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Size the tournament setup fields from their content — 2026-10-31
+
+Commit: pending.
+
+- Give the existing tournament name and starting FEN full-width rows. Measure the
+  FEN using its actual font, a representative chess FEN and a margin; update its
+  minimum width when the text, font or DPI changes. Both chess and draughts benefit.
+- Keep clock settings in a compact aligned label/edit group, with pairing and
+  action groups beside it when they fit and wrapping below on narrower windows.
+  Preserve existing controls, tournament logic, event handling and storage.
+- User authorisation on 2026-10-31: “QA: the starting field FEN width is too small
+  in the Tournament setup dialog box. Also, could you review the layout of that
+  box while you are at it?” Scope: tournament GUI geometry, continuing the
+  previously authorised automatic-sizing work without prior approval.
+- Extend the existing GUI layout checks with complete FEN/margin visibility,
+  full-width rows and text changes across fonts, window sizes and DPI, for both
+  games. Application compilation, all seventeen GUI suites (9,148 layout checks),
+  and the chess/draughts tournament preservation suites pass on an isolated source
+  snapshot excluding unfinished feature flags. Initial layout inspected visually;
+  native Windows interaction remains untested.
+
 ### Remove the configurable Hub initialization script — 2026-10-31
 
 Commit: `2b6afa2`.

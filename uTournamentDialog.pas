@@ -29,6 +29,7 @@ type
     FOnContextRequested:TTournamentContextEvent;
     FGameCombo:TComboBox;
     procedure GameContextChanged(Sender:TObject);
+    procedure StartingFENChanged(Sender:TObject);
   private
     FVariant:TGameVariant;
     FProfile:TGameGuiProfile;
@@ -126,6 +127,7 @@ type
   protected
     function CaptureGamePdn(AGame: TObject): string; virtual;
   public
+    procedure RefreshLayout; override;
     procedure LoadTournamentFromFile(const AFileName: string);
     procedure SaveTournamentToFile(const AFileName: string);
     procedure SetSelectedResult(const AResultText: string);
@@ -244,8 +246,7 @@ var
   Id: TGUID;
   GameIndex:Integer;
   NameLabel,FenLabel,MovesLabel,MinutesLabel,IncrementLabel,ConcurrentLabel:TLabel;
-  SettingsColumn,ActionsColumn:TPanel;ClockRow:TFlowPanel;
-  ClockControls:array[0..3] of TControl;
+  SettingsColumn,ActionsColumn,ClockRow:TPanel;
 begin
   inherited Create(AOwner);
   if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
@@ -285,7 +286,7 @@ begin
   FStartingFENEdit := TEdit.Create(Self);
   FStartingFENEdit.Name := 'TournamentStartingFEN';
   FStartingFENEdit.Text := FVariant.DefaultStartingFEN;
-  FStartingFENEdit.OnChange := @InvalidateTournamentResults;
+  FStartingFENEdit.OnChange := @StartingFENChanged;
   AddLabelledEdit(ButtonPanel, 'Starting FEN', FStartingFENEdit, TopPos);
 
   FMovesEdit := TEdit.Create(Self);
@@ -530,22 +531,49 @@ begin
   FTimer.OnTimer := @TimerTick;
   FAcceptedTournamentSignature := TournamentSignature;
   NameLabel:=TLabel(ButtonPanel.Controls[0]);FenLabel:=TLabel(ButtonPanel.Controls[2]);
-  SettingsColumn:=LayoutStack(ButtonPanel);
-  with LayoutFields(SettingsColumn,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]) do Top:=0;
-  ClockControls[0]:=LayoutFields(ButtonPanel,[MovesLabel,FMovesEdit]);
-  ClockControls[1]:=LayoutFields(ButtonPanel,[MinutesLabel,FMinutesEdit]);
-  ClockControls[2]:=LayoutFields(ButtonPanel,[IncrementLabel,FIncrementEdit]);
-  ClockControls[3]:=FIncrementModeCombo;
-  ClockRow:=LayoutFlow(SettingsColumn,ClockControls);ClockRow.Top:=1;
+  SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]);
+  SettingsColumn.Top:=0;
+  ClockRow:=LayoutStack(ButtonPanel);
+  with LayoutFields(ClockRow,[MovesLabel,FMovesEdit,MinutesLabel,FMinutesEdit,
+    IncrementLabel,FIncrementEdit]) do Top:=0;
+  with LayoutRow(ClockRow,[FIncrementModeCombo],0) do Top:=1;
   ActionsColumn:=LayoutStack(ButtonPanel);
   with LayoutRow(ActionsColumn,[CreateButton,ClearButton]) do Top:=0;
   with LayoutRow(ActionsColumn,[FStartStopButton,SaveButton,LoadButton]) do Top:=1;
   with LayoutFields(ActionsColumn,[ConcurrentLabel,FConcurrentGamesEdit]) do Top:=2;
   if FGameCombo<>nil then with LayoutRow(ActionsColumn,[FGameCombo],0) do Top:=3;
   FRoundRobinGroup.AutoSize:=True;
-  LayoutFlow(ButtonPanel,[SettingsColumn,FRoundRobinGroup,ActionsColumn]);ButtonPanel.AutoSize:=True;
+  with LayoutFlow(ButtonPanel,[ClockRow,FRoundRobinGroup,ActionsColumn]) do Top:=1;
+  ButtonPanel.AutoSize:=True;
   UpdateButtons;
   EnableAutoLayout;
+end;
+
+procedure TTournamentDialog.StartingFENChanged(Sender:TObject);
+begin
+  InvalidateTournamentResults(Sender);
+  InvalidateLayout;
+end;
+
+procedure TTournamentDialog.RefreshLayout;
+const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
+var FieldWidth,LabelWidth,I:Integer;Fields:TWinControl;
+begin
+  inherited RefreshLayout;
+  if FStartingFENEdit=nil then Exit;
+  FieldWidth:=MeasureGuiText(FStartingFENEdit.Text,FStartingFENEdit.Font).cx;
+  if GameVariantId(FVariant)='chess' then
+    FieldWidth:=Max(FieldWidth,MeasureGuiText(ChessFenSample,FStartingFENEdit.Font).cx);
+  Inc(FieldWidth,MeasureGuiText('MM',FStartingFENEdit.Font).cx);
+  FStartingFENEdit.Constraints.MinWidth:=FieldWidth;
+  Fields:=FStartingFENEdit.Parent;
+  LabelWidth:=0;
+  for I:=0 to Fields.ControlCount-1 do
+    if Fields.Controls[I] is TLabel then
+      LabelWidth:=Max(LabelWidth,MeasureGuiText(TLabel(Fields.Controls[I]).Caption,Fields.Controls[I].Font).cx);
+  Fields.Constraints.MinWidth:=Max(Fields.Constraints.MinWidth,
+    LabelWidth+FieldWidth+Fields.ChildSizing.HorizontalSpacing);
+  RefreshMinimum;
 end;
 
 procedure TTournamentDialog.BeginShutdown;
