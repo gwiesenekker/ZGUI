@@ -90,6 +90,17 @@ begin
     try Png.Assign(Img);Png.SaveToFile('/tmp/layout-'+F.ClassName+'-'+IntToStr(Size)+'.png');finally Png.Free;Img.Free;end;
    end;
   end;
+  if F is TMainForm then begin
+   F.Font.Size:=10;F.WindowState:=wsNormal;
+   // Simulated laptop work areas; do not change the user's desktop resolution.
+   for I:=0 to 1 do begin
+    if I=0 then F.SetBounds(0,0,1366,700) else F.SetBounds(0,0,1280,740);
+    Application.ProcessMessages;TMainForm(F).RefreshLayout;Application.ProcessMessages;
+    Check(F.Height<=700+40*I,'U26 main window fits laptop work-area height');
+    Check(F.Width<=1366-86*I,'U26 main window fits laptop work-area width');
+    Inspect(F,F);
+   end;
+  end;
   if F is TTournamentDialog then begin
    TEdit(F.FindComponent('TournamentStartingFEN')).Text:=
      TEdit(F.FindComponent('TournamentStartingFEN')).Text+' 12345678901234567890';

@@ -67,6 +67,9 @@ type
     FActiveContext:TGameUiContext;
     FFeatureBindings:array of TFeatureBinding;
     FSwitchingContext:Boolean;
+    FInitialSizeApplied:Boolean;
+    FResizingPanes:Boolean;
+    procedure ResizeSplitPanes(NewHeight:Integer);
     procedure InitializeGameContexts;
     procedure CaptureGameContext;
     procedure ActivateGameContext(Variant:TGameVariant);
@@ -518,6 +521,7 @@ type
     procedure TournamentClick(Sender: TObject);
   protected
     procedure Notification(AComponent:TComponent;Operation:TOperation); override;
+    procedure ChangeBounds(ALeft,ATop,AWidth,AHeight:Integer;KeepBase:Boolean);override;
   public
     constructor Create(AOwner: TComponent); override;
     procedure RefreshLayout; override;
@@ -799,18 +803,18 @@ begin
   LEnginesButton.OnClick := @EnginesClick;
   ApplyFeature(LEnginesButton, gfEngines);
 
-  LBottomPanel := TPanel.Create(Self);
+  LBottomPanel := TGuiSplitPanel.Create(Self);
   LBottomPanel.Parent := Self;
   LBottomPanel.Align := alBottom;
   LBottomPanel.Height := 366;
-  LBottomPanel.Constraints.MinHeight := 260;
+  LBottomPanel.Constraints.MinHeight := 160;
   LBottomPanel.BevelOuter := bvNone;
   LBottomPanel.Color := clWindow;
   LBottomPanel.BorderSpacing.Left := 8;
   LBottomPanel.BorderSpacing.Right := 8;
   LBottomPanel.BorderSpacing.Bottom := 8;
 
-  LAnalyzerPanel := TPanel.Create(Self);
+  LAnalyzerPanel := TGuiSplitPanel.Create(Self);
   LAnalyzerPanel.Parent := LBottomPanel;
   LAnalyzerPanel.Align := alBottom;
   LAnalyzerPanel.Height := 112;
@@ -1103,7 +1107,7 @@ begin
   LPvSplitter.Height := 8;
   LPvSplitter.ResizeAnchor := akBottom;
 
-  LPvPanel := TPanel.Create(Self);
+  LPvPanel := TGuiSplitPanel.Create(Self);
   LPvPanel.Parent := LSidePanel;
   LPvPanel.Align := alBottom;
   LPvPanel.Height := 130;
@@ -1370,12 +1374,54 @@ end;
 procedure TMainForm.FenTextChanged(Sender:TObject);
 begin InvalidateLayout;end;
 
+procedure TMainForm.ChangeBounds(ALeft,ATop,AWidth,AHeight:Integer;KeepBase:Boolean);
+begin
+  if not FResizingPanes then begin
+    FResizingPanes:=True;
+    try ResizeSplitPanes(AHeight);finally FResizingPanes:=False;end;
+  end;
+  inherited ChangeBounds(ALeft,ATop,AWidth,AHeight,KeepBase);
+end;
+
+procedure TMainForm.ResizeSplitPanes(NewHeight:Integer);
+var I,WorkHeight,Edges,Available,SeparatorHeight:Integer;Side,Bottom,Analyzer:TWinControl;C:TControl;
+begin
+  if FClosing or (FGameMoveMemo=nil) or (FGameLogMemo=nil) or (FAnalyzerMemo=nil) then Exit;
+  Side:=FGameMoveMemo.Parent;Bottom:=FGameLogMemo.Parent;Analyzer:=FAnalyzerMemo.Parent.Parent;
+  WorkHeight:=FGameMoveMemo.Constraints.MinHeight+Side.BorderSpacing.Top+
+    Side.BorderSpacing.Bottom+2*Side.BorderSpacing.Around;
+  for I:=0 to Side.ControlCount-1 do begin
+    C:=Side.Controls[I];
+    if C.Align in [alTop,alBottom] then begin
+      if C is TGuiSplitPanel then Inc(WorkHeight,C.Constraints.MinHeight)
+      else Inc(WorkHeight,C.Height);
+      Inc(WorkHeight,C.BorderSpacing.Top+C.BorderSpacing.Bottom+2*C.BorderSpacing.Around);
+    end;
+  end;
+  Edges:=Height-ClientHeight;
+  for I:=0 to ControlCount-1 do begin
+    C:=Controls[I];
+    if (C<>Bottom) and (C.Align in [alTop,alBottom]) then
+      Inc(Edges,C.Height+C.BorderSpacing.Top+C.BorderSpacing.Bottom+2*C.BorderSpacing.Around);
+  end;
+  Available:=NewHeight-Edges-WorkHeight-Bottom.BorderSpacing.Bottom;
+  // Shrink preferred splitter panes before native window minimum negotiation.
+  Bottom.Height:=Max(Bottom.Constraints.MinHeight,Min(Bottom.Height,Available));
+  SeparatorHeight:=0;
+  for I:=0 to Bottom.ControlCount-1 do
+    if Bottom.Controls[I] is TSplitter then Inc(SeparatorHeight,Bottom.Controls[I].Height);
+  Analyzer.Height:=Max(Analyzer.Constraints.MinHeight,
+    Min(Analyzer.Height,Bottom.Height-FGameLogMemo.Constraints.MinHeight-SeparatorHeight));
+end;
+
 procedure TMainForm.RefreshLayout;
 const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
-var I,FieldWidth,LabelWidth:Integer;Row,Side:TWinControl;
+var I,FieldWidth,LabelWidth,Preferred,Delta:Integer;Row,Side:TWinControl;
+    Area:TRect;Bottom:TControl;
 begin
   inherited RefreshLayout;
   if (FFenEdit=nil) or (FGameMoveMemo=nil) then Exit;
+  UpdateAnalyzerTextSizes(nil);
   FieldWidth:=MeasureGuiText(FFenEdit.Text,FFenEdit.Font).cx;
   if GameVariantId(CurrentVariant)='chess' then
     FieldWidth:=Max(FieldWidth,MeasureGuiText(ChessFenSample,FFenEdit.Font).cx);
@@ -1388,9 +1434,20 @@ begin
   Side:=Row.Parent.Parent;
   Side.Constraints.MinWidth:=Max(Side.Constraints.MinWidth,Row.Constraints.MinWidth);
   if Side.Width<Side.Constraints.MinWidth then Side.Width:=Side.Constraints.MinWidth;
-  FGameMoveMemo.Constraints.MinHeight:=10*Max(1,FGameMoveMemo.LineHeight)+
+  FGameMoveMemo.Constraints.MinHeight:=3*Max(1,FGameMoveMemo.LineHeight)+
     2*GetSystemMetrics(SM_CYEDGE)+GetSystemMetrics(SM_CYHSCROLL);
   RefreshMinimum;
+  if Showing and not FInitialSizeApplied then begin
+    FInitialSizeApplied:=True;
+    Area:=Monitor.WorkareaRect;
+    Height:=Min(Height,Area.Bottom-Area.Top);
+    Preferred:=10*Max(1,FGameMoveMemo.LineHeight)+
+      2*GetSystemMetrics(SM_CYEDGE)+GetSystemMetrics(SM_CYHSCROLL);
+    Delta:=Preferred-FGameMoveMemo.Height;
+    Bottom:=FGameLogMemo.Parent;
+    if Delta>0 then Bottom.Height:=Max(Bottom.Constraints.MinHeight,Bottom.Height-Delta);
+    Top:=Max(Area.Top,Min(Top,Area.Bottom-Height));
+  end;
 end;
 
 destructor TMainForm.Destroy;

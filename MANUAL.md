@@ -54,6 +54,10 @@ When ZGUI starts, the main window shows:
 - buttons for **Engines...**, **New game...**, **Tournament...**, analysis time,
   and **Auto Play**.
 
+The splitters let you resize the notation and analysis areas. Ten notation lines
+are preferred when space permits; smaller windows can reduce the notation to
+three lines. The initial main-window height is limited to the screen's work area.
+
 Chess uses an 8×8 board and SAN game notation; its legal-moves list uses UCI
 coordinates. Draughts uses a 10×10 board and numbered-square notation. Click a
 piece and destination to play, or choose a legal move. Chess promotion opens the

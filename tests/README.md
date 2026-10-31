@@ -397,3 +397,16 @@ runner snapshots and tournament rows, saved/reloaded reasons, error/manual-resul
 precedence, new-game resets and unchanged chess/Hub fallbacks (114 checks). The
 real DXP peer suite separately exercises numeric GAMEEND reason translation and
 acknowledgements without changing official-result adjudication.
+
+
+`main_readability_gui_check` also covers U26: the main window must shrink to
+laptop work-area heights for both games, retain three notation lines when
+compressed, and show ten when space permits. `gui_layout_check` includes
+1366×768/1280×800 work-area cases and Inter/font/DPI round trips.
+
+The preliminary `tournament_embedding_check.lpi` is deliberately separate from
+production tab integration and the normal GUI sweep pending native Windows QA.
+It embeds two existing tournament dialogs with their main-form component owner,
+and exercises sizing, independent fields, focus, default/cancel roles, mnemonics
+and Tab traversal (160 GTK2 checks). Run with `--interactive` for the native
+Windows checklist in `chatgpt/TOURNAMENT_EMBEDDING_WINDOWS_CHECK.md`.

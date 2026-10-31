@@ -4,9 +4,29 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
-### Correct the Windows embedding spike's caption check — 2026-10-31
+### Fix U26: let the main window fit laptop screens — 2026-10-31
 
 Commit: pending.
+
+- Treat existing splitter panes' heights as preferences, preserving their
+  measured content minimums. Let notation shrink to three lines; prefer ten
+  when space allows. Budget the existing panes before native resizing and
+  limit the initial window height to the monitor work area.
+- Refresh annotator text measurements after font changes; measure native
+  edit/combo heights without carrying the previous larger minimum forward.
+  Keep the existing GUI arrangement and both games' functionality unchanged.
+- Extend existing layout/readability checks for 1366×768 and 1280×800 work
+  areas, normal-font shrinking, full FEN, three/ten notation lines and font
+  round trips. The old implementation fails the new laptop-height assertion.
+- Application compilation, full headless regression, all 18 GUI suites
+  (9,602 Inter-font layout checks; 37 readability checks), and both tournament
+  suites pass. Checked builds report no unfreed blocks. Native Windows
+  confirmation remains outstanding. Record review response and the separate
+  tournament-tab Windows prerequisite in `chatgpt/REVIEW_559F6AA_RESPONSE.md`.
+
+### Correct the Windows embedding spike's caption check — 2026-10-31
+
+Commit: `9d317c0`.
 
 - The user's native Windows/Lazarus 4.8 run stopped at the generic button
   caption assertion. A platform's preferred button width can include a

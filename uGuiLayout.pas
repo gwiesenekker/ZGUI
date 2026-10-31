@@ -7,6 +7,9 @@ interface
 uses Classes, Controls, ExtCtrls, Forms;
 
 type
+  // A splitter-sized pane has a preferred height separate from its minimum.
+  TGuiSplitPanel = class(TPanel);
+
   // Reuses LCL alignment/child sizing. Only content measurements are refreshed here.
   TGuiLayoutForm = class(TForm)
   private
@@ -174,7 +177,7 @@ begin
     end;
     if Child is TCheckBox then TCheckBox(Child).AutoSize:=True;
     if (Child is TEdit) or (Child is TComboBox) then begin
-      W:=0;H:=0;Child.GetPreferredSize(W,H);
+      W:=0;H:=0;Child.GetPreferredSize(W,H,True);
       Child.Constraints.MinHeight:=Max(H,TextHeight+Gap(Child));
       if Child.Parent is TMeasuredPanel then Child.Constraints.MinWidth:=MeasureGuiText('MMMMMMMM',Child.Font).cx;
       if Child is TComboBox then begin
@@ -283,7 +286,7 @@ begin
     H:=Child.Constraints.MinHeight;
     if Child is TWinControl then H:=MinimumHeight(TWinControl(Child));
     if Child.Align in [alTop,alBottom] then begin
-      H:=Max(H,Child.Height);
+      if not (Child is TGuiSplitPanel) then H:=Max(H,Child.Height);
       Inc(Edge,H+Child.BorderSpacing.Top+Child.BorderSpacing.Bottom+2*Child.BorderSpacing.Around);
     end
     else Middle:=Max(Middle,H+Child.BorderSpacing.Top+Child.BorderSpacing.Bottom+2*Child.BorderSpacing.Around);

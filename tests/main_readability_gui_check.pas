@@ -33,12 +33,14 @@ begin
    for Size:=0 to 1 do begin
     Main.Font.Size:=10+6*Size;Moves.Font.Size:=10+6*Size;Main.RefreshLayout;Pump;
     for Mode:=0 to 1 do begin
-     if Mode=0 then begin Main.Width:=Main.Constraints.MinWidth;Main.Height:=Main.Constraints.MinHeight;end
-     else begin Main.Width:=Max(1040,Main.Constraints.MinWidth);Main.Height:=Max(760,Main.Constraints.MinHeight);end;
+     if Mode=0 then begin Main.Width:=Main.Constraints.MinWidth;Main.Height:=650;end
+     else begin Main.Width:=Max(1040,Main.Constraints.MinWidth);Main.Height:=Max(1100,Main.Constraints.MinHeight);end;
      Pump;
      Required:=MeasureGuiText(Fen.Text,Fen.Font).cx+MeasureGuiText('MM',Fen.Font).cx;
      Check(Fen.Width>=Required,'Full FEN fits with a margin');
-     Check(Moves.LinesInWindow>=10,'Notation shows at least ten lines');
+     if Mode=1 then Check(Moves.LinesInWindow>=10,'Notation shows ten lines when space permits')
+     else Check(Moves.LinesInWindow>=3,'Notation retains a usable three-line minimum');
+     if (Mode=0) and (Size=0) then Check(Main.Height<=700,'U26 normal-font main window can shrink below laptop height');
      Check((Moves.Top>=0) and (Moves.Top+Moves.Height<=Moves.Parent.ClientHeight),'Notation fits its parent');
      Check((Pos('*',Moves.Lines.Text)>0) and (Moves.TopLine=1),'Standalone game result remains in notation');
     end;
