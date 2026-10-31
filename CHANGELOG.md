@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reveal new tournament tabs after assembly; preserve normal window size — 2026-10-31
+
+Commit: pending.
+
+- Address the user's Windows follow-up: redraw suppression alone still exposed
+  buildup when adding another tab. Keep its page hidden while native controls
+  and measured layout are prepared; select/reveal it only after alignment resumes.
+  Keep existing tabs and the deferred game-switch lifetime fix intact.
+- Fix the oversized/fullscreen opening regression from a8a23e4. Hidden page bounds
+  are provisional and must not count as window chrome or inflate a hidden host.
+  Use the notebook's actual client area for visible-page layout and sizing.
+- Extend the existing GUI test to preserve normal size before/after first Show
+  and when adding a tab, and to inspect the activation event: alignment must be
+  unlocked and all visible native child controls and measured bounds ready.
+  The previous build fails the new hidden-size assertion.
+- Application compilation, all 19 GUI suites and both tournament suites pass on
+  hidden displays. The focused suite passes 200 checks with zero unfreed blocks.
+  Both chess and draughts use this presentation fix; game, engine, clock, pairing and persistence code unchanged.
+  Native Windows visual confirmation remains outstanding.
+
+
 ### Present completed tournament tabs without visible buildup — 2026-10-31
 
 Commit: `a8a23e4`.

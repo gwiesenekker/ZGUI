@@ -152,3 +152,33 @@ results are in CHANGELOG.md. All GUI tests use the hidden-display launcher.
 Native Windows execution/cross-compilation is unavailable here (the Win64 FPC
 system units are absent), so the Windows repaint improvement remains for native
 visual QA. No timing result or speedup percentage is claimed.
+
+
+## QA follow-up: reveal order and fullscreen regression — 2026-10-31
+
+The user confirmed a8a23e4 did not remove visible buildup when **adding another
+tournament tab**, and reported the window now opening fullscreen. The earlier
+redraw change was insufficient; its new synchronous measurement could also treat
+an unlaid-out hidden page as window chrome, expanding the window minimum.
+
+The new normal-size assertion fails on the previous implementation. Do not
+measure a hidden host's minimum from provisional page bounds. For visible hosts,
+use the notebook's actual client area as page space and as the basis for chrome.
+
+Embed now keeps the target page hidden and explicitly creates native child
+handles. EndTabUpdate resumes alignment and measures that page before changing
+ActivePage. Only then is the finished page selected/revealed, while the existing
+scoped Windows redraw guard still brackets presentation. The existing dialog's
+Show/DPI handling is retained. There is no message pumping, sleep, arbitrary delay,
+new tab model or new game infrastructure.
+
+Extend the test with hidden and first-shown normal-size invariants and a new-tab
+activation observer. At activation, alignment must have resumed, the dialog must
+be complete, every logically visible native child must already have a handle,
+and measured bounds must fit. Also assert adding a tab preserves window size.
+The earlier test only checked that a hidden host stayed hidden and missed its
+inflated dimensions; this closes that coverage gap.
+
+All execution remains on hidden displays. Regression counts and final results
+are in CHANGELOG.md. Native Windows repaint confirmation remains outstanding;
+Linux timing/geometry checks do not constitute visual Windows verification.

@@ -27,9 +27,11 @@ type
     FTabUpdateDepth:Integer;
     FLayoutDirty:Boolean;
     FRedrawHandle:THandle;
+    FRevealTab:TTournamentTab;
     procedure BeginTabUpdate;
     procedure EndTabUpdate;
     procedure RefreshActiveLayout;
+    procedure MeasureTab(Tab:TTournamentTab);
   private
     FPlans:array of TTournamentClosePlan;
     FOnStartGame:TTournamentStartGameEvent;
@@ -136,11 +138,16 @@ end;
 procedure TTournamentHostForm.Embed(Tab:TTournamentTab;Dialog:TTournamentDialog);
 begin
   Tab.Dialog:=Dialog;Dialog.BorderStyle:=bsNone;Dialog.Align:=alClient;
-  Dialog.Parent:=Tab.Page;Dialog.Show;FPages.ActivePage:=Tab.Page;TitleChanged(Dialog);
+  // Keep the current page on screen while every native child is constructed.
+  // Selecting the new page here would expose it before final measurement.
+  Tab.Page.Visible:=False;
+  Dialog.Parent:=Tab.Page;Dialog.Show;Dialog.HandleNeeded;
+  FRevealTab:=Tab;TitleChanged(Dialog);
 end;
 procedure TTournamentHostForm.BeginTabUpdate;
 begin
   Inc(FTabUpdateDepth);if FTabUpdateDepth>1 then Exit;
+  FRevealTab:=nil;
   DisableAlign;FPages.DisableAlign;
   {$IFDEF MSWINDOWS}
   // WM_SETREDRAW changes native visibility. Only suspend an already visible
@@ -157,9 +164,16 @@ begin
   if FTabUpdateDepth>1 then begin Dec(FTabUpdateDepth);Exit;end;
   try
     try FPages.EnableAlign;finally EnableAlign;end;
-    // Finalize measured bounds before revealing the completed tab.
-    RefreshActiveLayout;
+    if FRevealTab<>nil then begin
+      // Layout and native handles must be ready before ActivePage makes the
+      // page visible. No message pumping or timer delay is needed.
+      MeasureTab(FRevealTab);
+      FPages.ActivePage:=FRevealTab.Page;
+      FRevealTab.Page.Visible:=True;
+      FLayoutDirty:=False;
+    end else RefreshActiveLayout;
   finally
+    FRevealTab:=nil;
     Dec(FTabUpdateDepth);
     {$IFDEF MSWINDOWS}
     if FRedrawHandle<>0 then begin
@@ -259,11 +273,30 @@ begin
   for I:=FTabs.Count-1 downto 0 do
     if TTournamentTab(FTabs[I]).Dialog=nil then RemoveTab(TTournamentTab(FTabs[I]));
   Tab:=ActiveTab;if (Tab=nil) or (Tab.Dialog=nil) then Exit;
+  MeasureTab(Tab);
+end;
+procedure TTournamentHostForm.MeasureTab(Tab:TTournamentTab);
+var ChromeWidth,ChromeHeight:Integer;
+begin
+  // Native page client bounds are not final until the host is shown.
+  // Never grow a hidden top-level window from those provisional bounds.
+  if not Visible then begin Tab.Dialog.RefreshLayout;Exit;end;
+  FPages.HandleNeeded;Tab.Page.HandleNeeded;
+  if (FPages.ClientWidth<=0) or (FPages.ClientHeight<=0) then Exit;
+  // An inactive/hidden page can still have zero bounds. The notebook's client
+  // area describes real page space; zero page bounds are not window chrome.
+  Tab.Page.BoundsRect:=FPages.ClientRect;
+  Tab.Dialog.SetBounds(0,0,FPages.ClientWidth,FPages.ClientHeight);
+  Tab.Dialog.HandleNeeded;
   Tab.Dialog.RefreshLayout;
   DefaultControl:=nil;ActiveDefaultControl:=nil;CancelControl:=nil;
-  Constraints.MinWidth:=Tab.Dialog.Constraints.MinWidth+Width-Tab.Page.ClientWidth;
-  Constraints.MinHeight:=Tab.Dialog.Constraints.MinHeight+Height-Tab.Page.ClientHeight;
+  ChromeWidth:=Max(0,Width-FPages.ClientWidth);
+  ChromeHeight:=Max(0,Height-FPages.ClientHeight);
+  Constraints.MinWidth:=Tab.Dialog.Constraints.MinWidth+ChromeWidth;
+  Constraints.MinHeight:=Tab.Dialog.Constraints.MinHeight+ChromeHeight;
   Width:=Max(Width,Constraints.MinWidth);Height:=Max(Height,Constraints.MinHeight);
+  Tab.Page.BoundsRect:=FPages.ClientRect;
+  Tab.Dialog.SetBounds(0,0,FPages.ClientWidth,FPages.ClientHeight);
   FLayoutDirty:=False;
 end;
 procedure TTournamentHostForm.FontChanged(Sender:TObject);

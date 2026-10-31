@@ -75,6 +75,34 @@ public
  Answers:array of Integer;Index:Integer;
  procedure Show(Sender:TObject);
 end;
+type TRevealObserver=class
+public
+ Host:TTournamentHostForm;
+ Original:TNotifyEvent;
+ Changes:Integer;
+ procedure Changed(Sender:TObject);
+end;
+procedure TRevealObserver.Changed(Sender:TObject);
+var D:TTournamentDialog;
+ procedure NativeReady(C:TWinControl);
+ var I:Integer;
+ begin
+  Check(C.HandleAllocated,'A revealed native control has already been constructed');
+  for I:=0 to C.ControlCount-1 do
+   if C.Controls[I].Visible and (C.Controls[I] is TWinControl) then NativeReady(TWinControl(C.Controls[I]));
+ end;
+begin
+ Inc(Changes);
+ if Assigned(Original) then Original(Sender);
+ Check(TControlAccess(TControl(Host)).AutoSizingLockCount=0,
+  'The new tab is selected only after alignment is resumed');
+ Check(Host.Pages.ActivePage.ControlCount=1,'The new page contains its complete dialog');
+ D:=TTournamentDialog(Host.Pages.ActivePage.Controls[0]);
+ NativeReady(D);
+ Check((D.Parent.ClientWidth>=D.Constraints.MinWidth) and
+  (D.Parent.ClientHeight>=D.Constraints.MinHeight),
+  'The new tab is selected only after its measured bounds are ready');
+end;
 type TStarts=class
 public
  Original:TTournamentStartGameEvent;
@@ -110,17 +138,40 @@ begin
  if H.Visible then Check(IsWindowVisible(H.Pages.Handle),
   'Native tab drawing is restored after assembly');
 end;
+procedure CheckRevealOrder;
+var Observer:TRevealObserver;D:TTournamentDialog;OldOptions:TCTabControlOptions;
+begin
+ Observer:=TRevealObserver.Create;Observer.Host:=Host;
+ Observer.Original:=Host.Pages.OnChange;OldOptions:=Host.Pages.Options;
+ Host.Pages.Options:=OldOptions+[nboDoChangeOnSetIndex];
+ Host.Pages.OnChange:=@Observer.Changed;
+ try
+  D:=Host.NewTournament(Draughts);
+  Check(Observer.Changes=1,'Adding a tab makes one transition to the completed page');
+ finally
+  Host.Pages.OnChange:=Observer.Original;Host.Pages.Options:=OldOptions;Observer.Free;
+ end;
+ Check(Host.CloseTournament(D),'The completed test tab closes normally');
+end;
 procedure CheckHiddenHost;
-var H:TTournamentHostForm;D:TTournamentDialog;
+var H:TTournamentHostForm;D:TTournamentDialog;W,Ht:Integer;
 begin
  H:=TTournamentHostForm.Create(Main);
+ W:=H.Width;Ht:=H.Height;
  try
   D:=H.NewTournament(Chess);CheckTabReady(H,D);
+  Check((H.Width=W) and (H.Height=Ht),Format('Hidden initial layout preserves normal size: %dx%d became %dx%d',[W,Ht,H.Width,H.Height]));
   Check(not H.Visible and not IsWindowVisible(H.Handle),
    'Assembling a hidden host does not accidentally show it');
   D:=H.NewTournament(Draughts);CheckTabReady(H,D);
+  Check((H.Width=W) and (H.Height=Ht),'Adding a hidden tab does not inflate window chrome');
   Check(not H.Visible and not IsWindowVisible(H.Handle),
    'Another hidden tab does not reveal the host');
+  H.Show;Pump;
+  Check((H.WindowState=wsNormal) and (H.Width=W) and (H.Height=Ht),
+   Format('Opening the host keeps normal size: %dx%d became %dx%d',[W,Ht,H.Width,H.Height]));
+  H.NewTournament(Chess);Pump;
+  Check((H.Width=W) and (H.Height=Ht),'Adding a tab preserves the current window size');
  finally H.Free;end;
 end;
 procedure ChangeGame(D:TTournamentDialog;Variant:TGameVariant);
@@ -253,7 +304,7 @@ begin
  try
   RegisterEngines(False);Main:=TMainForm.Create(nil);Main.Show;Pump;
   Button(Main,'Tournament...').Click;Host:=Main.TournamentHost;Check(Host.Count=1,'First open creates one tab');
-  CheckHiddenHost;
+  CheckHiddenHost;CheckRevealOrder;
   Starts.Original:=Host.OnStartGame;
   D:=Host.Dialogs[0];CheckTabReady(Host,D);Check(Host.ShowForVariant(Chess)=D,'Reopen selects existing same-game tab');
   Page:=Host.Pages.ActivePage;Identity:=D.TournamentIdentity;
