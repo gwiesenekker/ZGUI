@@ -21,6 +21,7 @@ type
     FPosition: TGamePosition; // owned copy; nil before the game started
     FCurrentSide: TGameSide;
     FGameResult: string;
+    FEngineEndReason: string;
     FLastError: string;
     FLogLines: TStringList;
     FLogRevision: QWord;
@@ -58,6 +59,7 @@ type
     property Position: TGamePosition read FPosition;
     property CurrentSide: TGameSide read FCurrentSide;
     property GameResult: string read FGameResult;
+    property EngineEndReason: string read FEngineEndReason;
     property LastError: string read FLastError;
     property LogLines: TStringList read FLogLines;
     property LogRevision: QWord read FLogRevision;
@@ -250,6 +252,7 @@ begin
     AssignGamePosition(FPosition, ASource.FPosition);
   FCurrentSide := ASource.FCurrentSide;
   FGameResult := ASource.FGameResult;
+  FEngineEndReason := ASource.FEngineEndReason;
   FLastError := ASource.FLastError;
   if (FLogRevision <> ASource.FLogRevision) or
     (FLogLines.Count <> ASource.FLogLines.Count) then
@@ -288,6 +291,7 @@ begin
   FClockAnchorTick:=0;
   FState := gosStopped;
   FGameResult := '*';
+  FEngineEndReason := '';
   FLastError := AReason;
   if Trim(AReason) <> '' then
   begin
@@ -641,6 +645,7 @@ begin
   AssignGamePosition(Result.FPosition, FOrchestrator.Position);
   Result.FCurrentSide := FOrchestrator.CurrentSide;
   Result.FGameResult := FOrchestrator.GameResult;
+  Result.FEngineEndReason := FOrchestrator.EngineEndReason;
   Result.FLastError := FOrchestrator.LastError;
   FLogLock.Acquire;
   try

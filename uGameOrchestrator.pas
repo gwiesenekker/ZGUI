@@ -42,6 +42,7 @@ type
     FRules: TGameRules;
     FEngines: array[TGameSide] of TGameEngine;
     FGameResult: string;
+    FEngineEndReason: string;
     FLastError: string;
     FLog: TStringList;
     FLogTarget: TStrings;
@@ -100,6 +101,7 @@ type
     property CurrentSide: TGameSide read GetCurrentSide;
     property Engine[ASide: TGameSide]: TGameEngine read GetEngine write SetEngine;
     property GameResult: string read FGameResult;
+    property EngineEndReason: string read FEngineEndReason;
     property LastError: string read FLastError;
     property Log: TStringList read FLog;
     property LogTarget: TStrings read FLogTarget write FLogTarget;
@@ -166,6 +168,7 @@ begin
   FTimeControl := DefaultTimeControl;
   FState := gosWaiting;
   FGameResult := '*';
+  FEngineEndReason := '';
   FStartingFEN := FVariant.DefaultStartingFEN;
   ResetClocks;
   LogMessage('created; state=' + OrchestratorStateToString(FState));
@@ -296,6 +299,7 @@ begin
   FRules.Reset(FPosition);
   FLastError := '';
   FGameResult := '*';
+  FEngineEndReason := '';
   ResetClocks;
   ChangeState(gosRunning, 'new game');
   LogMessage('new game; fen=' + FStartingFEN +
@@ -584,7 +588,10 @@ begin
     LogMessage('move received; side=' + SideToString(LSide) + '; move=' + Result);
     if Result = '' then
     begin
-      if LEngine.GameResult <> '*' then
+      FEngineEndReason := Trim(LEngine.GameEndReason);
+      if FEngineEndReason <> '' then
+        FinishGame(LEngine.GameResult, FEngineEndReason + '; side=' + SideToString(LSide))
+      else if LEngine.GameResult <> '*' then
         FinishGame(LEngine.GameResult, 'engine ended game; side=' +
           SideToString(LSide))
       else

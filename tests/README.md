@@ -381,3 +381,9 @@ tracking and retained keyboard selection. Engine-list hover hints are checked
 for clipped/fitting Windows-style and Unicode paths, external locations, empty
 cells and headers (331 checks overall). It uses synthetic rows
 without starting engines, database imports or tournament games.
+
+`engine_end_reason_gui_check` covers the optional engine termination reason through
+runner snapshots and tournament rows, saved/reloaded reasons, error/manual-result
+precedence, new-game resets and unchanged chess/Hub fallbacks (114 checks). The
+real DXP peer suite separately exercises numeric GAMEEND reason translation and
+acknowledgements without changing official-result adjudication.

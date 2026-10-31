@@ -94,6 +94,7 @@ type
     function ListCaptionMatches(const ACaption: string): Boolean;
     function BlackNameText: string;
     function LastErrorText: string;
+    function EngineEndReasonText: string;
     function MainlineCount: Integer;
     function ResultText: string;
     function SetupTimeControl: TTimeControl;
@@ -373,6 +374,11 @@ begin
     Result := Trim(FBlackDisplayName);
   if Result = '' then
     Result := 'Black';
+end;
+
+function TRunningGame.EngineEndReasonText: string;
+begin
+  Result := Trim(FSnapshot.EngineEndReason);
 end;
 
 function TRunningGame.LastErrorText: string;

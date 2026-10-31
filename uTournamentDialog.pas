@@ -195,6 +195,8 @@ begin
   AGrid.Cells[TournamentColResult, ARow] := ResultText;
   if AGame.State = gosError then
     AGrid.Cells[TournamentColReason, ARow] := AGame.LastErrorText
+  else if AGame.EngineEndReasonText <> '' then
+    AGrid.Cells[TournamentColReason, ARow] := AGame.EngineEndReasonText
   else if ResultText = '*' then
     AGrid.Cells[TournamentColReason, ARow] := 'Unknown result'
   else if ParseTournamentResult(ResultText,AFormat)=trDraw then

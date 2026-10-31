@@ -186,9 +186,11 @@ A received DXP game-end reason means: `0` unspecified, `1` resignation,
 `2` draw claim, `3` win claim. Stop code `0` permits another game; `1` requests
 that the session end. Only resignation directly concedes a result. Other claims
 are checked by the shared game rules; a log entry with `result=*` means no final
-result was assigned by the DXP adapter. The tournament Reason column currently
-uses general result/error descriptions; it does not show the peer's reason as
-“Draw claimed” or “Win claimed”. The raw reason remains in the game log.
+result was assigned by the DXP adapter. The tournament Reason column preserves the
+engine's termination reason: **Draw claimed**, **Win claimed**, **Resigned**,
+or **Engine ended game**. Unknown codes retain their number. A draw or win claim
+may therefore have result `*` and a known reason; the reason is not acceptance
+of the claim. Actual game errors take precedence. The raw code remains in the log.
 
 ### 2.4 Launch arguments and configuration files
 

@@ -4,6 +4,32 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Preserve DXP termination reasons in tournament rows — 2026-10-31
+
+Commit: pending.
+
+- Carry a separate, lock-protected engine termination reason through the existing
+  engine interface, orchestrator, runner snapshot and running-game view. The DXP
+  adapter supplies the text; shared units remain independent of DXP codes.
+- Show **Draw claimed**, **Win claimed**, **Resigned** or **Engine ended game** in
+  the tournament Reason column; retain unknown DXP code numbers. Draw/win claims
+  keep result `*` under existing adjudication. Preserve actual error precedence,
+  manual overrides, snapshot shutdown behavior and saved tournament reason text.
+- No game-tree, scheduling, clock, official-result, DXP acknowledgement or storage
+  schema changes. Chess/UCI and Hub keep their existing fallback labels because
+  they publish no termination reason.
+- User authorisation on 2026-10-31: “Could you fix that?” Following the shared-code
+  proposal, the user explicitly waived prior review: “Implement this fix; waive
+  prior review”. Scope: the DXP termination-reason metadata path documented in
+  chatgpt/DXP_TERMINATION_REASON_PROPOSAL.md; Claude may review the final commit.
+- Extend real local DXP-peer checks for reason codes 0–3 and unknown codes, result
+  preservation and non-error endings. Add 114 end-to-end GUI checks for runner/
+  snapshot delivery, resets, save/reload, manual/error precedence and unchanged
+  chess/Hub fallback behavior. Update the manual to describe the separate reason.
+  Application compilation, local DXP socket checks, the full headless sweep,
+  both tournament suites and all eighteen GUI suites pass on an isolated snapshot
+  excluding unfinished feature flags.
+
 ### Refresh the built-in manual and show complete engine path hints — 2026-10-31
 
 Commit: `4553021`.

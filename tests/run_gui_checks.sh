@@ -115,3 +115,9 @@ echo "==> main_readability_gui_check (GTK2, full FEN and ten notation lines)"
 python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/main-readability" \
   "$ROOT_DIR/tests/main_readability_gui_check.lpi" > "$OUT_DIR/main-readability-build.log" 2>&1
 timeout 30s "$OUT_DIR/main-readability/main_readability_gui_check"
+
+
+echo "==> engine_end_reason_gui_check (GTK2, engine reason snapshots and tournament persistence)"
+python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/end-reason" \
+  "$ROOT_DIR/tests/engine_end_reason_gui_check.lpi" > "$OUT_DIR/end-reason-build.log" 2>&1
+timeout 45s "$OUT_DIR/end-reason/engine_end_reason_gui_check"

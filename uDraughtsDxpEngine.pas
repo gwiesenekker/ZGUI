@@ -97,6 +97,7 @@ type
       AIgnoreStopping: Boolean = False): Boolean;
     procedure SendPacket(const APacketName, APacketText: string);
     function TranslateGameEndResult(AReason: Char): string;
+    function TranslateGameEndReason(AReason: Char): string;
     function StartListening(ATimeoutMs: Integer): Boolean;
     procedure StopListening;
     function WaitForGameAccepted(ATimeoutMs: Integer): Boolean;
@@ -1017,6 +1018,16 @@ begin
     Result := MovesPlayed[MovesPlayed.Count - 1];
 end;
 
+function TDxpEngine.TranslateGameEndReason(AReason: Char): string;
+begin
+  case AReason of
+    '0':Result:='Engine ended game';
+    '1':Result:='Resigned';
+    '2':Result:='Draw claimed';
+    '3':Result:='Win claimed';
+  else Result:='Engine ended game (DXP reason '+AReason+')';end;
+end;
+
 function TDxpEngine.TranslateGameEndResult(AReason: Char): string;
 begin
   // GAMEEND reasons describe the peer's opinion. Only resignation concedes a
@@ -1175,7 +1186,7 @@ begin
             Reason := Packet[2];
           if Length(Packet) >= 3 then
             StopCode := Packet[3];
-          SetGameResult(TranslateGameEndResult(Reason));
+          SetGameResult(TranslateGameEndResult(Reason), TranslateGameEndReason(Reason));
           Log('DXP_GAMEEND received; reason=' + Reason + '; stop_code=' +
             StopCode + '; result=' + GameResult);
           try

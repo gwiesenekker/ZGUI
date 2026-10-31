@@ -39,6 +39,7 @@ type
     FMoveTimeLimitMs: Integer;
     FMoveTimedOut: Boolean;
     FGameResult: string;
+    FGameEndReason: string;
     FGameResultLock: TCriticalSection;
     FLastDepth: string;
     FLastError: string;
@@ -58,6 +59,7 @@ type
     FStopToken: TCancellationToken;
     function ExtractMessageValue(const AMessage, AName: string; out AValue: string): Boolean;
     function GetGameResult: string;
+    function GetGameEndReason: string;
     function GetLastDepth: string;
     function GetLastError: string;
     function GetLastScore: string;
@@ -80,7 +82,9 @@ type
     function DoStartThinking: string; virtual; abstract;
     procedure Log(const AMessage: string);
     procedure MarkMoveTimedOut;
-    procedure SetGameResult(const AResult: string);
+    // An engine termination reason is descriptive metadata, not adjudication.
+    // Existing result resets also clear the optional reason.
+    procedure SetGameResult(const AResult: string; const AReason: string = '');
     property State: TEngineState read GetCurrentState;
   public
     function StopRequested: Boolean;
@@ -124,6 +128,7 @@ type
     property EngineName: string read FEngineName write FEngineName;
     property CurrentState: TEngineState read GetCurrentState;
     property GameResult: string read GetGameResult;
+    property GameEndReason: string read GetGameEndReason;
     property LastDepth: string read GetLastDepth write SetLastDepth;
     property LastError: string read GetLastError;
     property LastScore: string read GetLastScore write SetLastScore;
@@ -358,7 +363,17 @@ begin
   end;
 end;
 
-procedure TGameEngine.SetGameResult(const AResult: string);
+function TGameEngine.GetGameEndReason: string;
+begin
+  FGameResultLock.Acquire;
+  try
+    Result := FGameEndReason;
+  finally
+    FGameResultLock.Release;
+  end;
+end;
+
+procedure TGameEngine.SetGameResult(const AResult: string; const AReason: string);
 var
   LResult: string;
 begin
@@ -369,6 +384,7 @@ begin
   FGameResultLock.Acquire;
   try
     FGameResult := LResult;
+    FGameEndReason := Trim(AReason);
   finally
     FGameResultLock.Release;
   end;

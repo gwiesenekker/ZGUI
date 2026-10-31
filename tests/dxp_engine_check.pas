@@ -189,7 +189,7 @@ begin
 end;
 
 procedure CheckGameEndClaim(Reason: Char; Side: TGameSide;
-  const ExpectedResult: string);
+  const ExpectedResult, ExpectedReason: string);
 var
   Definition: TExternalEngineDefinition;
   Engine: TDxpEngine;
@@ -219,6 +219,10 @@ begin
     Check(Game.PlayNextMove = '', 'GAMEEND should not manufacture a move');
     Check(Game.GameResult = ExpectedResult,
       'unverified peer claim must not decide the result: reason=' + Reason);
+    Check((Engine.GameEndReason=ExpectedReason) and (Game.EngineEndReason=ExpectedReason),
+      'peer termination reason must survive separately from result: '+Reason);
+    Check((Game.State=gosGameOver) and (Game.LastError=''),
+      'a peer termination claim is not a protocol error');
     Check((Game.MoveHistory.Count = 0) and (Game.Position.LegalMoveCount > 0),
       'GAMEEND must leave the nonterminal board and move history unchanged');
     Check(Pos('reason=' + Reason, Engine.StateLog.Text) > 0,
@@ -341,16 +345,18 @@ begin
     FakePeer(StrToInt(ParamStr(2)), ParamStr(3)[1]);
     Halt(0);
   end;
-  CheckGameEndClaim('3', gsWhite, '*');
-  CheckGameEndClaim('3', gsBlack, '*');
-  CheckGameEndClaim('2', gsWhite, '*');
-  CheckGameEndClaim('0', gsBlack, '*');
+  CheckGameEndClaim('3', gsWhite, '*', 'Win claimed');
+  CheckGameEndClaim('3', gsBlack, '*', 'Win claimed');
+  CheckGameEndClaim('2', gsWhite, '*', 'Draw claimed');
+  CheckGameEndClaim('2', gsBlack, '*', 'Draw claimed');
+  CheckGameEndClaim('9', gsWhite, '*', 'Engine ended game (DXP reason 9)');
+  CheckGameEndClaim('0', gsBlack, '*', 'Engine ended game');
   CheckLoopbackBinding;
   CheckNamedListenerAndPeerRestriction;
   CheckListenerShutdownRaces;
   CheckRegistrationPeerRestriction;
-  CheckGameEndClaim('1', gsWhite, '0-2');
-  CheckGameEndClaim('1', gsBlack, '2-0');
+  CheckGameEndClaim('1', gsWhite, '0-2', 'Resigned');
+  CheckGameEndClaim('1', gsBlack, '2-0', 'Resigned');
   CheckDisconnectedPeerFailsPromptly;
   CheckUnorderedCaptureHistory;
   CheckSilentPeerLosesOnTime;
