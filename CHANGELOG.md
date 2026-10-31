@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Make table scrolling immediate and consistent — 2026-10-31
 
-Commit: pending.
+Commit: `966bb10`.
 
 - Apply the parameter editor's native viewport wheel scrolling to tournament
   games/cross-table, registered engines, PGN/PDN games, database games/results and
