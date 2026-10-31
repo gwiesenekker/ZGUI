@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Fix U26: let the main window fit laptop screens — 2026-10-31
 
-Commit: pending.
+Commit: `844853d`.
 
 - Treat existing splitter panes' heights as preferences, preserving their
   measured content minimums. Let notation shrink to three lines; prefer ten

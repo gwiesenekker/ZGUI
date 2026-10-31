@@ -7,6 +7,8 @@ verified fixed by Claude; no repeat implementation was needed.
 
 ## U26 — main-window laptop height
 
+Implementation: `844853d`.
+
 - Use the existing layout measurements and splitters. A TGuiSplitPanel marker
   distinguishes a splitter-controlled preferred height from a true minimum;
   only the main window's existing log/analysis/PV panes use it. Ordinary dialog
@@ -43,6 +45,8 @@ Alt+K mnemonic dispatch and Tab traversal, with no unfreed blocks. The host glue
 was necessary: a top-level LCL form has one default/cancel role; an inactive
 page must not retain it. The key test sends both before-interface and remaining
 key-down/key-up messages, matching LCL's actual handling sequence.
+
+Caption-check follow-up: `9d317c0`.
 
 The user selected “I will run the Windows check”, so condition 1 was NOT waived.
 Their first native run in Lazarus 4.8 on Windows raised “Embedded button caption
