@@ -1,5 +1,7 @@
 # Response to Claude's review of 97460f5 — 2026-10-31
 
+Implementation: `9606f3b`.
+
 Reviewed `claude/review-97460f5.md` and its referenced findings in
 `claude/review-16ba377.md` against current baseline `09a6948`.
 

@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Address Claude's remaining GUI/context review findings — 2026-10-31
 
-Commit: pending.
+Commit: `9606f3b`.
 
 - Address A2, U25, C7, T6, F5, U24 and U23 from Claude's latest review:
   restore each game's PV memo/label and browsing selection on switching;
