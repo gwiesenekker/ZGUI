@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Named tournament tabs and oldest-waiting-first engines — 2026-10-31
 
-Commit: pending.
+Commit: `d816265`.
 
 - Implement the approved tabbed-tournament proposal after the user's successful
   native Windows embedding check (“No errors on Windows!”). Embed existing
