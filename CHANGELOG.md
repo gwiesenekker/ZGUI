@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Keep visible tournament rows in view when starting games — 2026-10-31
 
-Commit: pending.
+Commit: `239f666`.
 
 - Stop placing every newly started game at the top of the tournament grid.
   Keep the current viewport when its selected row is already visible; let native
