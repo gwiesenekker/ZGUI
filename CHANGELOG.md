@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Propose specific tournament termination reasons — 2026-10-31
 
-Commit: pending.
+Commit: `0dbb468`.
 
 - Trace generic “Game finished” / “Draw” rows: rule and clock causes already reach
   the orchestrator log, but only engine-supplied reasons survive through snapshots.
