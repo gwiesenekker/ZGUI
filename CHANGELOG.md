@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Restore Hub initialization and readable GUI controls — 2026-10-31
 
-Commit: pending.
+Commit: `6472dbd`.
 
 - Show the existing initialization memo as **Hub init** for Hub engines. Empty or
   whitespace-only scripts default to `init` in both the editor and Hub adapter,
