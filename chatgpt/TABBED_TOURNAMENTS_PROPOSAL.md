@@ -1,9 +1,10 @@
 # Named tournament tabs and explicit Close — proposal, 2026-10-31
 
-Status: proposal only; no production code changed. Requires Claude's review
-under AGENTS.md because it changes shared tournament ownership and closing.
-The user has confirmed the Close policy below. Implementation still awaits
-Claude's review of the shared ownership changes.
+Status: approved with conditions in `claude/review-559f6aa.md` (2026-10-31).
+The user requested proceeding with the fixes and tabbed approach. The embedding
+spike is the required first step; native Windows validation remains required
+unless the user explicitly waives that prerequisite. Production tournament-tab
+integration has not started.
 
 ## Request and current behaviour
 
@@ -28,6 +29,17 @@ record model, pairing algorithm or game runner.
 
 - New tournament creates a tab for a chosen game (current main-board game as
   default) and a unique initial display name Tournament1, Tournament2, etc.
+- User clarification (2026-10-31): “could you update the tournament settings
+  rather than opening a new tab when switching from draughts to chess?”
+  The Game selector changes the current tab in place; only New tournament
+  creates another tab. Preserve the tab identity and name, apply the target
+  game's engine filter, starting FEN and clock defaults, and keep the main
+  board and all other tabs unchanged. Protect existing/running data through
+  Save / Discard / Cancel before clearing incompatible pairings/results.
+  After stopping/capturing, replace the existing dialog within that same tab
+  with a target-variant dialog, reusing its existing construction/validation.
+  Begin a new tournament identity when the game changes; never relabel a
+  saved chess tournament as draughts or reuse its output paths.
 - A tab follows the existing Tournament name field. Its game is identified in
   the visible title too, for example “Tournament1 (Chess)”. Duplicate custom
   names need a visible disambiguator; neither name nor tab index is identity.
@@ -133,3 +145,25 @@ rather than prompting twice. Final-save failure retains the affected tab(s).
 No new pairing algorithms, clock/game engine, tournament result policy, game-tree
 implementation, database work, per-executable options redesign, or automatic
 resource-limit policy. This proposal does not implement pending engine flags.
+
+## Claude's approval conditions — 2026-10-31
+
+1. Embedding spike with two existing dialogs first, including layout, focus,
+   default/cancel buttons and keyboard behaviour. Native Windows run required;
+   Linux/Wine is not native Windows. If embedding proves unsuitable, propose
+   extracting the existing body into a TFrame before that shared refactor.
+2. Busy-engine rows must identify the engine and owning tournament, such as
+   “Waiting for engine X, in use by Tournament1”. Reuse reservation identities;
+   never launch a duplicate reserved engine or silently leave a row stalled.
+3. Discard preserves existing files but must not cause an automatic resume offer
+   later. Current startup does not enumerate/offer tournament recovery files;
+   keep that behaviour. If an automatic restore path is added, explicitly mark
+   discarded sessions so they are not offered. Deliberate file loading remains
+   a separate explicit action; no implicit replay on Open.
+4. Close-stopped rows save `*` and “Stopped: tournament closed”. Reopen/resume
+   must replay only stopped/unplayed rows, preserving completed results and
+   history. Extend the existing transient/retry status checks for this reason;
+   do not mark arbitrary failure reasons retryable.
+
+The new U26 laptop-height finding is an independent GUI fix. No repository
+pruning, AGENTS.md commit, or unfinished feature-flag implementation is included.

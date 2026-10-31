@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Prepare the approved tournament-tab embedding spike — 2026-10-31
+
+Commit: pending.
+
+- Review `claude/review-559f6aa.md`: the previous seven findings are verified
+  fixed; U26 is new, and tournament tabs are approved with four conditions.
+- Add a standalone two-tab spike reusing existing TTournamentDialog instances
+  and main-form ownership, with active-tab default/cancel roles and measured
+  host minimum sizes. No production tournament integration in this step.
+- Pass 160 isolated GTK2 checks for layout, independent edits, focus, Enter,
+  Escape, mnemonics and Tab navigation, with zero unfreed blocks.
+- Record the user's clarification: changing Chess/Draughts updates the current
+  tab's settings; only New tournament creates another tab. Preserve data through
+  the confirmed close/save policy before replacing incompatible settings.
+- Add `chatgpt/TOURNAMENT_EMBEDDING_WINDOWS_CHECK.md`. User chose “I will run the
+  Windows check”; native Windows validation remains a prerequisite to the full
+  tab integration. Record busy-engine ownership messages, Discard/no automatic
+  resume, and saved close-stopped rows as the other approval conditions.
+- Keep unfinished engine feature flags, user files and engine directories out
+  of this work. No application behaviour or installed executable changed here.
+
 ### Propose named tournament tabs and explicit closing — 2026-10-31
 
 Commit: `1fc4d0f`.
