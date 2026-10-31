@@ -473,11 +473,17 @@ procedure SaveEngineDefinitionParams(AEngine: TExternalEngineDefinition;
 var
   Params: TEngineParamArray;
   Section: string;
+  I,N:Integer;
 begin
   if AEngine = nil then
     Exit;
 
-  Params := Copy(AParams);
+  // Retire the old Hub startup-script setting while preserving other keys.
+  SetLength(Params,Length(AParams));N:=0;
+  for I:=0 to High(AParams) do if not SameText(AParams[I].Name,'gui-hub-init') then begin
+    Params[N]:=AParams[I];Inc(N);
+  end;
+  SetLength(Params,N);
   SeedDefaultGuiParams(Params, AEngine);
   SortEngineParams(Params);
   if AEngine.Kind=eekUci then begin
@@ -505,7 +511,6 @@ begin
     AddOrUpdateParam(Params, 'gui-hub-id', 'string', AEngine.HubId, False);
     AddOrUpdateParam(Params, 'gui-hub-launch-argument', 'string',
       AEngine.Arguments, True);
-    AddOrUpdateParam(Params, 'gui-hub-init', 'string', AEngine.InitText, False);
   end;
 
   SaveEngineParamsToJson(EngineParamsFileName(AEngine.ExePath), Section, Params);

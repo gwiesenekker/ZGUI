@@ -269,9 +269,10 @@ In the engine editor:
 
 ZGUI starts the executable in the executable's own directory, initiates the
 Hub protocol, applies the configured non-GUI parameters, and initializes the
-engine. The **Hub init** field defaults to `init`; a blank saved script also uses
-`init`. Custom initialization commands can be edited there. This field applies to
-Hub only. Closing the editor stops an engine that was launched for this test.
+engine. Hub initialization is automatic: ZGUI sends `hub`, applies the engine parameters,
+then sends the mandatory `init` command and waits for `ready`. The retired
+`gui-hub-init` setting is no longer shown or used; old values are ignored.
+Closing the editor stops an engine that was launched for this test.
 
 Hub engines can be used as players and annotators. A Hub engine can also be
 offered as an MCTS annotator when `gui-engine-supports-mcts` is enabled.

@@ -21,16 +21,17 @@ begin
  try
   D.ExePath:=ExpandFileName(ParamStr(0));D.Arguments:='--fake-init';
   P:=nil;AddOrUpdateParam(P,'gui-startup-timeout-ms','string','250',False);
+  AddOrUpdateParam(P,'gui-hub-init','string','quit',False);
   SaveEngineParamsToJson(EngineParamsFileName(D.ExePath),'hub',P);
   // Existing registrations can contain an empty/whitespace script. The Hub
-  // adapter must still complete the handshake; custom scripts remain intact.
-  for I:=0 to 2 do begin
-   case I of 0:D.InitText:='';1:D.InitText:='  '+LineEnding;2:D.InitText:='set-param name=threads value=1'+LineEnding+'init';end;
+  // adapter must complete the fixed handshake and ignore old startup scripts.
+  for I:=0 to 3 do begin
+   case I of 0:D.InitText:='';1:D.InitText:='  '+LineEnding;2:D.InitText:='set-param name=threads value=1'+LineEnding+'init';3:D.InitText:='quit';end;
    E:=THubEngine.Create(D);
    try
     if not E.LaunchAndInit then raise Exception.Create('Hub initialization failed for script '+IntToStr(I));
    finally E.Free;end;
   end;
-  WriteLn('PASS: blank/whitespace Hub init defaults and custom initialization');
+  WriteLn('PASS: mandatory Hub init ignores blank, custom and quit legacy scripts');
  finally DeleteFile(EngineParamsFileName(D.ExePath));D.Free;RegisterDefaultGameVariant(nil);end;
 end.

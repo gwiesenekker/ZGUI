@@ -544,14 +544,11 @@ end;
 function THubEngine.DoLaunchAndInit: Boolean;
 var
   Args: TStringList;
-  InitLines: TStringList;
-  I: Integer;
   Line: string;
 begin
   Result := False;
   if StopRequested then Exit;
   Args := TStringList.Create;
-  InitLines := TStringList.Create;
   try
     FWorker.PrepareLaunch(FEngine,FParams,Args);
     FStopping := False;
@@ -566,11 +563,7 @@ begin
       Log('hub wait not received before init; reason=' + FLastWaitFailure);
     SendHubParams;
 
-    InitLines.Text := ExpandEnginePlaceholders(FEngine.InitText, FEngine);
-    if Trim(InitLines.Text)='' then InitLines.Text:='init';
-    for I := 0 to InitLines.Count - 1 do
-      if Trim(InitLines[I]) <> '' then
-        SendLine(InitLines[I]);
+    SendLine('init');
 
     ChangeState(esWaitingForReady, 'init sent; waiting for ready');
     Result := WaitForLine('ready', EngineStartupTimeoutMs(FParams), Line);
@@ -591,7 +584,6 @@ begin
       FProcess.Close;
     end;
   finally
-    InitLines.Free;
     Args.Free;
   end;
 end;

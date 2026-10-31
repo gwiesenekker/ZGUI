@@ -1,7 +1,7 @@
 program init_colour_gui_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
- ExtCtrls,Graphics,ComCtrls,Math,uEngineEditForm,uEngineRegistry,uEngineParamsJson,
+ ExtCtrls,Graphics,ComCtrls,Math,Grids,uEngineEditForm,uEngineRegistry,uEngineParamsJson,
  uPreferencesForm,uPreferences,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,uGuiDialogs;
 type
  TTestPreferences=class(TPreferencesForm)
@@ -20,6 +20,33 @@ begin Inc(Checks);if not B then raise Exception.Create(S);end;
 procedure Pump;
 var I:Integer;
 begin for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;end;
+procedure FakeHub;
+var Line:string;Trace:TStringList;Initialized:Boolean;
+begin
+ Trace:=TStringList.Create;Initialized:=False;
+ try
+  while not EOF(Input) do begin
+   ReadLn(Line);Trace.Add(Line);Trace.SaveToFile(ParamStr(2));
+   if Line='hub' then WriteLn('wait')
+   else if Line='init' then begin
+    if Initialized then Halt(4);
+    Initialized:=True;WriteLn('ready');
+   end else if Line='quit' then begin
+    if not Initialized then Halt(3);
+    Break;
+   end;
+   Flush(Output);
+  end;
+ finally Trace.Free;end;
+end;
+function InitRow(F:TForm;out Grid:TStringGrid):Integer;
+var I:Integer;
+begin
+ Grid:=nil;Result:=-1;
+ for I:=0 to F.ComponentCount-1 do if F.Components[I] is TStringGrid then Grid:=TStringGrid(F.Components[I]);
+ if Grid=nil then Exit;
+ for I:=1 to Grid.RowCount-1 do if Grid.Cells[0,I]='gui-hub-init' then Exit(I);
+end;
 procedure Click(F:TForm;const Caption:string);
 var I:Integer;
 begin
@@ -28,37 +55,48 @@ begin
  raise Exception.Create('Button missing: '+Caption);
 end;
 var D:TExternalEngineDefinition;F:TEngineEditForm;M:TMemo;P,Loaded:TEngineParamArray;
+ Grid:TStringGrid;Row:Integer;
  Pref:TTestPreferences;Panel:TPanel;C:TCheckBox;Pages:TPageControl;
- Edits:TGamePreferencesEdits;I,J,K,N,Size,W,H:Integer;Errors:TErrors;Bitmap:TBitmap;
+ Edits:TGamePreferencesEdits;I,J,K,N,Size,W,H:Integer;Errors:TErrors;Bitmap:TBitmap;Trace:TStringList;TraceName:string;
 begin
+ if ParamStr(1)='--fake-hub-init' then begin FakeHub;Halt(0);end;
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  Errors:=TErrors.Create;Application.OnException:=@Errors.Report;
  RegisterGame(TChessVariant.Create,ChessGuiProfile);RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
  D:=TExternalEngineDefinition.Create;F:=nil;Pref:=nil;
  try
-  D.ExePath:=ExpandFileName(ParamStr(0));D.Kind:=eekHub;D.InitText:='';
+  D.ExePath:=ExpandFileName(ParamStr(0));D.Kind:=eekHub;D.InitText:='quit';
   if ParamStr(1)<>'--preferences-only' then begin
-  P:=nil;AddOrUpdateParam(P,'gui-hub-init','string','',False);
-  SaveEngineParamsToJson(EngineParamsFileName(D.ExePath),'hub',P);
-  F:=TEngineEditForm.Create(nil,RegisteredGame(1));F.LoadEngine(D);F.Show;Pump;
-  M:=TMemo(F.FindComponent('HubInitializationMemo'));
-  Check((M<>nil) and M.IsVisible,'Existing initialization memo visible for Hub');
-  Check(Trim(M.Text)='init','Saved blank Hub init defaults to init');
-  M.Text:='set-param name=threads value=1'+LineEnding+'init';
-  Click(F,'Launched correctly');
-  LoadEngineParamsFromJson(EngineParamsFileName(D.ExePath),'hub',Loaded);
-  Check(Trim(EngineParamValue(Loaded,'gui-hub-init',''))=Trim(M.Text),'Custom initialization persists');
-  F.LoadEngine(D);Check(Pos('set-param',M.Text)=1,'Custom initialization reloads');
-  M.Clear;Click(F,'Launched correctly');
-  LoadEngineParamsFromJson(EngineParamsFileName(D.ExePath),'hub',Loaded);
-  Check(Trim(EngineParamValue(Loaded,'gui-hub-init',''))='init','Saving cleared Hub init restores default');
-  D.Kind:=eekUci;D.InitText:='';F.LoadEngine(D);F.Show;Pump;
-  Check(not M.IsVisible,'Hub initialization hidden for UCI');
-  Check(Trim(M.Text)='','UCI remains without Hub init command');
-  D.Kind:=eekDxp;P:=nil;AddOrUpdateParam(P,'gui-engine-type','string','dxp',False);
-  SaveEngineParamsToJson(EngineParamsFileName(D.ExePath),'dxp',P);
-  F.LoadEngine(D);Pump;Check(not M.IsVisible,'Hub initialization hidden for DXP');
-  FreeAndNil(F);
+   TraceName:=GetTempFileName(GetTempDir,'hubinit');
+   D.Arguments:='--fake-hub-init "'+TraceName+'"';
+   P:=nil;AddOrUpdateParam(P,'gui-hub-init','string','quit',False);
+   AddOrUpdateParam(P,'gui-future-setting','string','preserved',False);
+   SaveEngineParamsToJson(EngineParamsFileName(D.ExePath),'hub',P);
+   F:=TEngineEditForm.Create(nil,RegisteredGame(1));F.LoadEngine(D);F.Show;Pump;
+   M:=TMemo(F.FindComponent('HubInitializationMemo'));Row:=InitRow(F,Grid);
+   Check((Row<0) and not M.IsVisible,'Retired gui-hub-init has no Hub editor control');
+   Check(not EngineParamShouldSendToHub('gui-hub-init'),'Legacy GUI setting is not an engine option');
+   Click(F,'Launch engine');Click(F,'Launched correctly');
+   Trace:=TStringList.Create;
+   try
+    Trace.LoadFromFile(TraceName);N:=0;
+    for I:=0 to Trace.Count-1 do if Trace[I]='init' then Inc(N);
+    Check((N=1) and (Trace.IndexOf('init')<Trace.IndexOf('quit')),'Editor sends one mandatory init before quitting');
+    Check(Pos('gui-hub-init',Trace.Text)=0,'Retired setting is not sent on the Hub wire');
+   finally Trace.Free;DeleteFile(TraceName);end;
+   LoadEngineParamsFromJson(EngineParamsFileName(D.ExePath),'hub',Loaded);
+   Check(EngineParamValue(Loaded,'gui-hub-init','absent')='absent','Saving retires old gui-hub-init metadata');
+   Check(EngineParamValue(Loaded,'gui-future-setting','')='preserved','Other GUI metadata survives');
+   F.LoadEngine(D);Check(InitRow(F,Grid)<0,'Retired initialization setting does not return on reload');
+   D.Kind:=eekUci;D.InitText:='';F.LoadEngine(D);F.Show;Pump;
+   Check((InitRow(F,Grid)<0) and not M.IsVisible,'Legacy Hub initialization hidden for UCI');
+   Check(Trim(M.Text)='','UCI remains without Hub init command');
+   D.InitText:='setoption name Hash value 32';F.LoadEngine(D);
+   Check(Trim(M.Text)=D.InitText,'Existing UCI initialization commands preserved');
+   D.Kind:=eekDxp;P:=nil;AddOrUpdateParam(P,'gui-engine-type','string','dxp',False);
+   SaveEngineParamsToJson(EngineParamsFileName(D.ExePath),'dxp',P);
+   F.LoadEngine(D);Pump;Check((InitRow(F,Grid)<0) and not M.IsVisible,'No Hub initialization option for DXP');
+   FreeAndNil(F);
   end;
   SetLength(Edits,2);
   Edits[0].GameId:='chess';Edits[1].GameId:='draughts';

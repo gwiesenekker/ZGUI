@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Remove the configurable Hub initialization script — 2026-10-31
+
+Commit: pending.
+
+- Remove the Hub initialization field and retire `gui-hub-init`. Both the editor
+  launch test and the Hub adapter now send the mandatory `init` command directly
+  after engine parameters, following Scan 3.1 protocol.txt. Blank or nonempty
+  legacy Hub scripts no longer control startup; UCI initialization is unchanged.
+- Ignore legacy values on load and omit the retired key from the parameter section
+  on normal Save, preserving other settings. No local engine files are migrated
+  or modified as part of this source change.
+- User authorisation on 2026-10-31: “Lets for now get rid of gui-hub-init”. Scope:
+  remove this setting/control and restore fixed Hub protocol initialization;
+  Claude can review the resulting commit afterwards.
+- Extend regressions with legacy `quit` overrides, exactly one initialization
+  command in the editor's wire trace, absent GUI controls, saved-key removal and
+  preservation of unrelated settings/UCI initialization. Application compilation,
+  all seventeen chess/draughts GUI suites and the full headless regression suite
+  pass on an isolated snapshot excluding unfinished feature flags. Native Windows
+  interaction remains untested.
+
 ### Restore Hub initialization and readable GUI controls — 2026-10-31
 
 Commit: `6472dbd`.
