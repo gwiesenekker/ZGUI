@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Propose named tournament tabs and explicit closing — 2026-10-31
 
-Commit: pending.
+Commit: `1fc4d0f`.
 
 - Prepare `chatgpt/TABBED_TOURNAMENTS_PROPOSAL.md` for Claude's review:
   multiple named chess/draughts tournament tabs reuse the existing dialog,
