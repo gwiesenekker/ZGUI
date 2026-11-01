@@ -4,6 +4,29 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Guard tournament Play and refresh switched-game titles — 2026-11-01
+
+Commit: pending.
+
+- User authorisation: “Apply now; waive prior review” for the named pairing-required
+  Play guard in chess and draughts. Scope: `chatgpt/TOURNAMENT_PLAY_PAIRING_GUARD_NOTES.md`.
+- Disable Play when the existing pairing grid is empty, retaining the current
+  running/shutdown and settings-change conditions. Guard the click handler too,
+  so an empty schedule cannot start scheduling or create automatic-save files.
+  Creating/loading pairings enables Play; clearing/reloading an empty schedule
+  disables it. No pairing, scheduler, clock or game-result policy changes.
+- Fix the related stale game suffix after switching a tournament in place, within
+  the earlier “Implement in-place switching; waive prior review” authorisation.
+  Emit the existing title-change notification after reset; retain tournament name,
+  duplicate-name IDs, native controls and other tabs' captions.
+- Add both-game regressions for fresh/created/loaded/cleared pairings, a direct
+  callback, both title-switch directions and the second tournament tab. The stale
+  title test fails before the fix; focused checks pass 203 assertions afterwards.
+  Application compilation, all 19 GUI suites and both tournament suites pass.
+  Final tab suite: 380 checks, with zero reported leaks. All GUI execution uses
+  hidden displays; native Windows QA remains pending.
+
+
 ### Show engine use in the native status bar — 2026-11-01
 
 Commit: `2b56236`.

@@ -219,6 +219,8 @@ begin
    Check((O.Removals=0) and (Host.Dialogs[0]=O.Dialog),'Game switch reuses the existing tournament dialog');
    Check((O.VisibilityChanges=0) and O.Dialog.Visible,'Game switch never hides or re-shows the dialog');
    Check(O.Dialog.Variant=V,'Existing controls select the requested game');
+   Check(Pos('('+V.Name+')',Host.Pages.ActivePage.Caption)>0,
+    'Tab title follows the selected game in both switch directions');
    Check(O.Dialog.ComponentCount=N,'Game switch reuses all existing components');
    Check(Grid(O.Dialog).PopupMenu.Items[1].Caption=V.ResultText(goWhiteWins),
     'Result menu switches to the target game spelling');
@@ -328,6 +330,26 @@ begin
   Variant.Name+': oldest waiting tournament gets the next complete engine pair');
  Host.OnStartGame:=Starts.Original;
 end;
+procedure CheckPairingRequired(V:TGameVariant);
+var D,R:TTournamentDialog;B:TButton;Name:string;
+begin
+ D:=TTournamentDialog.Create(nil,V);R:=nil;
+ Name:=Directory+'/pairing-required-'+GameVariantId(V)+'.json';
+ try
+  B:=Button(D,'Play');Check(not B.Enabled,'Play disabled without pairings');
+  B.OnClick(B);
+  Check(not D.IsRunning and (D.SaveFileName=''),'Direct Play callback cannot start or save an unpaired tournament');
+  Button(D,'Create pairing').Click;
+  Check(not TournamentPairingGridIsEmpty(Grid(D)) and B.Enabled,'Creating a pairing enables Play');
+  D.SaveTournamentToFile(Name);
+  R:=TTournamentDialog.Create(nil,V);R.LoadTournamentFromFile(Name);
+  Check(Button(R,'Play').Enabled,'Loading pairings enables Play');
+  Button(R,'Clear pairing').Click;
+  Check(TournamentPairingGridIsEmpty(Grid(R)) and not Button(R,'Play').Enabled,'Clearing pairings disables Play');
+  R.SaveTournamentToFile(Name);D.LoadTournamentFromFile(Name);
+  Check(not B.Enabled,'Loading an empty tournament disables Play');
+ finally R.Free;D.Free;end;
+end;
 procedure CheckTimeControlRows(V:TGameVariant);
 var D,R:TTournamentDialog;U:TComboBox;Value:TEdit;Data:TJSONObject;
  Name:string;I:Integer;C:TControl;Row:TWinControl;Rejected:Boolean;
@@ -354,7 +376,7 @@ begin
    'Play, concurrency and Stop share the action row');
   Check((Button(D,'Play').Parent.Top>Row.Top) and (Button(D,'Play').Left<Button(D,'Stop').Left),
    'Actions follow the time controls');
-  Check(Button(D,'Play').Enabled and not Button(D,'Stop').Enabled,'Separate idle Play/Stop state');
+  Check(not Button(D,'Play').Enabled and not Button(D,'Stop').Enabled,'Unpaired tournament disables Play and Stop');
   Check(Button(D,'Save...').Enabled and Button(D,'Load...').Enabled,'Idle file controls are available');
   TEdit(D.FindComponent('TournamentMoves')).Text:='40';Value.Text:='12.5';
   TEdit(D.FindComponent('TournamentIncrement')).Text:='0.75';
@@ -436,7 +458,8 @@ begin
  Starts:=TStarts.Create;Starts.Owners:=TList.Create;
  Defs:=TExternalEngineList.Create;L:=TStringList.Create;Decisions:=TDecisions.Create;Main:=nil;
  try
-  RegisterEngines(False);CheckTimeControlRows(Chess);CheckTimeControlRows(Draughts);
+  RegisterEngines(False);CheckPairingRequired(Chess);CheckPairingRequired(Draughts);
+  CheckTimeControlRows(Chess);CheckTimeControlRows(Draughts);
   Main:=TMainForm.Create(nil);Main.Show;Pump;
   Button(Main,'Tournament...').Click;Host:=Main.TournamentHost;Check(Host.Count=1,'First open creates one tab');
   if ParamStr(1)='--presentation-only' then begin
@@ -538,6 +561,10 @@ begin
   Check(TEdit(Other.FindComponent('TournamentStartingFEN')).Text=Draughts.DefaultStartingFEN,
     'In-place game switch uses target-game defaults');
   Check(D.Variant=Chess,'Switching one tab leaves the other game intact');
+  Check(Pos('('+Draughts.Name+')',Page.Caption)>0,
+    'Second tournament tab title follows its new game');
+  Check(Pos('('+Chess.Name+')',TTabSheet(D.Parent).Caption)>0,
+    'Switching a second tab preserves the first tab title');
   Check(Other.SaveFileName='',
     'In-place switch clears the previous tournament storage path');
   Check((ExtractFileExt(Other.PdnFileName)='.pdn') and (Other.SaveFileName<>SaveName),

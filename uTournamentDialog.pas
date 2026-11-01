@@ -740,6 +740,7 @@ begin
     FCrossTableGrid.EndUpdate;FGrid.EndUpdate;EnableAlign;
   end;
   RefreshLayout;UpdateButtons;
+  if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);
 end;
 
 function TTournamentDialog.GetTournamentName:string;
@@ -2161,7 +2162,7 @@ end;
 
 procedure TTournamentDialog.StartStopClick(Sender: TObject);
 begin
-  if FRunning or FRefereeStopPending then Exit;
+  if FRunning or FRefereeStopPending or TournamentPairingGridIsEmpty(FGrid) then Exit;
 
   if PendingInvalidatingChange then
     Exit;
@@ -2548,7 +2549,7 @@ begin
   begin
     if ActiveRunningGameCount=0 then FRefereeStopPending:=False;
     FStartStopButton.Enabled := (not FRunning) and (not FRefereeStopPending) and
-      (not PendingInvalidatingChange);
+      (not PendingInvalidatingChange) and (not TournamentPairingGridIsEmpty(FGrid));
     FStopButton.Enabled := (FRunning or (ActiveRunningGameCount>0)) and
       (not FRefereeStopPending);
   end;

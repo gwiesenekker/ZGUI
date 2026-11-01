@@ -736,7 +736,9 @@ schedule. Choose **Apply change** to clear the existing pairings and results, or
 
 ### 7.2 Playing the tournament
 
-Click **Play** to start pending games. ZGUI starts games up to the configured
+**Play** becomes available after creating or loading pairings. Clearing the
+pairings disables it again. Click **Play** to start pending games. ZGUI starts
+games up to the configured
 concurrency limit while respecting engine availability. Each simultaneous game
 needs its own available engine instances and non-conflicting DXP resources.
 
