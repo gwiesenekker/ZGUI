@@ -224,7 +224,8 @@ begin
   LFilterLabel.Caption := 'Show first';
   LFilterLabel.Layout := tlCenter;
 
-  FRowLimitEdit := TEdit.Create(Self);
+  FRowLimitEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FRowLimitEdit).WidthSample:='999999';
   FRowLimitEdit.Parent := LFilterPanel;
   FRowLimitEdit.SetBounds(644, 4, 60, 26);
   FRowLimitEdit.Text := IntToStr(DefaultDatabaseGridGameLimit);

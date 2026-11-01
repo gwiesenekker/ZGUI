@@ -115,16 +115,19 @@ begin
   FBlackPlayerCombo.OnChange := @ComboChange;
   AddLabelledCombo(LContentPanel, 'Black player', FBlackPlayerCombo, LTop);
 
-  FMovesEdit := TEdit.Create(Self);
+  FMovesEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FMovesEdit).WidthSample:='999';
   FMovesEdit.Text := IntToStr(FDefaultTimeControl.MovesPerPeriod);
   AddLabelledEdit(LContentPanel, 'Moves per period', FMovesEdit, LTop);
 
-  FMinutesEdit := TEdit.Create(Self);
+  FMinutesEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FMinutesEdit).WidthSample:='999.99';
   FMinutesEdit.Text := FormatFloat('0.###',
     FDefaultTimeControl.MinutesPerPeriod);
   AddLabelledEdit(LContentPanel, 'Minutes per period', FMinutesEdit, LTop);
 
-  FIncrementEdit := TEdit.Create(Self);
+  FIncrementEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FIncrementEdit).WidthSample:='999.99';
   FIncrementEdit.Text := FormatFloat('0.###',
     FDefaultTimeControl.IncrementSeconds);
   AddLabelledEdit(LContentPanel, 'Increment seconds', FIncrementEdit, LTop);

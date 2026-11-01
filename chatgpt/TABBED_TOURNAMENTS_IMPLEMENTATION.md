@@ -182,3 +182,69 @@ inflated dimensions; this closes that coverage gap.
 All execution remains on hidden displays. Regression counts and final results
 are in CHANGELOG.md. Native Windows repaint confirmation remains outstanding;
 Linux timing/geometry checks do not constitute visual Windows verification.
+
+## QA: in-place switching and compact controls — 2026-11-01
+
+User report: “Choose Tournament, switch from chess to draughts and the elements
+below are clearly all redrawn.” The existing path destroyed and rebuilt the
+embedded dialog for a game change. The earlier proposal explicitly allowed that
+replacement, but it recreated identical controls unnecessarily.
+
+The user asked: “Why do you destroy the old dialog? Shouldn't you just
+clear/repopulate the existing elements?” The named authorisation is:
+**“Implement in-place switching; waive prior review”** (2026-11-01).
+It covers resetting the existing shared tournament dialog, retaining the existing
+Save/Discard/Cancel protection, stopping/capturing/saving the old tournament and
+resetting defaults, engine choices, pairings and file identity. Claude reviews the
+result afterwards. No replacement infrastructure or game policy changes.
+
+The host keeps its deferred native selector callback and existing Prepare / Stop /
+Drain / Save sequence, then invokes ResetForVariant on the same dialog. The reset
+reuses existing clear-grid, record-reference clearing, engine population, cross
+table, validation/signature and measurement functions. Clear old file paths,
+publication ownership/fingerprints, storage notices/errors, timer/stop flags and
+launch staggering; assign a new tournament identity. Preserve tab and tournament
+name, restore game-specific FEN/clock defaults, reset unit/pairing/concurrency,
+filter engines by protocol and update existing result-menu captions. No Show,
+Hide, Embed, dialog recreation or new native handles on this switch path.
+
+The focused test checks both directions: same dialog/component count, unchanged
+native handles, and no removal or visibility transition. Existing tests cover
+cancel/discard, fresh identity/defaults, incompatible pairings, queued callback
+shutdown, loading, reservations and running-game closure. The focused suite
+passes 183 checks. Earlier preparation-of-replacement experimentation was not
+committed; the final implementation reuses the controls.
+
+### Layout and numeric widths
+
+Additional user authorisation: **“Apply now; waive prior review”** (2026-11-01),
+for the named tournament layout and consistent measured widths for numeric fields.
+The requested order is game chooser before the words “Starting FEN”; Clear pairing
+below Create pairing; Pairing options, then Time control, then the Play action row.
+
+Use the existing layout helpers and LCL constraints. Numeric edits are a small
+TEdit subclass carrying only a representative width sample, measured in the common
+layout pass with font margins. Count fields use 999; decimal fields 999.99;
+database row limits 999999. Apply to Tournament, New Game, Database, Preferences
+and annotator time. No MaxLength, numeric range or parser changes. Fixed-choice
+row dropdowns use their measured entry widths; player/path/FEN/name fields retain
+stretching. Engine registration work in progress is untouched.
+
+Keep the full-width settings rows in an ordinary stacking panel: a cell-layout
+panel would constrain nested rows to their preferred width and clip the chess
+FEN at larger fonts. The full layout test covers both games, larger fonts,
+resizing/maximizing and DPI adjustments, numeric sample widths and chooser order.
+It passes 10,394 checks with zero failures and no reported leaks.
+
+Final full-suite results are recorded in CHANGELOG.md. Testing uses a clean archive
+plus only task files, isolated configurations and hidden displays. Native Windows
+visual confirmation remains outstanding.
+
+Final verification: application compilation, the full headless regression and
+both tournament suites pass. All 19 GUI suites pass: 18 in the final full sweep,
+then the tab suite passes 364 checks after fixing a new assertion that called the
+side-effecting PdnFileName getter while checking for absent storage. The corrected
+assertion checks the cleared JSON path first, then verifies new recovery storage
+uses the target game format. No application change was needed for that assertion.
+The layout sweep passes 10,394 checks with zero failures; reported heap checks show
+zero leaks. Staged application/test sources match the isolated test snapshot.

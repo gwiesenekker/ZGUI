@@ -31,13 +31,21 @@ begin
    H:=MeasureGuiText(TLabel(Child).Caption,Child.Font).cy;
    Check((W<=Child.Width+2) and (H<=Child.Height+2),Path+' text clipped '+TLabel(Child).Caption+' width='+IntToStr(Child.Width)+' required='+IntToStr(W)+' min='+IntToStr(Child.Constraints.MinWidth)+' max='+IntToStr(Child.Constraints.MaxWidth));
   end;
+  if Child is TGuiNumberEdit then begin
+   W:=MeasureGuiText(TGuiNumberEdit(Child).WidthSample,Child.Font).cx;
+   Check((Child.Width>=W) and
+    (Child.Width<=W+Max(8,MeasureGuiText('M',Child.Font).cx)+2),Path+' numeric width follows sample and font');
+   Check((Child.Constraints.MaxWidth>0) and (TEdit(Child).MaxLength=0),
+    Path+' numeric presentation is bounded without truncating accepted input');
+  end;
   if Child.Name='TournamentStartingFEN' then begin
    W:=MeasureGuiText(TEdit(Child).Text,Child.Font).cx+MeasureGuiText('MM',Child.Font).cx;
    Check(Child.Width>=W,Path+' complete starting FEN plus margin');
    Choice:=TComboBox(Root.FindComponent('TournamentVariant'));
    if Choice<>nil then begin
     Check(Choice.Parent=Child.Parent,Path+' game chooser shares FEN row');
-    Check(Child.Left>=Choice.Left+Choice.Width,Path+' game chooser is to the left of FEN');
+    Check(TControl(Root.FindComponent('TournamentStartingFENLabel')).Left>=Choice.Left+Choice.Width,
+     Path+' game chooser precedes Starting FEN label');
     Check(Abs(Choice.Top-Child.Top)<=2,Path+' game chooser aligns with FEN');
     W:=0;for J:=0 to Choice.Items.Count-1 do W:=Max(W,MeasureGuiText(Choice.Items[J],Choice.Font).cx);
     Inc(W,MeasureGuiText('Ag',Choice.Font).cy+MeasureGuiText('MM',Choice.Font).cx);

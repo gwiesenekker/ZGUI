@@ -184,7 +184,8 @@ begin
   LGroup.BorderSpacing.Around := 8;
   LGroup.Caption := 'Evaluation bar / score history';
 
-  FEvaluationMaxEdit := TEdit.Create(Self);
+  FEvaluationMaxEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FEvaluationMaxEdit).WidthSample:='999.99';
   FEvaluationMaxEdit.Parent := LGroup;
   FEvaluationMaxEdit.SetBounds(250, 28, 80, 24);
 

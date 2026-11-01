@@ -190,6 +190,51 @@ begin
  C.DroppedDown:=False;
  Pump;
 end;
+type TSwitchPaintObserver=class
+ Dialog:TTournamentDialog;
+ VisibilityChanges,Removals:Integer;
+ procedure Removed(Sender:TObject;Form:TCustomForm);
+ procedure Revealed(Sender:TObject;Form:TCustomForm);
+end;
+procedure TSwitchPaintObserver.Removed(Sender:TObject;Form:TCustomForm);
+begin if Form=Dialog then Inc(Removals);end;
+procedure TSwitchPaintObserver.Revealed(Sender:TObject;Form:TCustomForm);
+begin if Form=Dialog then Inc(VisibilityChanges);end;
+procedure CheckSwitchPaintOrder;
+var O:TSwitchPaintObserver;V:TGameVariant;K,J,N:Integer;C:TWinControl;
+ Controls:TList;Handles:array of THandle;
+begin
+ O:=TSwitchPaintObserver.Create;Controls:=TList.Create;O.Dialog:=Host.Dialogs[0];
+ for J:=0 to O.Dialog.ComponentCount-1 do
+  if (O.Dialog.Components[J] is TWinControl) and TWinControl(O.Dialog.Components[J]).HandleAllocated then
+   Controls.Add(O.Dialog.Components[J]);
+ N:=O.Dialog.ComponentCount;SetLength(Handles,Controls.Count);
+ for J:=0 to Controls.Count-1 do Handles[J]:=TWinControl(Controls[J]).Handle;
+ Screen.AddHandlerRemoveForm(@O.Removed);
+ Screen.AddHandlerFormVisibleChanged(@O.Revealed);
+ try
+  for K:=0 to 1 do begin
+   if O.Dialog.Variant=Chess then V:=Draughts else V:=Chess;
+   ChangeGame(O.Dialog,V);
+   Check((O.Removals=0) and (Host.Dialogs[0]=O.Dialog),'Game switch reuses the existing tournament dialog');
+   Check((O.VisibilityChanges=0) and O.Dialog.Visible,'Game switch never hides or re-shows the dialog');
+   Check(O.Dialog.Variant=V,'Existing controls select the requested game');
+   Check(O.Dialog.ComponentCount=N,'Game switch reuses all existing components');
+   Check(Grid(O.Dialog).PopupMenu.Items[1].Caption=V.ResultText(goWhiteWins),
+    'Result menu switches to the target game spelling');
+   Check(Grid(O.Dialog).PopupMenu.Items[2].Caption=V.ResultText(goDraw),
+    'Draw menu switches to the target game spelling');
+   Check(not O.Dialog.HasTournamentData,'Fresh game defaults are accepted without a spurious edited-state warning');
+   for J:=0 to Controls.Count-1 do begin
+    C:=TWinControl(Controls[J]);
+    Check(C.HandleAllocated and (C.Handle=Handles[J]),'Game switch preserves native control handles');
+   end;
+  end;
+ finally
+  Screen.RemoveHandlerFormVisibleChanged(@O.Revealed);
+  Screen.RemoveHandlerRemoveForm(@O.Removed);Controls.Free;O.Free;
+ end;
+end;
 procedure Configure(D:TTournamentDialog;TwoRows:Boolean=False);
 var I:Integer;
 begin
@@ -295,6 +340,10 @@ begin
   U:=TComboBox(D.FindComponent('TournamentTimeUnit'));Value:=TEdit(D.FindComponent('TournamentMinutes'));
   Check((U.ItemIndex=0) and (U.Text='minutes'),'Minutes is the default time unit');
   Row:=Value.Parent;
+  Check(TControl(D.FindComponent('TournamentPairingOptions')).Parent.Top<Row.Top,
+   'Pairing options precede the time-control row');
+  Check(Button(D,'Clear pairing').Parent.Top>Button(D,'Create pairing').Parent.Top,
+   'Clear pairing is below Create pairing');
   for I:=0 to High(TimeNames) do begin
    C:=TControl(D.FindComponent(TimeNames[I]));
    Check(C.Parent=Row,'All time-control inputs share one row');
@@ -390,11 +439,13 @@ begin
   RegisterEngines(False);CheckTimeControlRows(Chess);CheckTimeControlRows(Draughts);
   Main:=TMainForm.Create(nil);Main.Show;Pump;
   Button(Main,'Tournament...').Click;Host:=Main.TournamentHost;Check(Host.Count=1,'First open creates one tab');
-  if ParamStr(1)='--controls-only' then begin
+  if ParamStr(1)='--presentation-only' then begin
+   CheckHiddenHost;CheckRevealOrder;CheckSwitchPaintOrder;DiscardAll;
+  end else if ParamStr(1)='--controls-only' then begin
     Starts.Original:=Host.OnStartGame;RegisterEngines(True);
     CheckRefereeStop(Chess);CheckRefereeStop(Draughts);DiscardAll;
   end else begin
-  CheckHiddenHost;CheckRevealOrder;
+  CheckHiddenHost;CheckRevealOrder;CheckSwitchPaintOrder;
   Starts.Original:=Host.OnStartGame;
   D:=Host.Dialogs[0];CheckTabReady(Host,D);Check(Host.ShowForVariant(Chess)=D,'Reopen selects existing same-game tab');
   Page:=Host.Pages.ActivePage;Identity:=D.TournamentIdentity;
@@ -487,6 +538,12 @@ begin
   Check(TEdit(Other.FindComponent('TournamentStartingFEN')).Text=Draughts.DefaultStartingFEN,
     'In-place game switch uses target-game defaults');
   Check(D.Variant=Chess,'Switching one tab leaves the other game intact');
+  Check(Other.SaveFileName='',
+    'In-place switch clears the previous tournament storage path');
+  Check((ExtractFileExt(Other.PdnFileName)='.pdn') and (Other.SaveFileName<>SaveName),
+    'New recovery storage uses the target game publication format');
+  Check(TournamentPairingGridIsEmpty(Grid(Other)),
+    'In-place switch clears incompatible pairings and results');
   // A failed final Save leaves stopped tabs open and their prior files intact.
   ForceDirectories(Directory+'/directory-target');GuiTestConfirmationResult:=mrYes;
   GuiTestFileDialogResult:=1;GuiTestFileName:=Directory+'/directory-target';

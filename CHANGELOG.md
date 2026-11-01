@@ -4,6 +4,34 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reuse tournament controls and compact measured fields — 2026-11-01
+
+Commit: pending.
+
+- User authorisations: “Apply now; waive prior review” for the requested tournament
+  layout and consistent measured numeric widths; “Implement in-place switching;
+  waive prior review” for resetting the existing tournament dialog. Scope and
+  verification are recorded in `chatgpt/TABBED_TOURNAMENTS_IMPLEMENTATION.md`.
+- Switching chess/draughts now clears and repopulates the existing controls and
+  preserves their native handles, rather than destroying/recreating the dialog.
+  Keep Save/Discard/Cancel, stop/capture/save of the old game, tab/name identity,
+  and target-game defaults. Reset incompatible pairings/results, engine choices,
+  recovery/publication paths and tournament identity; update result-menu spellings.
+  No scheduling, engine, clock or adjudication policy changes.
+- Move the game chooser before the words “Starting FEN”. Put Clear pairing below
+  Create pairing. Order the remaining sections as Pairing, Time control, Play.
+  Keep tournament name and FEN fields full width and font-measured.
+- Introduce a small measured numeric edit using existing LCL sizing: count fields
+  use `999`, decimal fields `999.99`, database limits `999999`, all plus font
+  margins. Apply to Tournament, New Game, Database, Preferences and annotator
+  time. Preserve input validation and larger accepted values. Size fixed-choice
+  row dropdowns to their entries rather than stretching them across the window.
+- Both games share these presentation changes. Application compilation, the full
+  headless regression, all 19 GUI suites and both tournament suites pass. Final
+  tournament-tab checks: 364; layout/font/window/DPI checks: 10,394; reported heap
+  checks show zero leaks. All GUI execution uses hidden displays. Native Windows
+  visual QA remains pending. Unrelated engine-feature work is excluded.
+
 
 ### Tournament controls and game-independent referee reasons — 2026-11-01
 

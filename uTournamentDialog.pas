@@ -142,6 +142,7 @@ type
     function CaptureGamePdn(AGame: TObject): string; virtual;
   public
     procedure RefreshLayout; override;
+    procedure ResetForVariant(AVariant:TGameVariant);
     procedure LoadTournamentFromFile(const AFileName: string);
     procedure SaveTournamentToFile(const AFileName: string);
     procedure SetSelectedResult(const AResultText: string);
@@ -327,7 +328,7 @@ var
   Id: TGUID;
   GameIndex:Integer;
   NameLabel,FenLabel,MovesLabel,MinutesLabel,IncrementLabel,ConcurrentLabel,TimeLabel:TLabel;
-  SettingsColumn,FenRow:TPanel;
+  SettingsColumn,FenRow,PairingActions:TPanel;
 begin
   inherited Create(AOwner);
   DisableAlign;
@@ -373,7 +374,8 @@ begin
   FStartingFENEdit.OnChange := @StartingFENChanged;
   AddLabelledEdit(ButtonPanel, 'Starting FEN', FStartingFENEdit, TopPos);
 
-  FMovesEdit := TEdit.Create(Self);
+  FMovesEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FMovesEdit).WidthSample:='999';
   FMovesEdit.Name:='TournamentMoves';FMovesEdit.Text := IntToStr(FProfile.DefaultClock.MovesPerPeriod);
   FMovesEdit.OnChange := @InvalidateTournamentResults;
   FMovesEdit.SetBounds(0, 132, 86, 24);
@@ -383,7 +385,8 @@ begin
   LabelControl.SetBounds(0, 114, 86, 18);
   LabelControl.Caption := 'moves in';MovesLabel:=LabelControl;
 
-  FMinutesEdit := TEdit.Create(Self);
+  FMinutesEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FMinutesEdit).WidthSample:='999.99';
   FMinutesEdit.Name:='TournamentMinutes';FMinutesEdit.Text := FloatToStr(FProfile.DefaultClock.MinutesPerPeriod);
   FMinutesEdit.OnChange := @InvalidateTournamentResults;
   FMinutesEdit.SetBounds(96, 132, 86, 24);
@@ -393,7 +396,8 @@ begin
   LabelControl.SetBounds(96, 114, 86, 18);
   LabelControl.Caption := 'with';MinutesLabel:=LabelControl;
 
-  FIncrementEdit := TEdit.Create(Self);
+  FIncrementEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FIncrementEdit).WidthSample:='999.99';
   FIncrementEdit.Name:='TournamentIncrement';FIncrementEdit.Text := FloatToStr(FProfile.DefaultClock.IncrementSeconds);
   FIncrementEdit.OnChange := @InvalidateTournamentResults;
   FIncrementEdit.SetBounds(192, 132, 86, 24);
@@ -420,7 +424,8 @@ begin
   FIncrementModeCombo.ItemIndex := 0;
   FIncrementModeCombo.OnChange := @InvalidateTournamentResults;
 
-  FConcurrentGamesEdit := TEdit.Create(Self);
+  FConcurrentGamesEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FConcurrentGamesEdit).WidthSample:='999';
   FConcurrentGamesEdit.Name:='TournamentConcurrentGames';FConcurrentGamesEdit.Text := '1';
   FConcurrentGamesEdit.SetBounds(640, 98, 120, 24);
   FConcurrentGamesEdit.Parent := ButtonPanel;
@@ -634,18 +639,24 @@ begin
   FAcceptedTournamentSignature := TournamentSignature;
   AcceptInitialSettings;
   NameLabel:=TLabel(ButtonPanel.Controls[0]);FenLabel:=TLabel(ButtonPanel.Controls[2]);
-  if FGameCombo<>nil then begin
-    FenRow:=LayoutRow(ButtonPanel,[FGameCombo,FStartingFENEdit],1);
-    SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FenRow]);
-  end else
-    SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]);
-  SettingsColumn.Top:=0;
+  FenLabel.Name:='TournamentStartingFENLabel';
+  SettingsColumn:=TPanel.Create(Self);SettingsColumn.Parent:=ButtonPanel;
+  SettingsColumn.BevelOuter:=bvNone;SettingsColumn.Align:=alTop;
+  SettingsColumn.AutoSize:=True;SettingsColumn.Top:=0;
+  with LayoutFields(SettingsColumn,[NameLabel,FTournamentNameEdit]) do Top:=0;
+  if FGameCombo<>nil then
+    FenRow:=LayoutRow(SettingsColumn,[FGameCombo,FenLabel,FStartingFENEdit],2)
+  else FenRow:=LayoutRow(SettingsColumn,[FenLabel,FStartingFENEdit],1);
+  FenRow.Top:=1;
+  PairingActions:=LayoutStack(ButtonPanel);
+  with LayoutRow(PairingActions,[CreateButton]) do Top:=0;
+  with LayoutRow(PairingActions,[ClearButton]) do Top:=1;
+  FRoundRobinGroup.Name:='TournamentPairingOptions';FRoundRobinGroup.AutoSize:=True;
+  with LayoutFlow(ButtonPanel,[FRoundRobinGroup,PairingActions]) do Top:=1;
   with LayoutRow(ButtonPanel,[TimeLabel,FMovesEdit,MovesLabel,FMinutesEdit,FTimeUnitCombo,
-    MinutesLabel,FIncrementEdit,IncrementLabel,FIncrementModeCombo]) do Top:=1;
+    MinutesLabel,FIncrementEdit,IncrementLabel,FIncrementModeCombo]) do Top:=2;
   with LayoutRow(ButtonPanel,[FStartStopButton,ConcurrentLabel,FConcurrentGamesEdit,
-    FStopButton,SaveButton,LoadButton]) do Top:=2;
-  FRoundRobinGroup.AutoSize:=True;
-  with LayoutFlow(ButtonPanel,[FRoundRobinGroup,CreateButton,ClearButton]) do Top:=3;
+    FStopButton,SaveButton,LoadButton]) do Top:=3;
   ButtonPanel.AutoSize:=True;
   UpdateButtons;
   EnableAutoLayout;
@@ -660,7 +671,7 @@ end;
 
 procedure TTournamentDialog.RefreshLayout;
 const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
-var FieldWidth,LabelWidth,ContentWidth,GameWidth,I:Integer;Fields:TWinControl;
+var FieldWidth,ContentWidth,GameWidth,I:Integer;Fields:TWinControl;
 begin
   inherited RefreshLayout;
   if FStartingFENEdit=nil then Exit;
@@ -679,17 +690,56 @@ begin
     FGameCombo.Constraints.MaxWidth:=0;
     FGameCombo.Constraints.MinWidth:=GameWidth;
     FGameCombo.Constraints.MaxWidth:=GameWidth;
-    Inc(ContentWidth,FGameCombo.Constraints.MinWidth+Fields.ChildSizing.HorizontalSpacing);
-    Fields.Constraints.MinWidth:=ContentWidth;
-    Fields:=Fields.Parent;
+    Inc(ContentWidth,FGameCombo.Constraints.MinWidth);
   end;
-  LabelWidth:=0;
   for I:=0 to Fields.ControlCount-1 do
     if Fields.Controls[I] is TLabel then
-      LabelWidth:=Max(LabelWidth,MeasureGuiText(TLabel(Fields.Controls[I]).Caption,Fields.Controls[I].Font).cx);
-  Fields.Constraints.MinWidth:=Max(Fields.Constraints.MinWidth,
-    LabelWidth+ContentWidth+Fields.ChildSizing.HorizontalSpacing);
+      Inc(ContentWidth,MeasureGuiText(TLabel(Fields.Controls[I]).Caption,Fields.Controls[I].Font).cx);
+  Inc(ContentWidth,(Fields.ControlCount-1)*Fields.ChildSizing.HorizontalSpacing);
+  Fields.Constraints.MinWidth:=ContentWidth;
+  Fields.Parent.Constraints.MinWidth:=ContentWidth;
   RefreshMinimum;
+end;
+
+procedure TTournamentDialog.ResetForVariant(AVariant:TGameVariant);
+var Profile:TGameGuiProfile;Id:TGUID;
+begin
+  if AVariant=nil then raise EGamePositionError.Create('Missing dialog game variant');
+  if IsRunning then raise EInvalidOperation.Create('Stop tournament before changing game');
+  Profile:=GameGuiProfileFor(AVariant);
+  if CreateGUID(Id)<>0 then raise EInOutError.Create('Could not create a tournament identity');
+  LeaveEngineQueue;
+  DisableAlign;FGrid.BeginUpdate;FCrossTableGrid.BeginUpdate;
+  FLoadingTournament:=True;
+  try
+    FTimer.Enabled:=False;FRunning:=False;FClosing:=False;
+    FCloseStopped:=False;FRefereeStopPending:=False;FLastGameStartTick:=0;
+    ClearTournamentGameRefs;FWhiteEngines.Clear;FBlackEngines.Clear;
+    FFileName:='';FPdnFileName:='';FPdnFileOwned:=False;
+    FPdnPublishedHash:='';FVerifiedPdnFingerprint:='';FLegacyPdnFileName:='';
+    FStorageNotice:='';FStorageError:='';FTournamentId:=GUIDToString(Id);
+    FVariant:=AVariant;FProfile:=Profile;
+    FStartingFENEdit.Text:=FVariant.DefaultStartingFEN;
+    FMovesEdit.Text:=IntToStr(FProfile.DefaultClock.MovesPerPeriod);
+    FMinutesEdit.Text:=FloatToStr(FProfile.DefaultClock.MinutesPerPeriod);
+    FTimeUnitCombo.ItemIndex:=0;
+    FIncrementEdit.Text:=FloatToStr(FProfile.DefaultClock.IncrementSeconds);
+    if FProfile.DefaultClock.IncrementMode=cimAfterMoveLimit then FIncrementModeCombo.ItemIndex:=1
+    else FIncrementModeCombo.ItemIndex:=0;
+    FConcurrentGamesEdit.Text:='1';FRoundRobinGroup.ItemIndex:=0;
+    if FGameCombo<>nil then FGameCombo.ItemIndex:=FGameCombo.Items.IndexOfObject(FVariant);
+    ClearTournamentPairingGrid(FGrid);PopulateEngines;
+    FGrid.PopupMenu.Items[1].Caption:=TournamentResultText(trWhiteWin,FProfile.FileFormat);
+    FGrid.PopupMenu.Items[2].Caption:=TournamentResultText(trDraw,FProfile.FileFormat);
+    FGrid.PopupMenu.Items[3].Caption:=TournamentResultText(trBlackWin,FProfile.FileFormat);
+    FAcceptedTournamentSignature:=TournamentSignature;
+    FInvalidationPanel.Visible:=False;AcceptInitialSettings;
+    AdjustPairingGridColumnWidths;UpdateCrossTable;
+  finally
+    FLoadingTournament:=False;
+    FCrossTableGrid.EndUpdate;FGrid.EndUpdate;EnableAlign;
+  end;
+  RefreshLayout;UpdateButtons;
 end;
 
 function TTournamentDialog.GetTournamentName:string;

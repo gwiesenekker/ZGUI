@@ -4,9 +4,17 @@ unit uGuiLayout;
 
 interface
 
-uses Classes, Controls, ExtCtrls, Forms;
+uses Classes, Controls, ExtCtrls, Forms, StdCtrls;
 
 type
+  // Numeric entry widths follow a representative value and the active font.
+  // This controls presentation only; existing parsers validate the entered value.
+  TGuiNumberEdit = class(TEdit)
+  public
+    WidthSample:string;
+    constructor Create(AOwner:TComponent); override;
+  end;
+
   // A splitter-sized pane has a preferred height separate from its minimum.
   TGuiSplitPanel = class(TPanel);
 
@@ -41,7 +49,10 @@ procedure ScrollLayoutPages(AOwner:TComponent;AControl:TWinControl);
 
 implementation
 
-uses Math, Graphics, StdCtrls, ComCtrls, Grids, uGuiDialogs;
+uses Math, Graphics, ComCtrls, Grids, uGuiDialogs;
+
+constructor TGuiNumberEdit.Create(AOwner:TComponent);
+begin inherited Create(AOwner);WidthSample:='999';end;
 
 type
   TGridAccess=class(TCustomGrid);
@@ -205,12 +216,19 @@ begin
       if TMeasuredPanel(C).StretchCells.IndexOf(Child)<0 then begin
         W:=0;H:=0;Child.GetPreferredSize(W,H,True);
         if Child is TLabel then W:=MeasureGuiText(TLabel(Child).Caption,Child.Font).cx;
+        if Child is TComboBox then W:=Child.Constraints.MinWidth;
         if Child is TButton then W:=MeasureGuiText(TButton(Child).Caption,Child.Font).cx+4*Gap(Child);
         // Leave breathing room after native checkbox captions across themes.
         if Child is TCheckBox then Inc(W,Gap(Child));
         Child.Constraints.MinWidth:=W;
         Child.Constraints.MaxWidth:=Child.Constraints.MinWidth;
       end else Child.Constraints.MaxWidth:=0;
+    end;
+    if Child is TGuiNumberEdit then begin
+      W:=MeasureGuiText(TGuiNumberEdit(Child).WidthSample,Child.Font).cx+2*Gap(Child);
+      Child.Constraints.MaxWidth:=0;
+      Child.Constraints.MinWidth:=W;
+      Child.Constraints.MaxWidth:=W;
     end;
   end;
   if C is TMeasuredPanel then begin

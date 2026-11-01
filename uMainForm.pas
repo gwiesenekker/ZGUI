@@ -774,7 +774,8 @@ begin
   LAnnotatorSecondsPanel.Width := 68;
   LAnnotatorSecondsPanel.BevelOuter := bvNone;
 
-  FAnnotatorSecondsEdit := TEdit.Create(Self);
+  FAnnotatorSecondsEdit := TGuiNumberEdit.Create(Self);
+  TGuiNumberEdit(FAnnotatorSecondsEdit).WidthSample:='999.99';
   FAnnotatorSecondsEdit.Parent := LAnnotatorSecondsPanel;
   FAnnotatorSecondsEdit.SetBounds(8, 7, 52, 27);
   FAnnotatorSecondsEdit.Text := '1';

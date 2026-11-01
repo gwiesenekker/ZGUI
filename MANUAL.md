@@ -688,9 +688,11 @@ gaps, and adding/removing registrations can change these display numbers.
 Tournament records identify engines using their saved configuration identity.
 
 The tournament name and Starting FEN occupy full-width rows. The FEN minimum
-width follows its text and font. The Chess/Draughts chooser is to the left of
-the starting FEN. Time controls occupy one row; Play, concurrent games, Stop,
-Save and Load occupy the following row.
+width follows its text and font. The Chess/Draughts chooser precedes the words
+**Starting FEN**.
+The Pairing options come next, with **Clear pairing** below **Create pairing**.
+Time controls occupy the next row; Play, concurrent games, Stop, Save and Load
+occupy the following row.
 
 ### 7.1 Tournament settings
 
@@ -705,6 +707,11 @@ Enter:
 - maximum concurrent games;
 - pairing type;
 - at least two engines from the checklist.
+
+Short numeric fields have font-measured widths: three digits for move and
+concurrent-game counts, with additional room for decimals where appropriate.
+These widths do not change which values the controls accept. New Game,
+Database limits, evaluation preferences and annotator time use the same sizing.
 
 The time-control row reads **Time control: X moves in Y minutes/seconds with Z
 second increment** followed by the increment mode. A zero move count means the

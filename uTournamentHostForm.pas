@@ -497,28 +497,21 @@ begin
 end;
 
 procedure TTournamentHostForm.SwitchGame(Tab:TTournamentTab;Variant:TGameVariant);
-var D,Old:TTournamentDialog;Plan:TTournamentClosePlan;
+var Plan:TTournamentClosePlan;
 begin
   try
-    D:=CreateDialog(Variant);
+    FBusy:=True;
+    try if not Prepare(Tab,Plan) then Exit;finally FBusy:=False;end;
+    FBusy:=True;
     try
-      D.TournamentName:=Tab.Dialog.TournamentName;
-      D.AcceptInitialSettings;
-      FBusy:=True;
-      try if not Prepare(Tab,Plan) then Exit;finally FBusy:=False;end;
-      // Keep this tab and its stable UI identity while replacing incompatible settings.
-      FBusy:=True;
-      try
-        Old:=Tab.Dialog;Old.StopForClose;
-        if not Old.DrainClose and (Plan.SaveName<>'') then raise EInOutError.Create('Final tournament capture failed');
-        if Plan.SaveName<>'' then Old.SaveTournamentToFile(Plan.SaveName);
-        BeginTabUpdate;
-        try
-          Old.RemoveFreeNotification(Self);Tab.Dialog:=nil;Old.Free;
-          Embed(Tab,D);D:=nil;
-        finally EndTabUpdate;end;
-      finally FBusy:=False;end;
-    finally D.Free;end;
+      Tab.Dialog.StopForClose;
+      if not Tab.Dialog.DrainClose and (Plan.SaveName<>'') then
+        raise EInOutError.Create('Final tournament capture failed');
+      if Plan.SaveName<>'' then Tab.Dialog.SaveTournamentToFile(Plan.SaveName);
+      BeginTabUpdate;
+      try Tab.Dialog.ResetForVariant(Variant);
+      finally EndTabUpdate;end;
+    finally FBusy:=False;end;
   except on E:Exception do ShowGuiOkDialog(Self,'Tournament game',E.Message);end;
 end;
 end.
