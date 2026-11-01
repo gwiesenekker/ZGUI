@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Guard tournament Play and refresh switched-game titles — 2026-11-01
 
-Commit: pending.
+Commit: `bdba1f7`.
 
 - User authorisation: “Apply now; waive prior review” for the named pairing-required
   Play guard in chess and draughts. Scope: `chatgpt/TOURNAMENT_PLAY_PAIRING_GUARD_NOTES.md`.
