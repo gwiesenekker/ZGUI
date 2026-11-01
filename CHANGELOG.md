@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Show engine use and correct startup/tournament presentation — 2026-11-01
 
-Commit: pending.
+Commit: `5cd5be5`.
 
 - User authorisation: “Please proceed with the small toolbar readout. We could
   also show it in the bottom area of the window?” Implement this named readout in
