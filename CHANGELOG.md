@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Retain specific tournament termination reasons — 2026-11-01
 
-Commit: pending.
+Commit: `07ea315`.
 
 - User authorisation: “Please proceed!” on 2026-11-01, in direct response to the
   named termination-reason proposal and prior-review waiver request. Scope:
