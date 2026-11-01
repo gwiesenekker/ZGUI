@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Show engine use in the native status bar — 2026-11-01
+
+Commit: pending.
+
+- Follow-up within the authorised engine-use readout: “Can we remove the extra
+  space below the engine-count label” and “Could we move it to the TStatusBar?”
+  Use Lazarus TStatusBar in the main window, replacing the padded label. Keep
+  its count, breakdown and explanatory hint; leave engine lifecycle/counting
+  unchanged. Both chess and draughts use the same global status bar.
+- Use native sizing with a font-measured minimum height, zero external bottom
+  spacing and a measured text minimum including room for the size grip. Disable AutoHint so menu hints do not
+  replace the engine count. No shared layout-helper changes are needed.
+- Extend multi-game, UCI and layout checks for the native status bar, absence of
+  the old label, bottom-edge placement, font fit and preserved counts. Focused
+  multi-game checks pass 175 assertions. Application compilation, all 19 GUI
+  suites and both tournament suites pass; layout/font/DPI checks pass 10,410
+  assertions and tournament tabs 364, with zero reported leaks on the final runs.
+  GUI tests use isolated hidden displays; native Windows visual QA is pending.
+- Update built-in Help and `chatgpt/ENGINE_ACTIVITY_INDICATOR_PROPOSAL.md`.
+
+
 ### Reuse tournament controls and compact measured fields — 2026-11-01
 
 Commit: `68035d0`.

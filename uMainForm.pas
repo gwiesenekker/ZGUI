@@ -128,7 +128,7 @@ type
     FGameState: TGameOrchestratorState;
     FGuiEventQueue: TThreadMessageQueue;
     FGuiEventTimer: TTimer;
-    FEngineUsageLabel: TLabel;
+    FEngineUsageStatusBar: TStatusBar;
     FBlackPlayerEdit: TEdit;
     FFenEdit: TEdit;
     FGameMoveMemo: TGameNotationView;
@@ -1375,17 +1375,17 @@ begin
   RefreshDisplayFromGameTree(FGameTree, True);
   InitializeGameContexts;
   if RegisteredGameCount>1 then UpdateContextFeatures;
-  FEngineUsageLabel := TLabel.Create(Self);
-  FEngineUsageLabel.Name := 'EngineUsageLabel';
-  FEngineUsageLabel.Parent := Self;
-  FEngineUsageLabel.Align := alBottom;
-  FEngineUsageLabel.Top := ClientHeight;
-  FEngineUsageLabel.AutoSize := True;
-  FEngineUsageLabel.BorderSpacing.Left := 8;
-  FEngineUsageLabel.BorderSpacing.Right := 8;
-  FEngineUsageLabel.BorderSpacing.Bottom := 4;
-  FEngineUsageLabel.ShowHint := True;
-  FEngineUsageLabel.Hint := 'Engine sessions across all games and tournaments, including annotators, '+
+  FEngineUsageStatusBar := TStatusBar.Create(Self);
+  FEngineUsageStatusBar.Name := 'EngineUsageStatusBar';
+  FEngineUsageStatusBar.Parent := Self;
+  FEngineUsageStatusBar.Align := alBottom;
+  FEngineUsageStatusBar.Top := ClientHeight;
+  FEngineUsageStatusBar.AutoSize := True;
+  FEngineUsageStatusBar.SimplePanel := True;
+  FEngineUsageStatusBar.AutoHint := False;
+  FEngineUsageStatusBar.UseSystemFont := False;
+  FEngineUsageStatusBar.ShowHint := True;
+  FEngineUsageStatusBar.Hint := 'Engine sessions across all games and tournaments, including annotators, '+
     'pondering, idle opponents and starting/stopping sessions. Remote DXP opponents are included. '+
     'Queued games and configuration probes are excluded. This is not a thread count or CPU-load measurement.';
   UpdateEngineUsage;
@@ -1443,8 +1443,12 @@ begin
   inherited RefreshLayout;
   if (FFenEdit=nil) or (FGameMoveMemo=nil) then Exit;
   UpdateAnalyzerTextSizes(nil);
-  if FEngineUsageLabel<>nil then
-    FEngineUsageLabel.Constraints.MinWidth:=MeasureGuiText(FEngineUsageLabel.Caption,FEngineUsageLabel.Font).cx;
+  if FEngineUsageStatusBar<>nil then begin
+    FEngineUsageStatusBar.Constraints.MinWidth:=MeasureGuiText(FEngineUsageStatusBar.SimpleText,FEngineUsageStatusBar.Font).cx+
+      MeasureGuiText('MM',FEngineUsageStatusBar.Font).cx+GetSystemMetrics(SM_CXVSCROLL);
+    FEngineUsageStatusBar.Constraints.MinHeight:=MeasureGuiText('Ag',FEngineUsageStatusBar.Font).cy+
+      2*GetSystemMetrics(SM_CYEDGE);
+  end;
   FieldWidth:=MeasureGuiText(FFenEdit.Text,FFenEdit.Font).cx;
   if GameVariantId(CurrentVariant)='chess' then
     FieldWidth:=Max(FieldWidth,MeasureGuiText(ChessFenSample,FFenEdit.Font).cx);
@@ -5722,7 +5726,7 @@ end;
 procedure TMainForm.UpdateEngineUsage;
 var I,Games,Annotators:Integer;Context:TGameUiContext;Game:TRunningGame;UsageText:string;
 begin
-  if FClosing or (FEngineUsageLabel=nil) then Exit;
+  if FClosing or (FEngineUsageStatusBar=nil) then Exit;
   Games:=0;Annotators:=0;
   if FGames<>nil then for I:=0 to FGames.Count-1 do begin
     Game:=TRunningGame(FGames[I]);
@@ -5738,8 +5742,8 @@ begin
   end;
   UsageText:='Engines in use: '+IntToStr(Games+Annotators)+' — games: '+IntToStr(Games)+
     ', annotators: '+IntToStr(Annotators);
-  if FEngineUsageLabel.Caption<>UsageText then begin
-    FEngineUsageLabel.Caption:=UsageText;
+  if FEngineUsageStatusBar.SimpleText<>UsageText then begin
+    FEngineUsageStatusBar.SimpleText:=UsageText;
     InvalidateLayout;
   end;
 end;

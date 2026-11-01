@@ -105,3 +105,37 @@ remains untouched.
 - Staged Pascal sources/tests matched the isolated tested source snapshot.
   Excluded unrelated unfinished engine-feature changes and left engine
   directories and user PGN files untouched. Native Windows QA remains pending.
+
+## Follow-up: native status bar — 2026-11-01
+
+Within this previously authorised readout, the user requested: “Can we remove the
+extra space below the engine-count label” and “Could we move it to the TStatusBar?”
+This is the named indicator's presentation correction; no scheduling, lifecycle,
+counting or other shared functionality changes. Claude reviews the resulting
+commit afterwards under the existing authorisation quoted above.
+
+Replace the main-window label with one native TStatusBar (SimplePanel/SimpleText),
+with no external bottom spacing. Native AutoSize uses a measured minimum height (font plus native borders), with
+the main window's font and a text minimum including margins/size-grip space. Leave AutoHint
+false so menu hints do not replace the engine total. Retain the explanatory Hint
+and ShowHint, and the existing update trigger/counting code.
+
+The multi-game check asserts native bottom-edge placement, absence of the old
+label/padded row, stable status text rather than automatic menu hints, and the
+same cross-game counters. The UCI check reads SimpleText. The full layout sweep
+checks bottom alignment and font fit at normal/enlarged fonts and different window
+sizes/DPI. The focused multi-game suite passes 175 checks. Full-suite results are
+recorded in CHANGELOG.md; all GUI execution uses hidden displays and isolated
+configuration. Native Windows visual confirmation remains pending.
+
+The enlarged-font check exposed a GTK status-bar preferred height that did not
+increase enough on its own. Set a measured minimum height using the current font
+plus native edge metrics, while retaining zero external spacing. The focused
+main-window font/size/DPI sweep then passes 1,188 checks with no reported leaks;
+its captured images confirm the status bar meets the bottom edge.
+
+Final verification: application compilation, all 19 GUI suites and both tournament
+suites pass on the final source. Layout/font/DPI: 10,410 checks; multi-game: 175;
+UCI GUI: 128; tournament tabs: 364; chess tournament: 101. Final heap reports show
+zero leaks. The isolated test snapshot matches the staged application/test source;
+unrelated unfinished engine-feature work is excluded from the build and commit.

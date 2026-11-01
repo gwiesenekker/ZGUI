@@ -54,7 +54,7 @@ When ZGUI starts, the main window shows:
 - buttons for **Engines...**, **New game...**, **Tournament...**, analysis time,
   and **Auto Play**.
 
-The bottom status line shows **Engines in use**, split into games and annotators,
+The bottom status bar shows **Engines in use**, split into games and annotators,
 across both games and every tournament tab. Each engine player counts once,
 including idle opponents and pondering; humans and queued pairings add nothing.
 Annotators include hidden game slots and the MCTS annotator. Auto Play reuses its

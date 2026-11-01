@@ -1,6 +1,6 @@
 program multi_game_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,ComCtrls,
   uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,
   uGameSetupTypes,uGameSetupForm,uGameOrchestrator,uRunningGame,uEngineEditForm,uMainForm,
   uEngineParamsJson,uGameBoardControl,uChessBoardControl,uDraughtsBoardControl,Menus,Controls,Dialogs,
@@ -91,17 +91,17 @@ end;
 
 procedure Pump;forward;
 procedure CheckUsage(Main:TMainForm;Games,Annotators:Integer;const Context:string);
-var LabelControl:TLabel;Expected:string;
+var StatusControl:TStatusBar;Expected:string;
 begin
   Main.TestDrainGuiEvents(True);
-  LabelControl:=TLabel(Main.FindComponent('EngineUsageLabel'));
+  StatusControl:=TStatusBar(Main.FindComponent('EngineUsageStatusBar'));
   Expected:='Engines in use: '+IntToStr(Games+Annotators)+' — games: '+IntToStr(Games)+
     ', annotators: '+IntToStr(Annotators);
-  Check((LabelControl<>nil) and (LabelControl.Caption=Expected),Context);
+  Check((StatusControl<>nil) and (StatusControl.SimpleText=Expected),Context);
 end;
 
 procedure UsageAndStartup;
-var Main:TMainForm;Setup:TGameSetup;A,B,C:TRunningGame;Keys:TStringList;LabelControl:TLabel;I:Integer;
+var Main:TMainForm;Setup:TGameSetup;A,B,C:TRunningGame;Keys:TStringList;StatusControl:TStatusBar;I:Integer;
 begin
   Main:=TMainForm.Create(nil);Keys:=TStringList.Create;
   try
@@ -109,10 +109,14 @@ begin
     CheckUsage(Main,0,0,'No engine sessions on startup');
     Main.Show;Pump;
     Check(not Button(Main,'Auto Play').Enabled,'Auto Play disabled after first Show');
-    LabelControl:=TLabel(Main.FindComponent('EngineUsageLabel'));
-    Check(LabelControl.Visible and (LabelControl.Align=alBottom) and
-      (LabelControl.Top+LabelControl.Height>=Main.ClientHeight-8),'Usage readout is in the bottom status area');
-    Check(LabelControl.ShowHint and (Pos('Remote DXP',LabelControl.Hint)>0),'Usage hint explains session-count semantics');
+    StatusControl:=TStatusBar(Main.FindComponent('EngineUsageStatusBar'));
+    Check(StatusControl.Visible and (StatusControl.Align=alBottom) and
+      (StatusControl.Top+StatusControl.Height>=Main.ClientHeight-8),'Usage readout is in the bottom status area');
+    Check(StatusControl.SimplePanel and not StatusControl.AutoHint,'Status bar keeps engine totals instead of replacing them with menu hints');
+    Check((Main.FindComponent('EngineUsageLabel')=nil) and
+      (StatusControl.Top+StatusControl.Height=Main.ClientHeight) and
+      (StatusControl.BorderSpacing.Bottom=0),'One native status bar reaches the bottom without an extra padded row');
+    Check(StatusControl.ShowHint and (Pos('Remote DXP',StatusControl.Hint)>0),'Usage hint explains session-count semantics');
     Keys.Add('engine-identity');Keys.Add('dxp-listen-port|27531');
     Setup:=Default(TGameSetup);Setup.Variant:=Draughts;Setup.StartingFEN:=Draughts.DefaultStartingFEN;
     A:=TRunningGame.Create(700,'Tournament A',nil,pkRegistered,pkRegistered,'a','b','A','B',Keys,Setup);
@@ -134,8 +138,8 @@ begin
     B.MarkFinished;C.MarkFinished;CheckUsage(Main,0,0,'All completed sessions release usage');
     for I:=0 to 1 do begin
       Main.Font.Size:=10+6*I;Main.RefreshLayout;Pump;
-      Check(LabelControl.Width>=LabelControl.Constraints.MinWidth,'Usage caption fits measured width at different fonts');
-      Check(LabelControl.Height>0,'Usage caption retains measured height');
+      Check(StatusControl.Width>=StatusControl.Constraints.MinWidth,'Usage caption fits measured width at different fonts');
+      Check(StatusControl.Height>0,'Usage caption retains measured height');
     end;
   finally Keys.Free;Main.Free;end;
 end;

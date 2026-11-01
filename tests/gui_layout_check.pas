@@ -31,6 +31,12 @@ begin
    H:=MeasureGuiText(TLabel(Child).Caption,Child.Font).cy;
    Check((W<=Child.Width+2) and (H<=Child.Height+2),Path+' text clipped '+TLabel(Child).Caption+' width='+IntToStr(Child.Width)+' required='+IntToStr(W)+' min='+IntToStr(Child.Constraints.MinWidth)+' max='+IntToStr(Child.Constraints.MaxWidth));
   end;
+  if Child.Name='EngineUsageStatusBar' then begin
+   Check((Child is TStatusBar) and (Child.Top+Child.Height=C.ClientHeight) and
+    (Child.BorderSpacing.Bottom=0),Path+' native status bar has no external bottom gap');
+   Check(Child.Height>=MeasureGuiText(TStatusBar(Child).SimpleText,Child.Font).cy,
+    Path+' status bar text fits the active font');
+  end;
   if Child is TGuiNumberEdit then begin
    W:=MeasureGuiText(TGuiNumberEdit(Child).WidthSample,Child.Font).cx;
    Check((Child.Width>=W) and
