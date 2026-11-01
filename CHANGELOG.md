@@ -7,7 +7,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Tournament controls and game-independent referee reasons — 2026-11-01
 
-Commit: pending.
+Commit: `06e5b89`.
 
 - User authorisation: “Apply the tournament update now; waive prior review”.
   Named scope: one-line time controls with minutes/seconds, separate Play /
