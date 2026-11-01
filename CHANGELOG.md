@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Remove excess height inside the Linux engine status bar — 2026-11-01
 
-Commit: pending.
+Commit: `07b90ab`.
 
 - Follow-up within the authorised engine readout: “Can we remove the extra
   space below the engine-count label” and “Could we move it to the TStatusBar?”
