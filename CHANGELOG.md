@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Show engine use in the native status bar — 2026-11-01
 
-Commit: pending.
+Commit: `2b56236`.
 
 - Follow-up within the authorised engine-use readout: “Can we remove the extra
   space below the engine-count label” and “Could we move it to the TStatusBar?”
