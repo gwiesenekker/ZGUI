@@ -1,6 +1,6 @@
 # ZGUI User Manual
 
-Updated 31 October 2026.
+Updated 1 November 2026.
 
 ZGUI plays, analyses and stores orthodox chess and international 10×10 draughts.
 Chess uses UCI engines and PGN files; draughts uses Hub/DXP engines and PDN files.
@@ -31,7 +31,7 @@ Ponder option and protocol-specific handling.
 
 The Tournaments window holds named tabs, each with its own settings, pairings
 and standings. Several chess and draughts tournaments can run at once. The Game
-choice changes the current tab after protecting its existing data. Set concurrency and engine thread counts with available CPU and memory
+choice beside the starting FEN changes the current tab after protecting its existing data. Set concurrency and engine thread counts with available CPU and memory
 in mind: games, annotators and tournaments can all be active together.
 
 Open accepts PGN and PDN. When a file's game is ambiguous, choose it explicitly.
@@ -53,6 +53,16 @@ When ZGUI starts, the main window shows:
 - a score-history graph and evaluation bar;
 - buttons for **Engines...**, **New game...**, **Tournament...**, analysis time,
   and **Auto Play**.
+
+The bottom status line shows **Engines in use**, split into games and annotators,
+across both games and every tournament tab. Each engine player counts once,
+including idle opponents and pondering; humans and queued pairings add nothing.
+Annotators include hidden game slots and the MCTS annotator. Auto Play reuses its
+annotator and adds no separate engine. Starting and stopping sessions count until
+their owners finish releasing them. Remote DXP opponents are included; temporary
+engine-configuration probes are excluded. This is a session count to help judge
+oversubscription, not a thread count or a measurement of CPU usage. Hover over the
+readout for its counting rules.
 
 The splitters let you resize the notation and analysis areas. Ten notation lines
 are preferred when space permits; smaller windows can reduce the notation to

@@ -89,6 +89,57 @@ begin
   raise Exception.Create('Missing menu '+Caption);
 end;
 
+procedure Pump;forward;
+procedure CheckUsage(Main:TMainForm;Games,Annotators:Integer;const Context:string);
+var LabelControl:TLabel;Expected:string;
+begin
+  Main.TestDrainGuiEvents(True);
+  LabelControl:=TLabel(Main.FindComponent('EngineUsageLabel'));
+  Expected:='Engines in use: '+IntToStr(Games+Annotators)+' — games: '+IntToStr(Games)+
+    ', annotators: '+IntToStr(Annotators);
+  Check((LabelControl<>nil) and (LabelControl.Caption=Expected),Context);
+end;
+
+procedure UsageAndStartup;
+var Main:TMainForm;Setup:TGameSetup;A,B,C:TRunningGame;Keys:TStringList;LabelControl:TLabel;I:Integer;
+begin
+  Main:=TMainForm.Create(nil);Keys:=TStringList.Create;
+  try
+    Check(not Button(Main,'Auto Play').Enabled,'Auto Play disabled immediately after construction');
+    CheckUsage(Main,0,0,'No engine sessions on startup');
+    Main.Show;Pump;
+    Check(not Button(Main,'Auto Play').Enabled,'Auto Play disabled after first Show');
+    LabelControl:=TLabel(Main.FindComponent('EngineUsageLabel'));
+    Check(LabelControl.Visible and (LabelControl.Align=alBottom) and
+      (LabelControl.Top+LabelControl.Height>=Main.ClientHeight-8),'Usage readout is in the bottom status area');
+    Check(LabelControl.ShowHint and (Pos('Remote DXP',LabelControl.Hint)>0),'Usage hint explains session-count semantics');
+    Keys.Add('engine-identity');Keys.Add('dxp-listen-port|27531');
+    Setup:=Default(TGameSetup);Setup.Variant:=Draughts;Setup.StartingFEN:=Draughts.DefaultStartingFEN;
+    A:=TRunningGame.Create(700,'Tournament A',nil,pkRegistered,pkRegistered,'a','b','A','B',Keys,Setup);
+    A.TournamentOwner:=Main;Main.TestRegisterGame(A);
+    Setup.Variant:=Chess;Setup.StartingFEN:=Chess.DefaultStartingFEN;
+    B:=TRunningGame.Create(701,'Tournament B',nil,pkHuman,pkRegistered,'','c','Human','C',nil,Setup);
+    B.TournamentOwner:=Main;Main.TestRegisterGame(B);
+    C:=TRunningGame.Create(702,'Human game',nil,pkHuman,pkHuman,'','','Human','Human',nil,Setup);
+    Main.TestRegisterGame(C);
+    CheckUsage(Main,3,0,'Multiple game slots count independently of reservation keys and human players');
+    for I:=0 to 3 do begin
+      if Odd(I) then Main.SelectGameVariant(Chess) else Main.SelectGameVariant(Draughts);
+      CheckUsage(Main,3,0,'Usage remains global across profile switches');
+      Check(not Button(Main,'Auto Play').Enabled,'Feature refresh must not enable Auto Play without annotator');
+    end;
+    A.RequestStop('test');B.RequestRemoval;
+    CheckUsage(Main,3,0,'Stopping/removing sessions count until completion');
+    A.MarkFinished;CheckUsage(Main,1,0,'Completed engine pair removed from usage');
+    B.MarkFinished;C.MarkFinished;CheckUsage(Main,0,0,'All completed sessions release usage');
+    for I:=0 to 1 do begin
+      Main.Font.Size:=10+6*I;Main.RefreshLayout;Pump;
+      Check(LabelControl.Width>=LabelControl.Constraints.MinWidth,'Usage caption fits measured width at different fonts');
+      Check(LabelControl.Height>0,'Usage caption retains measured height');
+    end;
+  finally Keys.Free;Main.Free;end;
+end;
+
 procedure RegistryAndContexts;
 var Candidate:TGameVariant;Rejected:Boolean;Setup:TGameSetup;Game:TRunningGame;
     Dialog:TGameSetupForm;Editor:TEngineEditForm;I:Integer;Kind:TComboBox;
@@ -387,6 +438,30 @@ var Main:TMainForm;Engines:TExternalEngineList;Defs:array[0..5]of TExternalEngin
     repeat Drain;until (Main.ActiveGameTree.Root.AnnotatorPV<>'') or (GetTickCount64-Started>5000);
     Check(Main.ActiveGameTree.Root.AnnotatorPV<>'','Context annotator produces a scored PV');
   end;
+  procedure CheckMctsUsage;
+  var Params:TEngineParamArray;Name,Before:string;Saved:Boolean;Item:TMenuItem;Popup:TPopupMenu;
+      K:Integer;Started:QWord;Mcts:TAnalyzerRunnerThread;Config:TStringList;
+  begin
+    if RealEngines then Exit; // Only write configuration beside the disposable test peer.
+    Name:=EngineParamsFileName(Defs[2].ExePath);Config:=TStringList.Create;Saved:=FileExists(Name);
+    try
+      Before:='';if Saved then begin Config.LoadFromFile(Name);Before:=Config.Text;end;
+      LoadEngineParamsFromJson(Name,'hub',Params);
+      AddOrUpdateParam(Params,'gui-engine-supports-mcts','bool','true',False);
+      SaveEngineParamsToJson(Name,'hub',Params);
+      Item:=Menu(Main,'Open MCTS annotator');Popup:=TPopupMenu(Item.GetParentMenu);Popup.OnPopup(Popup);
+      for K:=0 to Item.Count-1 do if Item.Items[K].Hint=EngineIdentityKey(Defs[2]) then begin Item.Items[K].Click;Break;end;
+      Mcts:=Main.TestMctsRunner;Check(Mcts<>nil,'MCTS session started');
+      CheckUsage(Main,0,3,'MCTS annotator contributes a separate engine session');
+      Main.SelectGameVariant(Chess);CheckUsage(Main,0,3,'Hidden MCTS remains counted without duplicate active context');
+      Main.SelectGameVariant(Draughts);Menu(Main,'Close MCTS annotator').Click;
+      Started:=GetTickCount64;repeat Drain;until (Main.TestMctsRunner=nil) or (GetTickCount64-Started>5000);
+      CheckUsage(Main,0,2,'MCTS shutdown releases only its own session');
+    finally
+      if Saved then begin Config.Text:=Before;Config.SaveToFile(Name);end else DeleteFile(Name);
+      Config.Free;
+    end;
+  end;
   procedure SaveReload(Game:TRunningGame;const ResultText:string);
   begin
     History.ItemIndex:=History.Items.IndexOfObject(Game);History.OnClick(History);Drain;
@@ -475,7 +550,10 @@ var Main:TMainForm;Engines:TExternalEngineList;Defs:array[0..5]of TExternalEngin
       Check((TournamentFileVariant(CFile,Chess)=Chess) and (TournamentFileVariant(DFile,Chess)=Draughts),
         'Tournament metadata selects its own variant');
       GuiTestConfirmationResult:=mrYes;
-      try Button(C,'Play').Click;Button(D,'Play').Click;finally GuiTestConfirmationResult:=0;end;
+      try
+        CheckUsage(Main,0,0,'Queued pairings reserve no engine sessions');
+        Button(C,'Play').Click;Button(D,'Play').Click;
+      finally GuiTestConfirmationResult:=0;end;
       Check(C.IsRunning and D.IsRunning,'Both tournament schedulers run together');
       GuiTestConfirmationResult:=mrCancel;
       try Main.OnCloseQuery(Main,CanQuit);finally GuiTestConfirmationResult:=0;end;
@@ -525,18 +603,24 @@ begin
     Check((A.GameTree.ResultText='1-0') and (B.GameTree.ResultText='2-0'),'Concurrent engine games finish in correct results');
     Check((A.GameTree.MainlineCount=1) and (B.GameTree.MainlineCount=1),'Concurrent game trees contain only their own moves');
     SaveReload(A,'1-0');SaveReload(B,'1-0'); // Existing PDN export normalises 2-0 to 1-0.
+    CheckUsage(Main,0,0,'Real completed matches leave no active sessions');
     Main.SelectGameVariant(Chess);OpenAnnotator(Defs[4]);CA:=Main.TestAnalyzerRunner;
+    CheckUsage(Main,0,1,'Open chess annotator adds one session');
     Stale:=TAnalyzerLogGuiMessage.Create('old-session-must-not-appear',CA);
     Main.SelectGameVariant(Draughts);OpenAnnotator(Defs[5]);HA:=Main.TestAnalyzerRunner;
     Main.CollectBusyEngineKeys(Busy);Check(Busy.Count=2,'Both loaded annotator slots reserve engines');
+    CheckUsage(Main,0,2,'Visible and hidden annotators each count once');
+    CheckMctsUsage;
     Main.TestGuiEventQueue.Post(TAnalyzerLogGuiMessage.Create('chess-hidden-log',CA));Drain;
     Check(Pos('chess-hidden-log',TMemo(Main.FindComponent('AnnotatorLogMemo')).Text)=0,'Hidden chess log stays out of draughts panel');
     Main.SelectGameVariant(Chess);Drain;
     Check(Main.TestAnalyzerRunner=CA,'Returning to chess retains the loaded annotator runner');
+    CheckUsage(Main,0,2,'Context restore does not double count saved active references');
     Check(Pos('chess-hidden-log',TMemo(Main.FindComponent('AnnotatorLogMemo')).Text)>0,'Chess panel restores its own log');
     HA.PostShutdown;Tick:=GetTickCount64;
     repeat Drain;Main.CollectBusyEngineKeys(Busy);until (Busy.Count=1) or (GetTickCount64-Tick>5000);
     Check((Main.TestAnalyzerRunner=CA) and (Busy.Count=1),'Hidden slot finish releases only its own runner and reservation');
+    CheckUsage(Main,0,1,'Hidden annotator shutdown updates global usage');
     Menu(Main,'Close Annotator').Click;Tick:=GetTickCount64;
     repeat Drain;until (Main.TestAnalyzerRunner=nil) or (GetTickCount64-Tick>5000);
     OpenAnnotator(Defs[4]);NewCA:=Main.TestAnalyzerRunner;Check(NewCA.SessionId<>Stale.SessionId,'Restart allocates a new session generation');
@@ -550,6 +634,8 @@ begin
     ReviewT5C6;
     Menu(Main,'Close Annotator').Click;Main.SelectGameVariant(Draughts);Menu(Main,'Close Annotator').Click;
     Tick:=GetTickCount64;repeat Drain;Main.CollectBusyEngineKeys(Busy);until (Busy.Count=0) or (GetTickCount64-Tick>5000);
+    CheckUsage(Main,0,0,'Closing both annotators releases all usage');
+    Check(not Button(Main,'Auto Play').Enabled,'Closing annotators disables Auto Play');
     // Remove the two analysis-only test registrations from the tournament lists.
     Engines.Delete(5);Engines.Delete(4);SaveExternalEngines(EnginesJsonFileName,Engines);
     Tournaments;
@@ -564,7 +650,7 @@ begin
   RequireDerivedFormResource:=False;Application.Initialize;Application.ShowMainForm:=False;Application.CaptureExceptions:=False;
   Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
   RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
-  try WriteLn('Registry');Flush(Output);RegistryAndContexts;
+  try UsageAndStartup;WriteLn('Registry');Flush(Output);RegistryAndContexts;
     WriteLn('Preferences/files');Flush(Output);PreferencesAndFiles;
     WriteLn('Views');Flush(Output);MixedViews;DraughtsStartup;
     WriteLn('Review follow-up');Flush(Output);ReviewPvAttach;ReviewRemaining;

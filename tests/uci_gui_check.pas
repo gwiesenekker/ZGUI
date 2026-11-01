@@ -326,6 +326,9 @@ begin
       'Auto Play displays the real current node');
     Lines.LoadFromFile(Trace);Wire:=Lines.Text;
     Check(Button(F,'Stop').Enabled,'Active Auto Play exposes an enabled Stop button');
+    F.TestDrainGuiEvents(True);
+    Check(TLabel(F.FindComponent('EngineUsageLabel')).Caption=
+      'Engines in use: 1 — games: 0, annotators: 1','Auto Play reuses its annotator session');
     Late:=F.TestAutoPlay.Search;
     Button(F,'Stop').Click;Found:=IntToStr(F.ActiveGameTree.MainlineCount);Tick:=GetTickCount64;
     Snapshot:=TPvSnapshot.Create;Snapshot.SetDataWithSearch(P,F.ActiveGameTree.MainlineCount,P.LegalMove(0),

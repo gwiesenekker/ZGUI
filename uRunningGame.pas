@@ -83,6 +83,7 @@ type
     destructor Destroy; override;
 
     function IsEngineReservationActive: Boolean;
+    function EnginePlayerCount: Integer;
     function CanEditGameTree: Boolean;
     function IsHumanToMove: Boolean;
     function GameTreeId: Int64;
@@ -310,6 +311,13 @@ end;
 function TRunningGame.IsEngineReservationActive: Boolean;
 begin
   Result := FLifecycle <> rglFinished;
+end;
+
+function TRunningGame.EnginePlayerCount: Integer;
+begin
+  Result := 0;
+  if FWhitePlayerKind = pkRegistered then Inc(Result);
+  if FBlackPlayerKind = pkRegistered then Inc(Result);
 end;
 
 function TRunningGame.CanEditGameTree: Boolean;

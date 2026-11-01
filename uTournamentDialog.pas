@@ -317,7 +317,7 @@ var
   Id: TGUID;
   GameIndex:Integer;
   NameLabel,FenLabel,MovesLabel,MinutesLabel,IncrementLabel,ConcurrentLabel:TLabel;
-  SettingsColumn,ActionsColumn,ClockRow:TPanel;
+  SettingsColumn,ActionsColumn,ClockRow,FenRow:TPanel;
 begin
   inherited Create(AOwner);
   DisableAlign;
@@ -610,7 +610,11 @@ begin
   FAcceptedTournamentSignature := TournamentSignature;
   AcceptInitialSettings;
   NameLabel:=TLabel(ButtonPanel.Controls[0]);FenLabel:=TLabel(ButtonPanel.Controls[2]);
-  SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]);
+  if FGameCombo<>nil then begin
+    FenRow:=LayoutRow(ButtonPanel,[FStartingFENEdit,FGameCombo],0);
+    SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FenRow]);
+  end else
+    SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]);
   SettingsColumn.Top:=0;
   ClockRow:=LayoutStack(ButtonPanel);
   with LayoutFields(ClockRow,[MovesLabel,FMovesEdit,MinutesLabel,FMinutesEdit,
@@ -620,7 +624,6 @@ begin
   with LayoutRow(ActionsColumn,[CreateButton,ClearButton]) do Top:=0;
   with LayoutRow(ActionsColumn,[FStartStopButton,SaveButton,LoadButton]) do Top:=1;
   with LayoutFields(ActionsColumn,[ConcurrentLabel,FConcurrentGamesEdit]) do Top:=2;
-  if FGameCombo<>nil then with LayoutRow(ActionsColumn,[FGameCombo],0) do Top:=3;
   FRoundRobinGroup.AutoSize:=True;
   with LayoutFlow(ButtonPanel,[ClockRow,FRoundRobinGroup,ActionsColumn]) do Top:=1;
   ButtonPanel.AutoSize:=True;
@@ -637,7 +640,7 @@ end;
 
 procedure TTournamentDialog.RefreshLayout;
 const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
-var FieldWidth,LabelWidth,I:Integer;Fields:TWinControl;
+var FieldWidth,LabelWidth,ContentWidth,GameWidth,I:Integer;Fields:TWinControl;
 begin
   inherited RefreshLayout;
   if FStartingFENEdit=nil then Exit;
@@ -647,12 +650,25 @@ begin
   Inc(FieldWidth,MeasureGuiText('MM',FStartingFENEdit.Font).cx);
   FStartingFENEdit.Constraints.MinWidth:=FieldWidth;
   Fields:=FStartingFENEdit.Parent;
+  ContentWidth:=FieldWidth;
+  if FGameCombo<>nil then begin
+    GameWidth:=0;
+    for I:=0 to FGameCombo.Items.Count-1 do
+      GameWidth:=Max(GameWidth,MeasureGuiText(FGameCombo.Items[I],FGameCombo.Font).cx);
+    Inc(GameWidth,MeasureGuiText('Ag',FGameCombo.Font).cy+MeasureGuiText('MM',FGameCombo.Font).cx);
+    FGameCombo.Constraints.MaxWidth:=0;
+    FGameCombo.Constraints.MinWidth:=GameWidth;
+    FGameCombo.Constraints.MaxWidth:=GameWidth;
+    Inc(ContentWidth,FGameCombo.Constraints.MinWidth+Fields.ChildSizing.HorizontalSpacing);
+    Fields.Constraints.MinWidth:=ContentWidth;
+    Fields:=Fields.Parent;
+  end;
   LabelWidth:=0;
   for I:=0 to Fields.ControlCount-1 do
     if Fields.Controls[I] is TLabel then
       LabelWidth:=Max(LabelWidth,MeasureGuiText(TLabel(Fields.Controls[I]).Caption,Fields.Controls[I].Font).cx);
   Fields.Constraints.MinWidth:=Max(Fields.Constraints.MinWidth,
-    LabelWidth+FieldWidth+Fields.ChildSizing.HorizontalSpacing);
+    LabelWidth+ContentWidth+Fields.ChildSizing.HorizontalSpacing);
   RefreshMinimum;
 end;
 

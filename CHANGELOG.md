@@ -4,6 +4,42 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Show engine use and correct startup/tournament presentation — 2026-11-01
+
+Commit: pending.
+
+- User authorisation: “Please proceed with the small toolbar readout. We could
+  also show it in the bottom area of the window?” Implement this named readout in
+  the bottom status area, with subsequent Claude review. Separate explicit waiver:
+  “Apply the Auto Play correction too; waive prior review”. Scope and user words
+  recorded in `chatgpt/ENGINE_ACTIVITY_INDICATOR_PROPOSAL.md` and
+  `chatgpt/AUTOPLAY_STARTUP_BUTTON_PROPOSAL.md`.
+- Show a measured global “Engines in use” total with game/annotator breakdown.
+  Count player slots across chess, draughts and all tournaments, plus visible and
+  hidden annotator/MCTS sessions. Include pondering, idle opponents and sessions
+  awaiting startup/shutdown completion. Exclude humans, queued pairings and
+  configuration probes. Count remote DXP sessions too; explain this distinction
+  from CPU usage/thread counts in the tooltip and manual. No scheduling changes.
+- Reapply the existing Auto Play availability check after game-feature refresh;
+  startup and profile switches no longer enable it without an annotator. Preserve
+  the existing Auto Play/Stop conditions and all game/analysis behavior.
+- Additional layout authorisation: “Apply the layout change now; waive prior
+  review”. Move the existing tournament Chess/Draughts chooser to the right of
+  the starting FEN, in the same measured row. Keep the complete FEN minimum and
+  size the chooser to all game names plus margin; preserve settings and switching.
+  Scope and verification recorded in `chatgpt/TOURNAMENT_GAME_CHOOSER_LAYOUT_NOTES.md`.
+- At the user's request, update AGENTS.md: first ask whether to implement the
+  named shared change with prior review waived or seek review first. Write a
+  proposal only when the review-first route is chosen; preserve existing named
+  approvals, both-game verification and reuse requirements.
+- Both games share these visible corrections. Application compilation, the full
+  headless regression sweep, all 19 GUI suites and both tournament suites pass.
+  Focused multi-game checks cover 173 assertions; final layout sweep passes 9762
+  checks, with zero reported leaks. UCI GUI/Auto Play passes 128 checks and
+  tournament tabs 200. GUI execution uses hidden displays and isolated files;
+  native Windows QA remains pending. Unrelated engine-feature work is excluded.
+
+
 ### Retain specific tournament termination reasons — 2026-11-01
 
 Commit: `07ea315`.

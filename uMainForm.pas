@@ -128,6 +128,7 @@ type
     FGameState: TGameOrchestratorState;
     FGuiEventQueue: TThreadMessageQueue;
     FGuiEventTimer: TTimer;
+    FEngineUsageLabel: TLabel;
     FBlackPlayerEdit: TEdit;
     FFenEdit: TEdit;
     FGameMoveMemo: TGameNotationView;
@@ -464,6 +465,7 @@ type
     function CurrentNotationSelection: TNotationSelection;
     procedure UpdateGameMoveHighlight;
     procedure UpdateAutoPlayButtonState;
+    procedure UpdateEngineUsage;
     function AutoPlayAtDisplayedNode(ATree:TGameTree):Boolean;
     procedure UpdateAnalyzerTextSizes(Sender:TObject);
     procedure StartAutoPlay;
@@ -1372,6 +1374,20 @@ begin
   RefreshDisplayFromGameTree(FGameTree, True);
   InitializeGameContexts;
   if RegisteredGameCount>1 then UpdateContextFeatures;
+  FEngineUsageLabel := TLabel.Create(Self);
+  FEngineUsageLabel.Name := 'EngineUsageLabel';
+  FEngineUsageLabel.Parent := Self;
+  FEngineUsageLabel.Align := alBottom;
+  FEngineUsageLabel.Top := ClientHeight;
+  FEngineUsageLabel.AutoSize := True;
+  FEngineUsageLabel.BorderSpacing.Left := 8;
+  FEngineUsageLabel.BorderSpacing.Right := 8;
+  FEngineUsageLabel.BorderSpacing.Bottom := 4;
+  FEngineUsageLabel.ShowHint := True;
+  FEngineUsageLabel.Hint := 'Engine sessions across all games and tournaments, including annotators, '+
+    'pondering, idle opponents and starting/stopping sessions. Remote DXP opponents are included. '+
+    'Queued games and configuration probes are excluded. This is not a thread count or CPU-load measurement.';
+  UpdateEngineUsage;
   EnableAutoLayout;
 end;
 
@@ -1426,6 +1442,8 @@ begin
   inherited RefreshLayout;
   if (FFenEdit=nil) or (FGameMoveMemo=nil) then Exit;
   UpdateAnalyzerTextSizes(nil);
+  if FEngineUsageLabel<>nil then
+    FEngineUsageLabel.Constraints.MinWidth:=MeasureGuiText(FEngineUsageLabel.Caption,FEngineUsageLabel.Font).cx;
   FieldWidth:=MeasureGuiText(FFenEdit.Text,FFenEdit.Font).cx;
   if GameVariantId(CurrentVariant)='chess' then
     FieldWidth:=Max(FieldWidth,MeasureGuiText(ChessFenSample,FFenEdit.Font).cx);
@@ -1756,6 +1774,7 @@ begin
     if TMenuItem(Components[I]).OnClick=@OpenPdnClick then TMenuItem(Components[I]).Caption:='&Open game...';
     if TMenuItem(Components[I]).OnClick=@SavePdnClick then TMenuItem(Components[I]).Caption:='&Save '+GameGuiProfileFor(CurrentVariant).FormatName+'...';
   end;
+  UpdateAutoPlayButtonState;
 end;
 
 function TMainForm.ActiveGameTree: TGameTree;
@@ -5699,6 +5718,31 @@ begin
   end;
 end;
 
+procedure TMainForm.UpdateEngineUsage;
+var I,Games,Annotators:Integer;Context:TGameUiContext;Game:TRunningGame;UsageText:string;
+begin
+  if FClosing or (FEngineUsageLabel=nil) then Exit;
+  Games:=0;Annotators:=0;
+  if FGames<>nil then for I:=0 to FGames.Count-1 do begin
+    Game:=TRunningGame(FGames[I]);
+    if Game.IsEngineReservationActive then Inc(Games,Game.EnginePlayerCount);
+  end;
+  if FAnalyzerRunner<>nil then Inc(Annotators);
+  if FMctsRunner<>nil then Inc(Annotators);
+  if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
+    Context:=TGameUiContext(FGameContexts[I]);
+    if Context=FActiveContext then Continue;
+    if Context.FAnalyzerRunner<>nil then Inc(Annotators);
+    if Context.FMctsRunner<>nil then Inc(Annotators);
+  end;
+  UsageText:='Engines in use: '+IntToStr(Games+Annotators)+' — games: '+IntToStr(Games)+
+    ', annotators: '+IntToStr(Annotators);
+  if FEngineUsageLabel.Caption<>UsageText then begin
+    FEngineUsageLabel.Caption:=UsageText;
+    InvalidateLayout;
+  end;
+end;
+
 procedure TMainForm.MarkGameStopped(AGame: TRunningGame; const AReason: string);
 begin
   if AGame = nil then
@@ -6021,6 +6065,7 @@ begin
     FlushPendingRunnerSnapshots;
     ProcessQueuedGameTreeCommands;
   end;
+  UpdateEngineUsage;
   if not FClosing and (SelectedDisplayedGame<>nil) then
     UpdateClockLabels(ActiveGameTree,SelectedDisplayedGame.WhiteNameText,SelectedDisplayedGame.BlackNameText);
 end;

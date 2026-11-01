@@ -14,7 +14,7 @@ var Checks,Failures:Integer;Errors:TErrors;
 procedure Check(B:Boolean;const Msg:string);
 begin Inc(Checks);if not B then begin Inc(Failures);WriteLn('FAIL: ',Msg);end;end;
 procedure Inspect(C:TWinControl;Root:TForm);
-var I,J:Integer;Child:TControl;W,H:Integer;Path:string;
+var I,J:Integer;Child:TControl;W,H:Integer;Path:string;Choice:TComboBox;
 begin
  for I:=0 to C.ControlCount-1 do begin
   Child:=C.Controls[I];if not Child.Visible then Continue;
@@ -34,7 +34,16 @@ begin
   if Child.Name='TournamentStartingFEN' then begin
    W:=MeasureGuiText(TEdit(Child).Text,Child.Font).cx+MeasureGuiText('MM',Child.Font).cx;
    Check(Child.Width>=W,Path+' complete starting FEN plus margin');
-   Check(Child.Parent.Width>=Root.ClientWidth-32,Path+' full-width settings rows');
+   Choice:=TComboBox(Root.FindComponent('TournamentVariant'));
+   if Choice<>nil then begin
+    Check(Choice.Parent=Child.Parent,Path+' game chooser shares FEN row');
+    Check(Choice.Left>=Child.Left+Child.Width,Path+' game chooser is to the right of FEN');
+    Check(Abs(Choice.Top-Child.Top)<=2,Path+' game chooser aligns with FEN');
+    W:=0;for J:=0 to Choice.Items.Count-1 do W:=Max(W,MeasureGuiText(Choice.Items[J],Choice.Font).cx);
+    Inc(W,MeasureGuiText('Ag',Choice.Font).cy+MeasureGuiText('MM',Choice.Font).cx);
+    Check(Choice.Width<=W+2,Path+' chooser width is measured to its values: '+IntToStr(Choice.Width)+' expected '+IntToStr(W));
+    Check(Child.Parent.Parent.Width>=Root.ClientWidth-32,Path+' full-width settings rows');
+   end else Check(Child.Parent.Width>=Root.ClientWidth-32,Path+' full-width settings rows');
   end;
   if (C is TRadioGroup) and (Child is TRadioButton) then begin
    Child.GetPreferredSize(W,H,True);
@@ -86,6 +95,8 @@ begin
     if Mode=3 then F.WindowState:=wsNormal;
    end;
    if (ParamStr(1)='--images') or (ParamStr(2)='--images') then begin
+    // Let the native window finish restoring from maximized before capturing it.
+    for I:=1 to 5 do begin Application.ProcessMessages;Sleep(5);end;
     Img:=F.GetFormImage;Png:=TPortableNetworkGraphic.Create;
     try Png.Assign(Img);Png.SaveToFile('/tmp/layout-'+F.ClassName+'-'+IntToStr(Size)+'.png');finally Png.Free;Img.Free;end;
    end;
