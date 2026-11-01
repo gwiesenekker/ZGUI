@@ -139,3 +139,29 @@ suites pass on the final source. Layout/font/DPI: 10,410 checks; multi-game: 175
 UCI GUI: 128; tournament tabs: 364; chess tournament: 101. Final heap reports show
 zero leaks. The isolated test snapshot matches the staged application/test source;
 unrelated unfinished engine-feature work is excluded from the build and commit.
+
+
+## Follow-up: GTK2 internal status-bar height — 2026-11-01
+
+Within the earlier authorisation, “Can we remove the extra space below the
+engine-count label” and “Could we move it to the TStatusBar?”, the user supplied
+Linux and Windows screenshots. Windows fits one line. Linux shows blank space
+inside the status-bar bounds, which bottom-edge placement checks alone missed.
+
+The Lazarus GTK2 status-bar implementation obtains preferred height from a
+separate theme widget (`TGtk2WSStatusBar.GetPreferredSize`), rather than measuring
+this control's font. A minimum height only prevents clipping; it cannot constrain
+an excessive preferred height. For LCLGTK2 only, disable native AutoSize and set
+Height from the existing measured minimum (current font plus native edge space)
+in RefreshLayout. Keep normal native sizing on Windows. Retain TStatusBar,
+its alignment, hints, count and update triggers. No native widget replacement,
+GTK theme modification or engine/game logic changes.
+
+Extend the existing both-game layout sweep to bound the GTK height by the text
+height plus native edge space, as well as checking bottom placement and text fit.
+Focused main-window
+font/size/DPI checks pass 1,204 assertions without leaks; full-suite and build
+results are recorded in CHANGELOG.md. All GUI execution uses hidden displays.
+The user's desktop theme still needs visual confirmation after restarting the
+rebuilt Linux executable. This correction remains in the named readout scope;
+Claude can review the resulting commit afterwards.

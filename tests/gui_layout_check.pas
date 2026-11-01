@@ -1,7 +1,7 @@
 program gui_layout_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
- Math,ComCtrls,Graphics,ExtCtrls,uGuiLayout,uGuiDialogs,uGamePosition,uChessPosition,
+ Math,ComCtrls,Graphics,ExtCtrls,LCLIntf,LCLType,uGuiLayout,uGuiDialogs,uGamePosition,uChessPosition,
  uDraughtsPosition,uGameGuiProfile,uEngineEditForm,uEnginesDialog,uGameSetupForm,
  uTournamentDialog,uPreferencesForm,uDatabaseForm,uDraughtsPositionSetupForm,uMainForm,
  uPreferences,uManualForm,uPdnOpenDialog,uScoreHistoryForm;
@@ -36,6 +36,11 @@ begin
     (Child.BorderSpacing.Bottom=0),Path+' native status bar has no external bottom gap');
    Check(Child.Height>=MeasureGuiText(TStatusBar(Child).SimpleText,Child.Font).cy,
     Path+' status bar text fits the active font');
+   {$IFDEF LCLGTK2}
+   Check(Child.Height<=MeasureGuiText(TStatusBar(Child).SimpleText,Child.Font).cy+
+     2*GetSystemMetrics(SM_CYEDGE),
+    Path+' GTK status bar uses its measured height without a theme-sized blank strip');
+   {$ENDIF}
   end;
   if Child is TGuiNumberEdit then begin
    W:=MeasureGuiText(TGuiNumberEdit(Child).WidthSample,Child.Font).cx;

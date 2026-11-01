@@ -1381,6 +1381,11 @@ begin
   FEngineUsageStatusBar.Align := alBottom;
   FEngineUsageStatusBar.Top := ClientHeight;
   FEngineUsageStatusBar.AutoSize := True;
+  {$IFDEF LCLGTK2}
+  // GTK2's preferred status-bar height comes from a separate theme widget,
+  // rather than this control's font. Set its measured height in RefreshLayout.
+  FEngineUsageStatusBar.AutoSize := False;
+  {$ENDIF}
   FEngineUsageStatusBar.SimplePanel := True;
   FEngineUsageStatusBar.AutoHint := False;
   FEngineUsageStatusBar.UseSystemFont := False;
@@ -1448,6 +1453,9 @@ begin
       MeasureGuiText('MM',FEngineUsageStatusBar.Font).cx+GetSystemMetrics(SM_CXVSCROLL);
     FEngineUsageStatusBar.Constraints.MinHeight:=MeasureGuiText('Ag',FEngineUsageStatusBar.Font).cy+
       2*GetSystemMetrics(SM_CYEDGE);
+    {$IFDEF LCLGTK2}
+    FEngineUsageStatusBar.Height:=FEngineUsageStatusBar.Constraints.MinHeight;
+    {$ENDIF}
   end;
   FieldWidth:=MeasureGuiText(FFenEdit.Text,FFenEdit.Font).cx;
   if GameVariantId(CurrentVariant)='chess' then

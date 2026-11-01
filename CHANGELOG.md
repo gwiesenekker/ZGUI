@@ -4,6 +4,25 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Remove excess height inside the Linux engine status bar — 2026-11-01
+
+Commit: pending.
+
+- Follow-up within the authorised engine readout: “Can we remove the extra
+  space below the engine-count label” and “Could we move it to the TStatusBar?”
+  User screenshots show an internal blank strip on Linux; Windows fits correctly.
+- For GTK2 only, set the existing native status bar to its measured font height
+  plus native edge space, instead of accepting a potentially larger preferred
+  height from GTK2's separate theme widget. Keep Windows native sizing. Both
+  chess and draughts retain the same engine counts, hints and bottom alignment.
+- Extend the existing font/window/DPI sweep to check compact GTK height, not
+  merely bottom-edge placement. Focused checks pass 1,204 assertions with no
+  reported leaks. Application compilation, all 20 GUI suites and both tournament
+  suites pass. Full layout sweep: 10,426 checks; tournament tabs: 380 checks.
+- Notes: `chatgpt/ENGINE_ACTIVITY_INDICATOR_PROPOSAL.md`. The user's Linux theme
+  needs visual confirmation after restart; supplied Windows appearance is retained.
+
+
 ### Engine compatibility flags and optional DXP PV — 2026-11-01
 
 Commit: `79c336c`.
