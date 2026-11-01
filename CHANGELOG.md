@@ -10,7 +10,7 @@ No unreleased changes.
 
 ### First ZGUI release
 
-Commit: pending.
+Commit: `4462544`.
 
 - Publish chess and international draughts together as ZGUI 1.0, based on
   GWDGUI 3.4 and the existing shared infrastructure.
