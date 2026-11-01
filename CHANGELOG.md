@@ -4,6 +4,28 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+No unreleased changes.
+
+## 1.0 — 2026-11-01
+
+### First ZGUI release
+
+Commit: pending.
+
+- Publish chess and international draughts together as ZGUI 1.0, based on
+  GWDGUI 3.4 and the existing shared infrastructure.
+- Refresh README installation/features/build instructions and correct obsolete
+  external-font requirements in Help and the Windows build warning.
+- Ignore build products, local engines/settings, databases and SQLite sidecars,
+  release packages and scratch exports while retaining source/test fixtures.
+- Provide Linux and author-built Windows x86_64 executables and portable packages,
+  with SHA1SUMS and SHA256SUMS. No engines, local preferences or piece font bundled.
+- Application functionality was verified by both-game regressions, all 20 GUI
+  suites and both tournament suites; the final Linux status-bar fix was visually
+  confirmed by the user. Native Windows build and visual QA were supplied by
+  the user. Release packaging/build checks are recorded in the release notes.
+
+
 ### Remove excess height inside the Linux engine status bar — 2026-11-01
 
 Commit: `07b90ab`.

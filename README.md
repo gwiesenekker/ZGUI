@@ -1,184 +1,131 @@
-# ZGUI
+# ZGUI 1.0
 
-ZGUI is being ported to chess from the unmodified GWDGUI 3.4 source at
-upstream commit `61c6cef894e18544d18e7e761143de47ef492226`, while preserving
-its existing GUI and shared infrastructure.
+ZGUI is a desktop GUI for **chess and international draughts**, with both games
+available side by side. It builds on GWDGUI 3.4 and preserves its shared game,
+analysis, tournament and database infrastructure.
 
-The executable now opens an **8×8 chess board** in the existing layout. This
-step supports standalone exploration: legal board/list moves, promotion choices,
-FEN copying/pasting, mainline and variation navigation, highlights and board
-flipping. Click both source and destination, including for a piece with one move.
-The legal list uses UCI coordinates; notation and PV views use SAN.
+## Features
 
-**Ctrl+O** opens PGN collections in the existing game browser; **Ctrl+S**
-appends the displayed game to a PGN file. Headers, comments, NAGs and nested
-variations are retained. Repeated equivalent variations are merged with an
-import warning. Replacing or closing a board offers the existing save prompt;
-Cancel or failed saving preserves it. The score-history view is retained.
+- Chess on an 8×8 board and international draughts on a 10×10 board, with legal
+  moves, FEN position setup, board flipping and configurable appearance.
+- PGN for chess and PDN for draughts, including comments and nested variations.
+- UCI chess engines and Hub/DXP draughts engines, configurable through the
+  existing engine editor. Engine INI-file editing remains available.
+- Human and engine games with clocks, increments, engine analysis, PV browsing,
+  hints, evaluation bars, score history and Auto Play.
+- UCI and Hub pondering, with per-engine compatibility flags. Optional
+  `dxp-pv` collects Hub-format analysis from a local DXP engine's stdout during
+  matches; DXP remains a game protocol, not an annotator protocol.
+- Tabbed round-robin and Swiss tournaments, concurrent games, shared engine
+  reservations and oldest-waiting-first allocation across tournaments.
+- SQLite game databases, import and duplicate detection, player/event filters,
+  position searches and move-based navigation.
+- Separate chess/draughts preferences where appropriate, a global engine-use
+  status bar and an offline searchable manual under **Help → Manual**.
 
-UCI engine configuration and analysis use the existing engine editor and
-annotator: select **UCI**, launch to discover options, save, then right-click
-the analysis area and choose **Open Annotator**. INI editing remains available.
-**New game** now runs clocked chess through the existing game and clock
-infrastructure, with Human/UCI player choices, chess FEN input and a 5+3 default.
-Both clocks, Stop, live engine PVs and PGN saving use the existing GUI paths.
-Pondering, Auto Play, position setup, tournaments and databases
-are not yet connected for chess. Their controls stay in place but remain disabled,
-including automatic database search.
-Chess pieces are original, scalable Canvas vector artwork in
-`uChessBoardControl.pas`, distributed under the project's **GPLv3** licence.
-No system chess glyphs, external artwork or additional chess font is needed.
-The inherited `draughts.ttf` remains for the preserved draughts components.
+See the [manual](MANUAL.md) for supported rules, protocol settings, file locations,
+result/reason handling and operational limits. See [CHANGELOG.md](CHANGELOG.md)
+for implementation history and commit IDs.
 
-See [the port review](CHESS_PORT_REVIEW.md), [user manual](MANUAL.md) and
-[change history](CHANGELOG.md). The sections below document the inherited
-GWDGUI infrastructure; disabled features will become available through adapters,
-not replacement implementations.
+## Download and run
 
-## Inherited infrastructure
-
-- Human-versus-human, human-versus-engine and engine-versus-engine games, with
-  configurable time controls and multiple games in the game history.
-- Legal move selection on the board or from a list, including a chooser for
-  captures that share the same source and destination.
-- Game-tree browsing with nested variations, comments, analysis and clocks;
-  PDN import/export and FEN position setup, copying and pasting.
-- Hub engine analysis and annotators, principal-variation browsing, Auto Play,
-  score history, an evaluation bar and optional board hints.
-- Single and double round-robin and Swiss tournaments, with concurrent games,
-  saved standings, recovery files and PDN game records.
-- SQLite game databases with PDN import, duplicate detection, player/event
-  filters and position searches.
-- Configurable board colours and notation styles, separate engine/annotator PV
-  colours and a font chooser for the moves window.
-- An offline, searchable manual under **Help → Manual** and the build commit
-  under **Help → About ZGUI**.
-
-## Upstream downloads
-
-The upstream GWDGUI [version 3.4 release](https://github.com/gwiesenekker/GWDGUI/releases/tag/v3.4)
-provides **Linux x86_64** and **Windows x86_64** portable archives, plus the
-executables, draughts font and manual as separate downloads. Compare download
-checksums with the release's `SHA256SUMS` file.
-
-Extract the archive for your operating system into a writable directory. On
-Windows, run `gwdgui.exe`. On Linux, run:
+Download a portable archive from [ZGUI releases](https://github.com/gwiesenekker/ZGUI/releases).
+Extract it into a writable directory. On Windows, run `zgui.exe`; on Linux:
 
 ```sh
-./gwdgui
+chmod +x zgui
+./zgui
 ```
 
-Linux requires the GTK2 and SQLite3 runtime libraries. Keep `draughts.ttf` beside
-the executable. ZGUI also needs an independently installed draughts engine
-for engine play or analysis; you can play human-versus-human games without one.
+The Linux x86_64 build requires GTK2 and SQLite3 runtime libraries. No external
+piece font is required: both boards draw their pieces directly. Engines and
+engine data files are not bundled; install engines separately. Human-versus-human
+play and game browsing do not require an engine.
 
-Build ZGUI from this checkout using the instructions below; upstream downloads
-retain their GWDGUI name.
+The release includes **SHA1SUMS** and **SHA256SUMS** for the executables and
+portable archives. Compare the downloaded files with these before use. For example,
+on Linux run `sha1sum -c SHA1SUMS` for the files you downloaded, or on Windows:
 
-## Using the inherited draughts features (reference)
+```bat
+certutil -hashfile zgui.exe SHA1
+```
 
-1. Open **Engines...**, add an executable and select its Hub or DXP protocol.
-   Use **Launch engine** to test it, then **Launched correctly** to save it.
-   See [Configuring engines](MANUAL.md#2-configuring-engines) for protocol settings.
-2. Choose **New game...**, select the players and time control, and start play.
-   Make a human move by clicking its source and destination, or choose a legal
-   move from the list.
-3. Select games in **Game History**. Click moves to browse; use Left/Right to
-   navigate the focused notation, tree or PV view.
-4. Use **Tournament...** for engine competitions, or the **Database** menu for
-   collections and position searches.
-5. Press **F1** for the full manual. **Ctrl+O** opens the selected game format (PGN for chess), **Ctrl+S** saves it,
-   **Ctrl+,** opens preferences and **Ctrl+Q** quits with the normal save prompts.
+## First steps
 
-## Settings and saved files
+1. Use **Engines...** to register an executable. Choose **UCI** for chess or
+   **Hub/DXP** for draughts, launch to test/discover settings, and save.
+2. Choose **New game...**, select players and a time control, then play by clicking
+   a piece and destination or selecting a legal move.
+3. Use **Game History** to switch between games and boards. Both games can remain
+   open, with tournaments running concurrently when engine instances are available.
+4. Right-click the analysis area to open an annotator. Use **Tournament...** for
+   competitions and the **Database** menu for collections and position searches.
+5. Press **F1** for the manual. **Ctrl+O** opens games, **Ctrl+S** saves the displayed
+   game, and **Ctrl+,** opens preferences.
+
+## Settings and portability
 
 Keep the application directory writable: `engines.json` and `prefs.json` are
 stored beside the executable. Per-engine `.params.json` files are stored beside
-the engine they describe. Save games, databases and named tournaments wherever
-you prefer. Unsaved tournament recovery files use the operating system's per-user
+the engine. Save games, databases and named tournaments wherever you prefer.
+Unsaved tournament recovery files use the operating system's per-user
 configuration directory.
 
-Engine paths are specific to the machine and operating system. Re-register or
-edit engine entries when moving between Linux and Windows. For DXP, give each
-simultaneous connection its own port.
-
-See [File locations and portability](MANUAL.md#121-file-locations-and-portability)
-and [Common problems](MANUAL.md#11-common-problems) for details.
+Engine paths are machine-specific. Re-register or edit engine entries when
+moving between Linux and Windows. Give simultaneous DXP connections separate
+ports. Never overwrite your settings or engine installations when upgrading.
 
 ## Build from source
 
 Use **Lazarus/LCL 3.0 or later**, its bundled **SynEdit** package and
-**Free Pascal 3.2.2 or later**. Keep the source directory writable and keep
-`draughts.ttf` with the resulting executable.
+**Free Pascal 3.2.2 or later**. The release's Linux build uses GTK2.
 
-### Linux
-
-Install the GTK2 Lazarus development environment, SQLite3 runtime library and
-Python 3, then run from the source directory:
+On Linux, install the Lazarus/GTK2 development environment and Python 3, then run:
 
 ```sh
 bash build.sh
 ./zgui
 ```
 
-The script compiles in a temporary directory, embeds the manual and Git identity,
-and replaces the local executable only after compilation succeeds.
-
-### Windows
-
-With Lazarus installed, run:
+On Windows, install Lazarus and Git for Windows, make `git` available on PATH,
+and run:
 
 ```bat
 build.bat
 ```
 
-The script finds `lazbuild.exe` on PATH or in standard Lazarus installation
-folders. You can supply its full path explicitly:
+You can supply a Lazarus location with `build.bat "C:\lazarus\lazbuild.exe"`.
+Alternatively, open `zgui.lpi`, select the **Windows** build mode, and build.
+The Windows build mode embeds help and Git identity without Python. The Linux
+script embeds them too. The Lazarus **Default** mode instead reads `MANUAL.md`
+beside the executable and reports build identity as unavailable.
 
-```bat
-build.bat "C:\lazarus\lazbuild.exe"
-```
-
-It builds a candidate executable in `lib\candidate` and replaces `zgui.exe`
-only after a successful build, preserving the previous executable on failure.
-Alternatively, open `zgui.lpi` in Lazarus, select the **Windows** build mode
-under **Project → Project Options → Build modes**, and choose **Build**.
-
-The Windows build mode embeds the manual and Git identity without Python.
-Install Git for Windows and make `git` available on PATH before starting the
-build. A Git checkout identifies its commit; a source archive without `.git`
-reports that identity as unavailable. Modified tracked files are marked in About.
-
-The Linux build script and Windows build mode provide embedded help and identity.
-The Lazarus **Default** mode instead loads `MANUAL.md` from beside the executable
-and reports that build identity is unavailable.
+Build scripts replace the installed executable only after successful compilation.
+Modified tracked files are identified in About when build identity is embedded.
+The repository ignores generated binaries, local settings, engines, databases
+and temporary output; source files and test fixtures remain versioned.
 
 ## Checks
 
-Run the headless regression suite from the source directory:
-
 ```sh
 bash tests/run_regression_checks.sh
-```
-
-It requires FPC, Python 3 and ripgrep. GTK interface tests additionally require
-Lazarus/GTK2 and a display:
-
-```sh
+bash tests/run_dxp_checks.sh
 bash tests/run_gui_checks.sh
 bash tests/run_tournament_checks.sh
 ```
 
-[tests/README.md](tests/README.md) describes the other checks.
-`bash tests/run_windows_cross_check.sh` runs the batch recovery checks under
-Wine when available, then attempts a Windows cross-build when FPC's win64 units
-are installed. Missing tools or target units are reported as skips. Cross-building
-and Wine tests do not replace native Windows testing.
+GUI checks need Lazarus/GTK2 and a display. To keep them off the main desktop,
+use `python3 tests/run_hidden_gui.py bash tests/run_gui_checks.sh` (requires
+Xephyr and an existing parent X display). See [tests/README.md](tests/README.md)
+for individual checks and Windows validation.
 
-## Project and license
+## Origins and license
 
-GWDGUI is maintained by Gijsbert Wiesenekker and was developed using Codex and
-Claude. Its tagged releases and commit history record the development from the
-initial Lazarus GUI through the current application.
+ZGUI is maintained by Gijsbert Wiesenekker and developed with assistance from
+Claude and Codex. It derives from [GWDGUI](https://github.com/gwiesenekker/GWDGUI)
+3.4, upstream commit `61c6cef894e18544d18e7e761143de47ef492226`.
+Both games use the shared GWDGUI infrastructure through game-specific adapters.
+Chess pieces are original scalable Canvas artwork in `uChessBoardControl.pas`.
 
-See [LICENSE](LICENSE) for the GNU General Public License, version 3.
+ZGUI is distributed under the **GNU General Public License, version 3**;
+see [LICENSE](LICENSE). Separately installed engines have their own licenses.

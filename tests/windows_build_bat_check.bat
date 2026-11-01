@@ -16,7 +16,6 @@ if not exist "%WORK%\" exit /b 1
 copy /y "%ROOT%\build.bat" "%WORK%\build.bat" >nul
 if not exist "%WORK%\build.bat" exit /b 1
 type nul > "%WORK%\zgui.lpi"
-type nul > "%WORK%\draughts.ttf"
 set "FAKE=%WORK%\fake_lazbuild.cmd"
 echo @echo off> "%FAKE%"
 echo if "%%FAKE_MODE%%"=="ok" echo NEW^> "%%GWDGUI_BUILD_DIR%%zgui.exe">> "%FAKE%"

@@ -71,8 +71,8 @@ three lines. The initial main-window height is limited to the screen's work area
 Chess uses an 8×8 board and SAN game notation; its legal-moves list uses UCI
 coordinates. Draughts uses a 10×10 board and numbered-square notation. Click a
 piece and destination to play, or choose a legal move. Chess promotion opens the
-existing move chooser. Press **F** to flip the board. Chess artwork is embedded;
-draughts uses the supplied `draughts.ttf` font.
+existing move chooser. Press **F** to flip the board. Both games draw their
+pieces directly; no external piece font is required.
 
 Before playing against an engine or running a tournament, register the engine
 through **Engines...**. Human-versus-human games can be started immediately.
@@ -1354,8 +1354,7 @@ game to an existing collection.
 
 ZGUI is an Object Pascal application built with Lazarus/LCL 3.0 or later (GTK2
 on Linux), its bundled SynEdit package, and Free Pascal 3.2.2 or later. The
-`draughts.ttf` piece font must be available beside the application as expected
-by the build or distribution.
+boards draw their pieces directly; no external piece font is required.
 
 A typical source build is:
 
@@ -1374,8 +1373,7 @@ use the build mode's pre-build step, which uses
 Lazarus’s configured compiler to embed the manual and Git identity; Python is
 not required. Install Git for Windows and make `git` available on PATH before
 starting Lazarus. Use a Git checkout or copy including `.git` to identify the
-commit. Changes to tracked files are marked in About. Keep `draughts.ttf` beside
-`zgui.exe`.
+commit. Changes to tracked files are marked in About.
 
 Direct IDE builds in the **Default** mode or
 `lazbuild zgui.lpi` builds remain supported, but report that the commit is

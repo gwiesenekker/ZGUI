@@ -36,9 +36,6 @@ where git.exe >nul 2>nul
 if errorlevel 1 (
   echo Warning: git is not on PATH; Help ^> About will report the commit as unavailable.
 )
-if not exist "draughts.ttf" (
-  echo Warning: draughts.ttf is missing; keep it beside zgui.exe.
-)
 
 set "CANDIDATE_DIR=lib\candidate\"
 

@@ -1,57 +1,79 @@
-# Lazarus/FPC build output
-lib/
+# Lazarus / Free Pascal build products and editor state
+/lib/
 backup/
 *.o
+*.obj
 *.ppu
+*.a
+*.so
+*.dll
+*.exe
 *.compiled
 *.or
 *.res
+*.lps
 *.bak
 *.swp
-gwdgui
-gwdgui.exe
-*.lps
+*~
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
 
-# Logs/temp
+# Application/test executables and interrupted build replacements
+/zgui
+/gwdgui
+/.zgui-*-build
+/.zgui-*-new
+/.gwdgui-new-build
+/tests/*_check
+
+# Generated documentation and release packages
+/output/
+/dist/
+/releases/
+
+# Logs and temporary files
 *.log
 *.tmp
+/*.trace
 
-# Local SQLite databases
+# Local SQLite databases, journals and write-ahead logs
 *.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
 
-# Engines / large assets
-GWD/
-engine*/
-engines/
-*.bin
-*.dat
-*.nn
+# Local engine installations, downloaded networks and tablebases
+/GWD/
+/engines/
+/engine[0-9]*/
+/endgine[0-9]*/
+/engne[0-9]*/
+/enginge[0-9]*/
 *.zst
-network*.json
 
-# Local machine-specific engine configuration
-engines.json
+# Machine-specific settings (engine option files may be beside the engine)
+/engines.json
+/prefs.json
 *.params.json
 
-# Numbered local engine configurations and executables
-/engine[0-9]*
-/endgine[0-9]*
-
-# Runtime preferences and tournament output (keep existing local files)
-/prefs.json
+# Local game exports; keep fixtures and opening/benchmark source data trackable
+/Test.pgn
+/Test.pdn
+/Tournament.pgn
 /Tournament.pdn
-/.gwdgui-new-build
 
-# Python build/test helper cache
-__pycache__/
-
-# Local review and refactoring notes
+# Local review notes; already tracked documents remain in the project history
 /REFACTORING.md
 /REVIEW_NOTES.md
 /claude/
 /chatgpt/
 
-# ZGUI application branding
-zgui
-zgui.exe
-/.zgui-new-build
+# Root-local neural networks and data files
+/network*.json
+/*.bin
+/*.dat
+/*.nn
