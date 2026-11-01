@@ -592,6 +592,7 @@ var
   procedure CreateRegisteredEngine(ASide: TGameSide;
     ADefinition: TExternalEngineDefinition);
   begin
+    if FStopToken.IsCancelled then Exit;
     if ADefinition = nil then
       raise EInvalidOperation.Create('No registered engine definition for ' +
         SideToString(ASide));
@@ -602,9 +603,11 @@ var
       LEngine.StopToken := FStopToken;
       AddGameLogLines(LEngine.StateLog);
       LEngine.OnLog := @RuntimeLog;
-      if not LEngine.LaunchAndInit then
+      if not LEngine.LaunchAndInit then begin
+        if FStopToken.IsCancelled then Exit;
         raise EInvalidOperation.Create(SideToString(ASide) + ' ' +
           LEngine.ProtocolName + ' engine did not launch correctly');
+      end;
       FOrchestrator.Engine[ASide] := LEngine;
       LEngine := nil;
     finally
@@ -740,7 +743,9 @@ begin
     Result.FState := gosError;
     Result.FGameResult := '*';
     Result.FLastError := FRunnerError;
-  end;
+  end
+  else if FStopToken.IsCancelled then
+    Result.MarkStopped('stop requested');
 end;
 
 procedure TGameRunnerThread.PublishSnapshot;
@@ -827,6 +832,13 @@ begin
       AddGameLogLines(FOrchestrator.Log);
       FOrchestrator.TimeControl := FSetup.TimeControl;
       CreateEngines;
+      if FStopToken.IsCancelled then
+      begin
+        // A cancelled initialization must not send new-game commands to a
+        // session whose handshake was interrupted. Keep the configured root.
+        FOrchestrator.Engine[gsWhite] := nil;
+        FOrchestrator.Engine[gsBlack] := nil;
+      end;
       FOrchestrator.NewGame(FSetup.StartingFEN);
       DrainCommands;
       PublishSnapshot;

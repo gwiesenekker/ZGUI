@@ -37,7 +37,7 @@ begin
    Choice:=TComboBox(Root.FindComponent('TournamentVariant'));
    if Choice<>nil then begin
     Check(Choice.Parent=Child.Parent,Path+' game chooser shares FEN row');
-    Check(Choice.Left>=Child.Left+Child.Width,Path+' game chooser is to the right of FEN');
+    Check(Child.Left>=Choice.Left+Choice.Width,Path+' game chooser is to the left of FEN');
     Check(Abs(Choice.Top-Child.Top)<=2,Path+' game chooser aligns with FEN');
     W:=0;for J:=0 to Choice.Items.Count-1 do W:=Max(W,MeasureGuiText(Choice.Items[J],Choice.Font).cx);
     Inc(W,MeasureGuiText('Ag',Choice.Font).cy+MeasureGuiText('MM',Choice.Font).cx);

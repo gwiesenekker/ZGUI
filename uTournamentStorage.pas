@@ -242,6 +242,10 @@ begin
   Value := Data.Find('increment_seconds');
   if (Value <> nil) and (IsNan(Value.AsFloat) or IsInfinite(Value.AsFloat) or (Value.AsFloat<0)) then
     raise EConvertError.Create('Invalid tournament increment');
+  CheckField(Data, 'time_unit', [jtString]);
+  PairingType:=Data.Get('time_unit','minutes');
+  if (PairingType<>'minutes') and (PairingType<>'seconds') then
+    raise EConvertError.Create('Invalid tournament time unit');
   CheckField(Data, 'increment_mode', [jtString]);
   PairingType := Data.Get('increment_mode', 'from-start');
   if (PairingType <> 'from-start') and (PairingType <> 'after-move-limit') then

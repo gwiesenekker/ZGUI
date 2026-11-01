@@ -62,7 +62,10 @@ type
     FInvalidationPanel: TPanel;
     FLoadingTournament: Boolean;
     FLastGameStartTick: QWord;
-    FMinutesEdit: TEdit;
+    FMinutesEdit: TEdit; // Quantity in the selected display unit.
+    FTimeUnitCombo: TComboBox;
+    FStopButton: TButton;
+    FRefereeStopPending: Boolean;
     FMovesEdit: TEdit;
     FOnSelectGame: TTournamentSelectGameEvent;
     FOnStartGame: TTournamentStartGameEvent;
@@ -125,10 +128,11 @@ type
     procedure SaveClick(Sender: TObject);
     procedure SetSelectedResultClick(Sender: TObject);
     procedure StartStopClick(Sender: TObject);
+    procedure RefereeStopClick(Sender: TObject);
     procedure StartPendingGames;
     procedure LeaveEngineQueue;
     procedure StartFailure(ARow: Integer; const AReason: string);
-    procedure StopRunningGames;
+    procedure StopRunningGames(const AReason:string='Tournament stopped');
     procedure TimerTick(Sender: TObject);
     function TournamentSignature: string;
     function SettingsSignature: string;
@@ -233,19 +237,25 @@ begin
 end;
 
 function TournamentPlayedReason(const AReason:string):string;
-const Marker='. Operator set result to ';
 var P:Integer;
 begin
-  Result:=Trim(AReason);P:=Pos(Marker,Result);
+  Result:=Trim(AReason);P:=Pos('. Referee declared ',Result);
+  if P=0 then P:=Pos('. Referee set result to ',Result);
+  if P=0 then P:=Pos('. Operator set result to ',Result);
   if P>0 then Result:=Copy(Result,1,P-1)
-  else if (Pos('Operator set result to ',Result)=1) or SameText(Result,'Manual result') then Result:='';
+  else if (Pos('Referee declared ',Result)=1) or (Pos('Referee set result to ',Result)=1) or
+    (Pos('Operator set result to ',Result)=1) or SameText(Result,'Manual result') then Result:='';
 end;
 
-function TournamentOperatorReason(const AReason,AResult:string):string;
+function TournamentRefereeReason(const AReason,AResult:string;AFormat:TGameFileFormat):string;
 begin
   Result:=TournamentPlayedReason(AReason);
   if Result<>'' then Result+='. ';
-  Result+='Operator set result to '+AResult;
+  case ParseTournamentResult(AResult,AFormat) of
+    trWhiteWin:Result+='Referee declared win for White';
+    trBlackWin:Result+='Referee declared win for Black';
+    trDraw:Result+='Referee declared draw';
+  else Result+='Referee declared unfinished game';end;
 end;
 
 procedure ApplyTournamentGameResultToRow(AGrid: TStringGrid; ARow: Integer;
@@ -316,8 +326,8 @@ var
   TopPos: Integer;
   Id: TGUID;
   GameIndex:Integer;
-  NameLabel,FenLabel,MovesLabel,MinutesLabel,IncrementLabel,ConcurrentLabel:TLabel;
-  SettingsColumn,ActionsColumn,ClockRow,FenRow:TPanel;
+  NameLabel,FenLabel,MovesLabel,MinutesLabel,IncrementLabel,ConcurrentLabel,TimeLabel:TLabel;
+  SettingsColumn,FenRow:TPanel;
 begin
   inherited Create(AOwner);
   DisableAlign;
@@ -371,7 +381,7 @@ begin
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := ButtonPanel;
   LabelControl.SetBounds(0, 114, 86, 18);
-  LabelControl.Caption := 'Moves';MovesLabel:=LabelControl;
+  LabelControl.Caption := 'moves in';MovesLabel:=LabelControl;
 
   FMinutesEdit := TEdit.Create(Self);
   FMinutesEdit.Name:='TournamentMinutes';FMinutesEdit.Text := FloatToStr(FProfile.DefaultClock.MinutesPerPeriod);
@@ -381,7 +391,7 @@ begin
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := ButtonPanel;
   LabelControl.SetBounds(96, 114, 86, 18);
-  LabelControl.Caption := 'Time';MinutesLabel:=LabelControl;
+  LabelControl.Caption := 'with';MinutesLabel:=LabelControl;
 
   FIncrementEdit := TEdit.Create(Self);
   FIncrementEdit.Name:='TournamentIncrement';FIncrementEdit.Text := FloatToStr(FProfile.DefaultClock.IncrementSeconds);
@@ -391,9 +401,17 @@ begin
   LabelControl := TLabel.Create(Self);
   LabelControl.Parent := ButtonPanel;
   LabelControl.SetBounds(192, 114, 86, 18);
-  LabelControl.Caption := 'Increment';IncrementLabel:=LabelControl;
+  LabelControl.Caption := 'second increment';IncrementLabel:=LabelControl;
+
+  TimeLabel:=TLabel.Create(Self);TimeLabel.Caption:='Time control:';
+  TimeLabel.Name:='TournamentTimeControlLabel';TimeLabel.Parent:=ButtonPanel;
+  FTimeUnitCombo:=TComboBox.Create(Self);FTimeUnitCombo.Parent:=ButtonPanel;
+  FTimeUnitCombo.Name:='TournamentTimeUnit';FTimeUnitCombo.Style:=csDropDownList;
+  FTimeUnitCombo.Items.Add('minutes');FTimeUnitCombo.Items.Add('seconds');
+  FTimeUnitCombo.ItemIndex:=0;FTimeUnitCombo.OnChange:=@InvalidateTournamentResults;
 
   FIncrementModeCombo := TComboBox.Create(Self);
+  FIncrementModeCombo.Name:='TournamentIncrementMode';
   FIncrementModeCombo.Parent := ButtonPanel;
   FIncrementModeCombo.SetBounds(288, 132, 140, 24);
   FIncrementModeCombo.Style := csDropDownList;
@@ -431,8 +449,13 @@ begin
   FStartStopButton := TButton.Create(Self);
   FStartStopButton.Parent := ButtonPanel;
   FStartStopButton.SetBounds(640, 52, 120, 28);
+  FStartStopButton.Name:='TournamentPlay';
   FStartStopButton.Caption := 'Play';
   FStartStopButton.OnClick := @StartStopClick;
+
+  FStopButton:=TButton.Create(Self);FStopButton.Parent:=ButtonPanel;
+  FStopButton.Name:='TournamentStop';FStopButton.Caption:='Stop';
+  FStopButton.OnClick:=@RefereeStopClick;
 
   ClearButton := TButton.Create(Self);
   ClearButton.Name := 'ClearPairing';
@@ -442,6 +465,7 @@ begin
   ClearButton.OnClick := @ClearPairingsClick;
 
   SaveButton := TButton.Create(Self);
+  SaveButton.Name:='SaveTournament';
   SaveButton.Parent := ButtonPanel;
   SaveButton.SetBounds(770, 52, 56, 28);
   SaveButton.Caption := 'Save...';
@@ -611,21 +635,17 @@ begin
   AcceptInitialSettings;
   NameLabel:=TLabel(ButtonPanel.Controls[0]);FenLabel:=TLabel(ButtonPanel.Controls[2]);
   if FGameCombo<>nil then begin
-    FenRow:=LayoutRow(ButtonPanel,[FStartingFENEdit,FGameCombo],0);
+    FenRow:=LayoutRow(ButtonPanel,[FGameCombo,FStartingFENEdit],1);
     SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FenRow]);
   end else
     SettingsColumn:=LayoutFields(ButtonPanel,[NameLabel,FTournamentNameEdit,FenLabel,FStartingFENEdit]);
   SettingsColumn.Top:=0;
-  ClockRow:=LayoutStack(ButtonPanel);
-  with LayoutFields(ClockRow,[MovesLabel,FMovesEdit,MinutesLabel,FMinutesEdit,
-    IncrementLabel,FIncrementEdit]) do Top:=0;
-  with LayoutRow(ClockRow,[FIncrementModeCombo],0) do Top:=1;
-  ActionsColumn:=LayoutStack(ButtonPanel);
-  with LayoutRow(ActionsColumn,[CreateButton,ClearButton]) do Top:=0;
-  with LayoutRow(ActionsColumn,[FStartStopButton,SaveButton,LoadButton]) do Top:=1;
-  with LayoutFields(ActionsColumn,[ConcurrentLabel,FConcurrentGamesEdit]) do Top:=2;
+  with LayoutRow(ButtonPanel,[TimeLabel,FMovesEdit,MovesLabel,FMinutesEdit,FTimeUnitCombo,
+    MinutesLabel,FIncrementEdit,IncrementLabel,FIncrementModeCombo]) do Top:=1;
+  with LayoutRow(ButtonPanel,[FStartStopButton,ConcurrentLabel,FConcurrentGamesEdit,
+    FStopButton,SaveButton,LoadButton]) do Top:=2;
   FRoundRobinGroup.AutoSize:=True;
-  with LayoutFlow(ButtonPanel,[ClockRow,FRoundRobinGroup,ActionsColumn]) do Top:=1;
+  with LayoutFlow(ButtonPanel,[FRoundRobinGroup,CreateButton,ClearButton]) do Top:=3;
   ButtonPanel.AutoSize:=True;
   UpdateButtons;
   EnableAutoLayout;
@@ -814,6 +834,7 @@ begin
     raise EConvertError.Create('Moves must be a nonnegative integer');
   if not TryStrToFloat(Trim(FMinutesEdit.Text),Result.MinutesPerPeriod) then
     raise EConvertError.Create('Time must be a positive finite number');
+  if FTimeUnitCombo.ItemIndex=1 then Result.MinutesPerPeriod:=Result.MinutesPerPeriod/60;
   if not TryStrToFloat(Trim(FIncrementEdit.Text),Result.IncrementSeconds) then
     raise EConvertError.Create('Increment must be a nonnegative finite number');
   if FIncrementModeCombo.ItemIndex=1 then Result.IncrementMode:=cimAfterMoveLimit
@@ -1558,8 +1579,8 @@ begin
   GameRecord(FGrid.Row).OverrideResult(AResultText);
   FGrid.Cells[TournamentColResult, FGrid.Row] := GameRecord(FGrid.Row).EffectiveResult;
   if GameRecord(FGrid.Row).ManualResult <> '' then
-    FGrid.Cells[TournamentColReason, FGrid.Row] := TournamentOperatorReason(
-      FGrid.Cells[TournamentColReason,FGrid.Row],GameRecord(FGrid.Row).EffectiveResult)
+    FGrid.Cells[TournamentColReason, FGrid.Row] := TournamentRefereeReason(
+      FGrid.Cells[TournamentColReason,FGrid.Row],GameRecord(FGrid.Row).EffectiveResult,FProfile.FileFormat)
   else begin
     FGrid.Cells[TournamentColReason,FGrid.Row]:=TournamentPlayedReason(FGrid.Cells[TournamentColReason,FGrid.Row]);
     if (FGrid.Cells[TournamentColReason,FGrid.Row]='') and (GameRecord(FGrid.Row).PlayedResult<>'') then
@@ -1606,6 +1627,7 @@ end;
 
 procedure TTournamentDialog.SaveClick(Sender: TObject);
 begin
+  if IsRunning then Exit;
   SaveTournamentWithDialog;
 end;
 
@@ -1623,10 +1645,7 @@ var
   Dialog: TOpenDialog;
   TargetVariant:TGameVariant;
 begin
-  if IsRunning and not Assigned(FOnContextRequested) then
-    Exit;
-  if FRunning and not Assigned(FOnContextRequested) then
-    Exit;
+  if IsRunning then Exit;
   Dialog := TOpenDialog.Create(Self);
   try
     Dialog.Title := 'Load tournament';
@@ -1745,6 +1764,8 @@ begin
     else Data.Add('starting_fen', Trim(FStartingFENEdit.Text));
     Data.Add('moves_per_period', Clock.MovesPerPeriod);
     Data.Add('minutes_per_period', Clock.MinutesPerPeriod);
+    if FTimeUnitCombo.ItemIndex=1 then Data.Add('time_unit','seconds')
+    else Data.Add('time_unit','minutes');
     Data.Add('increment_seconds', Clock.IncrementSeconds);
     Data.Add('concurrent_games', MaxConcurrentGames);
     if FIncrementModeCombo.ItemIndex = 1 then
@@ -1806,7 +1827,7 @@ var
   Games: TJSONData;
   I: Integer;
   Row: Integer;
-  PairingType: string;
+  PairingType,TimeUnit: string;
   Id: TGUID;
   Setup:TGameSetup;
 begin
@@ -1822,6 +1843,7 @@ begin
     Setup.TimeControl.IncrementSeconds:=Data.Get('increment_seconds',Setup.TimeControl.IncrementSeconds);
     if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
     ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
+    TimeUnit:=Data.Get('time_unit','minutes');
   except Data.Free;raise;end;
   FLoadingTournament := True;
   try
@@ -1830,7 +1852,11 @@ begin
     FStartingFENEdit.Text := TJSONObject(Data).Get('starting_fen',
       FVariant.DefaultStartingFEN);
     FMovesEdit.Text := IntToStr(TJSONObject(Data).Get('moves_per_period', FProfile.DefaultClock.MovesPerPeriod));
-    FMinutesEdit.Text := FloatToStr(TJSONObject(Data).Get('minutes_per_period', FProfile.DefaultClock.MinutesPerPeriod));
+    if TimeUnit='seconds' then begin
+      FTimeUnitCombo.ItemIndex:=1;FMinutesEdit.Text:=FloatToStr(Setup.TimeControl.MinutesPerPeriod*60);
+    end else begin
+      FTimeUnitCombo.ItemIndex:=0;FMinutesEdit.Text:=FloatToStr(Setup.TimeControl.MinutesPerPeriod);
+    end;
     FIncrementEdit.Text := FloatToStr(TJSONObject(Data).Get('increment_seconds', FProfile.DefaultClock.IncrementSeconds));
     FConcurrentGamesEdit.Text := IntToStr(TJSONObject(Data).Get('concurrent_games', 1));
     if SameText(TJSONObject(Data).Get('increment_mode', 'from-start'),
@@ -1888,8 +1914,8 @@ begin
           if Engine <> nil then FGrid.Cells[TournamentColBlack, Row] := DisplayNameForEngine(Engine);
           FGrid.Cells[TournamentColResult, Row] := GameRecord(Row).EffectiveResult;
           if GameRecord(Row).ManualResult <> '' then
-            FGrid.Cells[TournamentColReason, Row] := TournamentOperatorReason(
-              Game.Get('reason',''),GameRecord(Row).EffectiveResult)
+            FGrid.Cells[TournamentColReason, Row] := TournamentRefereeReason(
+              Game.Get('reason',''),GameRecord(Row).EffectiveResult,FProfile.FileFormat)
           else
             FGrid.Cells[TournamentColReason, Row] := Game.Get('reason', '');
           if GameRecord(Row).CaptureError <> '' then
@@ -1975,7 +2001,7 @@ begin
   Result := Trim(FStartingFENEdit.Text) + '|' + Trim(FMovesEdit.Text) + '|' +
     Trim(FMinutesEdit.Text) + '|' + Trim(FIncrementEdit.Text) + '|' +
     IntToStr(FIncrementModeCombo.ItemIndex) + '|' +
-    IntToStr(FRoundRobinGroup.ItemIndex);
+    IntToStr(FRoundRobinGroup.ItemIndex)+'|'+IntToStr(FTimeUnitCombo.ItemIndex);
 end;
 
 procedure TTournamentDialog.ApplyInvalidatingChange(Sender: TObject);
@@ -2026,6 +2052,8 @@ begin
         FIncrementEdit.Text := Parts[3];
         FIncrementModeCombo.ItemIndex := StrToIntDef(Parts[4], 0);
         FRoundRobinGroup.ItemIndex := StrToIntDef(Parts[5], 0);
+        if Parts.Count>=7 then FTimeUnitCombo.ItemIndex:=StrToIntDef(Parts[6],0)
+        else FTimeUnitCombo.ItemIndex:=0;
       finally
         FLoadingTournament := False;
       end;
@@ -2083,14 +2111,7 @@ end;
 
 procedure TTournamentDialog.StartStopClick(Sender: TObject);
 begin
-  if FRunning then
-  begin
-    FRunning := False;
-    StopRunningGames;
-    FTimer.Enabled := ActiveRunningGameCount > 0;
-    UpdateButtons;
-    Exit;
-  end;
+  if FRunning or FRefereeStopPending then Exit;
 
   if PendingInvalidatingChange then
     Exit;
@@ -2110,7 +2131,16 @@ begin
   UpdateButtons;
 end;
 
-procedure TTournamentDialog.StopRunningGames;
+procedure TTournamentDialog.RefereeStopClick(Sender:TObject);
+begin
+  if FRefereeStopPending or ((not FRunning) and (ActiveRunningGameCount=0)) then Exit;
+  FRunning:=False;FCloseStopped:=False;FRefereeStopPending:=True;
+  StopRunningGames('Referee stopped tournament');
+  FTimer.Enabled:=ActiveRunningGameCount>0;
+  UpdateButtons;
+end;
+
+procedure TTournamentDialog.StopRunningGames(const AReason:string);
 var
   Game: TRunningGame;
   I: Integer;
@@ -2135,13 +2165,15 @@ begin
       begin
         if Owner is TMainForm then
           if FCloseStopped then TMainForm(Owner).MarkGameStopped(Game,'Stopped: tournament closed')
-          else TMainForm(Owner).MarkGameStopped(Game, 'Tournament stopped')
-        else
-          Game.Runner.PostStop;
+          else TMainForm(Owner).MarkGameStopped(Game, AReason)
+        else if AReason='Referee stopped tournament' then Game.RequestStop(AReason)
+        else Game.Runner.PostStop;
         if (RunningGame.Row > 0) and (RunningGame.Row < FGrid.RowCount) then
         begin
           FGrid.Cells[TournamentColResult, RunningGame.Row] := '*';
-          FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopping';
+          if AReason='Referee stopped tournament' then
+            FGrid.Cells[TournamentColReason,RunningGame.Row]:=AReason
+          else FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopping';
         end;
         Continue;
       end;
@@ -2198,8 +2230,8 @@ begin
         if GameRecord(RunningGame.Row).ManualResult <> '' then
         begin
           FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
-          FGrid.Cells[TournamentColReason, RunningGame.Row] := TournamentOperatorReason(
-            FGrid.Cells[TournamentColReason,RunningGame.Row],GameRecord(RunningGame.Row).EffectiveResult);
+          FGrid.Cells[TournamentColReason, RunningGame.Row] := TournamentRefereeReason(
+            FGrid.Cells[TournamentColReason,RunningGame.Row],GameRecord(RunningGame.Row).EffectiveResult,FProfile.FileFormat);
         end;
         if GameRecord(RunningGame.Row).CaptureError <> '' then
           FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Capture failed: ' + GameRecord(RunningGame.Row).CaptureError;
@@ -2212,6 +2244,8 @@ begin
           FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopping'
         else
           if FCloseStopped then FGrid.Cells[TournamentColReason, RunningGame.Row]:='Stopped: tournament closed'
+          else if TRunningGame(AGame).StopReason='Referee stopped tournament' then
+            FGrid.Cells[TournamentColReason,RunningGame.Row]:='Referee stopped tournament'
           else FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopped';
       end;
     end;
@@ -2399,8 +2433,8 @@ begin
       if GameRecord(RunningGame.Row).ManualResult <> '' then
       begin
         FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
-        FGrid.Cells[TournamentColReason, RunningGame.Row] := TournamentOperatorReason(
-            FGrid.Cells[TournamentColReason,RunningGame.Row],GameRecord(RunningGame.Row).EffectiveResult);
+        FGrid.Cells[TournamentColReason, RunningGame.Row] := TournamentRefereeReason(
+            FGrid.Cells[TournamentColReason,RunningGame.Row],GameRecord(RunningGame.Row).EffectiveResult,FProfile.FileFormat);
       end;
       if GameRecord(RunningGame.Row).CaptureError <> '' then
         FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Capture failed: ' + GameRecord(RunningGame.Row).CaptureError;
@@ -2409,6 +2443,8 @@ begin
     begin
       FGrid.Cells[TournamentColResult, RunningGame.Row] := '*';
       if FCloseStopped then FGrid.Cells[TournamentColReason, RunningGame.Row]:='Stopped: tournament closed'
+      else if Game.StopReason='Referee stopped tournament' then
+        FGrid.Cells[TournamentColReason,RunningGame.Row]:='Referee stopped tournament'
       else if SameText(FGrid.Cells[TournamentColReason, RunningGame.Row], 'Stopping') then
         FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Stopped'
       else
@@ -2433,8 +2469,8 @@ var
   I, FailedCaptures: Integer;
   Button: TComponent;
 const
-  PairingActions: array[0..3] of string = ('CreatePairing', 'ClearPairing',
-    'LoadTournament', 'ApplyTournamentChanges');
+  PairingActions: array[0..4] of string = ('CreatePairing', 'ClearPairing',
+    'LoadTournament', 'SaveTournament', 'ApplyTournamentChanges');
 begin
   if FClosing then
     Exit;
@@ -2442,9 +2478,8 @@ begin
   begin
     Button := FindComponent(PairingActions[I]);
     if Button is TButton then
-      TButton(Button).Enabled := ((not IsRunning) or
-        ((PairingActions[I]='LoadTournament') and Assigned(FOnContextRequested))) and
-        ((PairingActions[I] = 'LoadTournament') or (FStorageError = ''));
+      TButton(Button).Enabled := (not IsRunning) and
+        ((PairingActions[I]='LoadTournament') or (PairingActions[I]='SaveTournament') or (FStorageError=''));
   end;
   Caption := 'Tournament';
   if RegisteredGameCount>1 then Caption:=Caption+' - '+FVariant.Name;
@@ -2461,11 +2496,11 @@ begin
     Caption := Caption + ' - settings changed';
   if FStartStopButton <> nil then
   begin
-    if FRunning then
-      FStartStopButton.Caption := 'Stop'
-    else
-      FStartStopButton.Caption := 'Play';
-    FStartStopButton.Enabled := FRunning or (not PendingInvalidatingChange);
+    if ActiveRunningGameCount=0 then FRefereeStopPending:=False;
+    FStartStopButton.Enabled := (not FRunning) and (not FRefereeStopPending) and
+      (not PendingInvalidatingChange);
+    FStopButton.Enabled := (FRunning or (ActiveRunningGameCount>0)) and
+      (not FRefereeStopPending);
   end;
 end;
 

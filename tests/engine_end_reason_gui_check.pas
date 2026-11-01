@@ -102,17 +102,28 @@ begin
   Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[TournamentColReason,1]=ExpectedRowReason,
     'termination reason survives tournament save/reload');
   Grid.Row:=1;T.SetSelectedResult(V.ResultText(goDraw));
-  ManualReason:=ExpectedRowReason+'. Operator set result to '+V.ResultText(goDraw);
-  Check(Grid.Cells[TournamentColReason,1]=ManualReason,'operator result retains original reason');
+  ManualReason:=ExpectedRowReason+'. Referee declared draw';
+  Check(Grid.Cells[TournamentColReason,1]=ManualReason,'referee result retains original reason');
   T.GameStopped(G);
-  Check(Grid.Cells[TournamentColReason,1]=ManualReason,'late completion preserves operator result and original reason');
+  Check(Grid.Cells[TournamentColReason,1]=ManualReason,'late completion preserves referee result and original reason');
+  T.SetSelectedResult(V.ResultText(goWhiteWins));
+  Check(Grid.Cells[TournamentColReason,1]=ExpectedRowReason+'. Referee declared win for White',
+   'white referee declaration uses the same wording for both games');
   T.SetSelectedResult(V.ResultText(goBlackWins));
-  ManualReason:=ExpectedRowReason+'. Operator set result to '+V.ResultText(goBlackWins);
-  Check(Grid.Cells[TournamentColReason,1]=ManualReason,'repeated operator edit replaces previous suffix');
+  ManualReason:=ExpectedRowReason+'. Referee declared win for Black';
+  Check(Grid.Cells[TournamentColReason,1]=ManualReason,'repeated referee edit replaces previous suffix');
   Reloaded.Free;Reloaded:=nil;T.SaveTournamentToFile(FileName);
   Reloaded:=TTournamentDialog.Create(nil,V);Reloaded.LoadTournamentFromFile(FileName);
   Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[TournamentColReason,1]=ManualReason,
-   'operator provenance survives save/reload');
+   'referee provenance survives save/reload');
+  Reloaded.Free;Reloaded:=nil;
+  with TStringList.Create do try
+   LoadFromFile(FileName);Text:=StringReplace(Text,'Referee declared win for Black',
+    'Operator set result to '+V.ResultText(goBlackWins),[rfReplaceAll]);SaveToFile(FileName);
+  finally Free;end;
+  Reloaded:=TTournamentDialog.Create(nil,V);Reloaded.LoadTournamentFromFile(FileName);
+  Check(TStringGrid(Reloaded.FindComponent('TournamentPairings')).Cells[TournamentColReason,1]=ManualReason,
+   'legacy operator suffix loads as a referee declaration without losing the cause');
   T.SetSelectedResult('*');
   Check(Grid.Cells[TournamentColReason,1]=ExpectedRowReason,'clearing override restores original cause');
  finally Reloaded.Free;T.Free;G.Free;if R<>nil then begin R.PostStop;R.WaitFor;R.Free;end;

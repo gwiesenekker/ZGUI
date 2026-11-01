@@ -4,6 +4,41 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+
+### Tournament controls and game-independent referee reasons — 2026-11-01
+
+Commit: pending.
+
+- User authorisation: “Apply the tournament update now; waive prior review”.
+  Named scope: one-line time controls with minutes/seconds, separate Play /
+  concurrency / Stop row and stopped-game reasons. Subsequent user requests add
+  Save/Load disabling during play/shutdown, the chooser left of FEN, and
+  “Use Referee for tournament actions” with generic win/loss/draw declarations.
+  Exact scope and implementation notes: `chatgpt/TOURNAMENT_TIME_AND_REFEREE_CONTROLS_NOTES.md`.
+- Both games now show moves, duration with minutes/seconds (minutes default),
+  increment and increment mode on one row; Play, concurrency, Stop, Save and Load
+  occupy the next row. Preserve canonical clock values and old-file compatibility;
+  persist the chosen display unit and protect unit edits with existing Revert.
+- Stop cancels scheduling and active games. Incomplete games keep `*` and
+  “Referee stopped tournament”; completed outcomes and genuine errors retain
+  precedence. Disable restart/repeated Stop until shutdown completes. Correct
+  cancellation during engine initialization instead of reporting a false launch
+  error; this also fixes early Stop in ordinary chess and draughts games.
+- Save/Load are disabled while that tab is running or stopping. Existing automatic
+  saving and other tournament tabs continue. Place Chess/Draughts left of FEN.
+- Manual results say “Referee declared win for White”, “Referee declared win for
+  Black” or “Referee declared draw”, retaining the original cause. Recognize older
+  operator annotations and restore the original cause when clearing an override.
+  Engine crashes still leave `*` for referee adjudication/rescheduling.
+- Update built-in Help with controls, loading behaviour and a reference of reason
+  families for chess, draughts, clocks, engines, referee actions and diagnostics.
+- Validation: application compilation, the complete headless regression, all 19
+  GUI suites and both tournament suites pass. Layout: 9,730 checks; reasons:
+  290; tournament tabs: 267; focused Stop checks: 73; chess tournament: 101.
+  Reported heap checks show zero leaks. GUI tests use separate hidden displays.
+  Native Windows QA remains pending; unrelated engine-feature work is excluded.
+
+
 ### Show engine use and correct startup/tournament presentation — 2026-11-01
 
 Commit: `5cd5be5`.

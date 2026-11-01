@@ -688,7 +688,9 @@ gaps, and adding/removing registrations can change these display numbers.
 Tournament records identify engines using their saved configuration identity.
 
 The tournament name and Starting FEN occupy full-width rows. The FEN minimum
-width follows its text and font; clock, pairing and action groups wrap as needed.
+width follows its text and font. The Chess/Draughts chooser is to the left of
+the starting FEN. Time controls occupy one row; Play, concurrent games, Stop,
+Save and Load occupy the following row.
 
 ### 7.1 Tournament settings
 
@@ -697,12 +699,18 @@ Enter:
 - a tournament name;
 - a starting FEN;
 - moves per period;
-- time in minutes;
+- time, with a **minutes / seconds** selector (minutes is the default);
 - increment in seconds;
 - increment mode;
 - maximum concurrent games;
 - pairing type;
 - at least two engines from the checklist.
+
+The time-control row reads **Time control: X moves in Y minutes/seconds with Z
+second increment** followed by the increment mode. A zero move count means the
+whole game; the existing from-start / after-move-limit increment policies still
+apply. Files store duration in minutes plus the display-unit choice. Older files
+open in minutes without changing their actual duration.
 
 Available pairing types are:
 
@@ -744,8 +752,12 @@ Starting a game selects its row. Rows that already fit stay in their current
 place; the grid scrolls only when needed to reveal a started row. Between starts,
 you can scroll the list manually without it snapping back on each timer update.
 
-Click **Stop** to stop the tournament's active games. Incomplete games remain
-available for review or rescheduling.
+Click **Stop** to stop the tournament's active games and pending scheduling.
+Incomplete games keep result `*` with **Referee stopped tournament**, including
+when stopped during engine initialization. Already completed games retain their
+result and reason; actual engine errors remain diagnostic errors. Play and Stop
+are disabled while shutdown completes. Incomplete games remain available for
+review or rescheduling.
 
 ### 7.3 Results and rescheduling
 
@@ -775,18 +787,49 @@ the raw protocol reason code when supplied. An unspecified engine ending does
 not identify a rule-based cause. These descriptions preserve the existing result
 and are saved with the tournament. Older completed rows retain their saved text.
 
-An operator result edit retains the original reason and appends, for example,
-**GWD (Black) claimed win (DXP reason 3). Operator set result to 0-2**.
-With no original reason it shows **Operator set result to 0-2**. Further edits
-replace the operator result suffix. Clearing the override with `*` restores the
-played result and its reason. Use
-**Reschedule selected game** to clear a game's result and make it pending again.
+A referee result edit retains the original reason and appends, for example,
+**GWD (Black) claimed win (DXP reason 3). Referee declared win for Black**.
+The same wording applies to both games: **Referee declared win for White**,
+**Referee declared win for Black**, or **Referee declared draw**. With no original
+reason, only the declaration is shown. Further edits replace that declaration.
+Clearing the override with `*` restores the played result and its reason.
+Older numeric “Operator set result to …” annotations are recognized on loading.
+Use **Reschedule selected game** to clear a game's result and make it pending again.
+
+An engine crash, unexpected process exit or failed launch leaves result `*`;
+it does not automatically forfeit the game. The referee can declare a result or
+reschedule it after investigating the diagnostic.
+
+#### Reason reference
+
+These are the fixed reason families currently produced by ZGUI. Names, sides,
+counters, protocol codes and error details vary; saved older rows can retain
+legacy wording. Engine claims describe what the engine reported, rather than
+asserting an independently verified rule cause.
+
+| Source | Reason text / meaning |
+|---|---|
+| Chess rules | **Orchestrator declared checkmate**; **Orchestrator declared draw by stalemate**, **insufficient mating material**, **75-move rule**, or **fivefold repetition**. |
+| Accepted chess claims | **Orchestrator declared draw by 50-move rule (claim accepted)** or **threefold repetition (claim accepted)**, including the **intended** variants. |
+| Draughts rules | **Orchestrator: White has no legal move** or **Black has no legal move**; **Orchestrator declared draw by 5-move endgame rule**, **16-move endgame rule**, **repetition; repetitions=N**, or **25-move rule; reversible_plies=N**. |
+| Clocks | **Orchestrator: Flag fell for white/black**, optionally with **engine move deadline expired** or **idle move deadline expired**. A chess timeout draw adds **opponent has insufficient mating material**. |
+| Engine reports | **Name (White/Black) claimed draw**, **claimed win**, **resigned**, or **ended game**, with raw **DXP reason N** when provided. Unrecognized details are preserved. A fallback can say **Engine ended game** with side or no-move information. |
+| Referee actions | **Referee stopped tournament**; **Referee declared win for White/Black**; **Referee declared draw**. A declaration follows the original cause when present. |
+| Closing | **Stopped: tournament closed**. |
+| Scheduling | **Running**, **Waiting for engine Name**, optionally **in use by …**, **Waiting for engine allocation**, optionally naming a tournament, **Stopping**, **Stopped**, or a blank pending row. |
+| Configuration / failures | **Missing engine**, **Could not start: …**, **Capture failed: …**, or the actual runtime diagnostic, for example an unexpected process exit. Details are open-ended. |
+| Fallback / imported records | **Game finished**, **Draw**, **Unknown result**, **Played result**, legacy **Manual result**, or the saved reason. **Bye** identifies an unplayed Swiss bye. |
+
+This reference describes displayed causes; it does not add adjudication rules.
 
 The cross table ranks engines by points, wins, Sonnenborn-Berger score, and then
 name. It also shows the individual matchup results.
 
 ### 7.4 Saving and loading tournaments
 
+- **Save…** and **Load…** are disabled while this tab is running or stopping.
+  Other tournament tabs can continue running while an idle tab loads a file.
+  Automatic saving continues while games run.
 - Changes and results save automatically. Use **Save** to choose the JSON file;
   **Load** opens a saved tournament in its own tab without starting it. Opening
   the same file or tournament identity again selects its existing tab. Other

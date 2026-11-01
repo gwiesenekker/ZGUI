@@ -252,8 +252,8 @@ begin
   Check(not D.IsRunning and (H.Starts=1),'Stop/error finishes existing runner without automatic retry');
   Check(Grid.Cells[TournamentColResult,1]='*','Stop/error does not fabricate a forfeit');
   if Mode='crash' then Check(Pos('process exited',Grid.Cells[TournamentColReason,1])>0,'Crash has an explicit row error')
-  else if Mode='silent' then Check(Grid.Cells[TournamentColReason,1]='Stopped','Stop has an explicit unfinished row reason: '+Grid.Cells[TournamentColReason,1])
-  else Check(Grid.Cells[TournamentColReason,1]<>'','Early shutdown retains an explicit unfinished-row reason');
+  else if Mode='silent' then Check(Grid.Cells[TournamentColReason,1]='Referee stopped tournament','Stop has an explicit unfinished row reason: '+Grid.Cells[TournamentColReason,1])
+  else Check(Grid.Cells[TournamentColReason,1]='Referee stopped tournament','Stop during initialization retains the referee reason: '+Grid.Cells[TournamentColReason,1]);
   for I:=1 to 20 do Pump(H,D);Check(H.Starts=1,'Repeated timer ticks never retry a failed attempt');
   H.Main.CollectBusyEngineKeys(Keys);Check(Keys.Count=0,'Stopped/failed workers release reservations');
   D.SetSelectedResult('1/2-1/2');D.SaveTournamentToFile(FileName);

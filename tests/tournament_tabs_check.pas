@@ -5,7 +5,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,
   StdCtrls,ExtCtrls,ComCtrls,CheckLst,Grids,Dialogs,LCLIntf,FPJSON,JSONParser,uMainForm,
   uTournamentHostForm,uTournamentDialog,uTournamentGridModel,uGamePosition,
   uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,uGameSetupTypes,
-  uGameOrchestrator,uRunningGame,uDraughtsEngine,uDraughtsHubEngine,uEngineParamsJson,uGuiDialogs,uGameTree;
+  uGameOrchestrator,uRunningGame,uDraughtsEngine,uDraughtsHubEngine,uEngineParamsJson,uGuiDialogs,uGameTree,uTournamentStorage;
 type TControlAccess=class(TControl);
 var Chess,Draughts:TGameVariant;Checks:Integer=0;
 procedure Check(B:Boolean;const S:string);
@@ -283,6 +283,91 @@ begin
   Variant.Name+': oldest waiting tournament gets the next complete engine pair');
  Host.OnStartGame:=Starts.Original;
 end;
+procedure CheckTimeControlRows(V:TGameVariant);
+var D,R:TTournamentDialog;U:TComboBox;Value:TEdit;Data:TJSONObject;
+ Name:string;I:Integer;C:TControl;Row:TWinControl;Rejected:Boolean;
+const TimeNames:array[0..4]of string=('TournamentMoves','TournamentMinutes','TournamentTimeUnit',
+ 'TournamentIncrement','TournamentIncrementMode');
+begin
+ D:=TTournamentDialog.Create(nil,V);R:=nil;Name:=Directory+'/units-'+GameVariantId(V)+'.json';
+ try
+  D.Show;Pump;D.RefreshLayout;Pump;
+  U:=TComboBox(D.FindComponent('TournamentTimeUnit'));Value:=TEdit(D.FindComponent('TournamentMinutes'));
+  Check((U.ItemIndex=0) and (U.Text='minutes'),'Minutes is the default time unit');
+  Row:=Value.Parent;
+  for I:=0 to High(TimeNames) do begin
+   C:=TControl(D.FindComponent(TimeNames[I]));
+   Check(C.Parent=Row,'All time-control inputs share one row');
+   Check(Abs(C.Top-Value.Top)<=4,'Time-control inputs align on one line');
+  end;
+  Check((Button(D,'Play').Parent=Button(D,'Stop').Parent) and
+   (Button(D,'Play').Parent=TEdit(D.FindComponent('TournamentConcurrentGames')).Parent),
+   'Play, concurrency and Stop share the action row');
+  Check((Button(D,'Play').Parent.Top>Row.Top) and (Button(D,'Play').Left<Button(D,'Stop').Left),
+   'Actions follow the time controls');
+  Check(Button(D,'Play').Enabled and not Button(D,'Stop').Enabled,'Separate idle Play/Stop state');
+  Check(Button(D,'Save...').Enabled and Button(D,'Load...').Enabled,'Idle file controls are available');
+  TEdit(D.FindComponent('TournamentMoves')).Text:='40';Value.Text:='12.5';
+  TEdit(D.FindComponent('TournamentIncrement')).Text:='0.75';
+  TComboBox(D.FindComponent('TournamentIncrementMode')).ItemIndex:=1;
+  U.ItemIndex:=1;U.OnChange(U);D.SaveTournamentToFile(Name);
+  Data:=ReadTournamentDocument(Name,GameGuiProfileFor(V).FileFormat);
+  try
+   Check(Abs(Data.Get('minutes_per_period',0.0)*60-12.5)<1e-9,'Seconds convert to existing canonical minutes');
+   Check((Data.Get('time_unit','')='seconds') and (Data.Get('increment_mode','')='after-move-limit') and
+    (Abs(Data.Get('increment_seconds',0.0)-0.75)<1e-10),'Display unit and increment settings persist');
+  finally Data.Free;end;
+  R:=TTournamentDialog.Create(nil,V);R.LoadTournamentFromFile(Name);
+  Check((TComboBox(R.FindComponent('TournamentTimeUnit')).ItemIndex=1) and
+   (Abs(StrToFloat(TEdit(R.FindComponent('TournamentMinutes')).Text)-12.5)<1e-10),'Seconds reload without changing the clock');
+  AddTournamentPairingRow(Grid(R),'White','Black',1);
+  U:=TComboBox(R.FindComponent('TournamentTimeUnit'));U.ItemIndex:=0;U.OnChange(U);
+  Check(TPanel(R.FindComponent('TournamentSettingsChanged')).Visible,'Unit-only edits protect accepted pairings');
+  Button(R,'Revert').Click;
+  Check((U.ItemIndex=1) and (TEdit(R.FindComponent('TournamentMinutes')).Text='12.5'),'Revert restores value and unit together');
+  Data:=ReadTournamentDocument(Name,GameGuiProfileFor(V).FileFormat);
+  try
+   Data.Strings['time_unit']:='hours';L.Text:=Data.AsJSON;L.SaveToFile(Name);
+   Rejected:=False;try R.LoadTournamentFromFile(Name);except on E:EConvertError do Rejected:=True;end;
+   Check(Rejected and (U.ItemIndex=1),'Invalid saved units are rejected before changing the dialog');
+   Data.Delete('time_unit');L.Text:=Data.AsJSON;L.SaveToFile(Name);R.LoadTournamentFromFile(Name);
+   Check((U.ItemIndex=0) and (Abs(StrToFloat(TEdit(R.FindComponent('TournamentMinutes')).Text)*60-12.5)<1e-9),
+    'Legacy files default to minutes with unchanged actual duration');
+  finally Data.Free;end;
+ finally R.Free;D.Free;end;
+end;
+
+procedure CheckRefereeStop(V:TGameVariant);
+var D,R:TTournamentDialog;Name:string;G:TRunningGame;
+begin
+ D:=Host.NewTournament(V);R:=nil;Configure(D);
+ try
+  GuiTestConfirmationResult:=mrYes;
+  try Button(D,'Play').Click;finally GuiTestConfirmationResult:=0;end;
+  WaitStarted(D);G:=RunningGame(D);
+  Check(not Button(D,'Play').Enabled and Button(D,'Stop').Enabled,'Running tournament exposes separate Stop');
+  Check(not Button(D,'Save...').Enabled and not Button(D,'Load...').Enabled,'File controls disabled while running');
+  Button(D,'Stop').Click;
+  Check((G.StopReason='Referee stopped tournament') and
+   (Grid(D).Cells[TournamentColReason,1]='Referee stopped tournament'),'Stop records referee intent immediately');
+  Check(not Button(D,'Play').Enabled and not Button(D,'Stop').Enabled,'Buttons prevent restart/repeated Stop during shutdown');
+  Check(not Button(D,'Save...').Enabled and not Button(D,'Load...').Enabled,'File controls disabled while stopping');
+  Started:=GetTickCount64;repeat Pump;until not D.IsRunning or (GetTickCount64-Started>8000);
+  Check(not D.IsRunning,'Referee Stop drains existing engine workers');
+  Check((Grid(D).Cells[TournamentColResult,1]='*') and
+   (Grid(D).Cells[TournamentColReason,1]='Referee stopped tournament'),'Stopped games remain unfinished with the referee reason: '+V.Name+'; result='+
+    Grid(D).Cells[TournamentColResult,1]+'; reason='+Grid(D).Cells[TournamentColReason,1]+'; stop='+G.StopReason);
+  Check(Button(D,'Play').Enabled and not Button(D,'Stop').Enabled,'Idle controls return after shutdown');
+  Check(Button(D,'Save...').Enabled and Button(D,'Load...').Enabled,'File controls return after shutdown');
+  Name:=Directory+'/referee-stop-'+GameVariantId(V)+'.json';D.SaveTournamentToFile(Name);
+  R:=TTournamentDialog.Create(nil,V);R.LoadTournamentFromFile(Name);
+  Check(Grid(R).Cells[TournamentColReason,1]='Referee stopped tournament','Referee stop reason survives save/reload');
+ finally
+  R.Free;GuiTestConfirmationResult:=mrNo;
+  try Check(Host.CloseTournament(D),'Stopped test tournament closes');finally GuiTestConfirmationResult:=0;end;
+ end;
+end;
+
 procedure DiscardAll;
 begin
  GuiTestConfirmationResult:=mrNo;
@@ -302,8 +387,13 @@ begin
  Starts:=TStarts.Create;Starts.Owners:=TList.Create;
  Defs:=TExternalEngineList.Create;L:=TStringList.Create;Decisions:=TDecisions.Create;Main:=nil;
  try
-  RegisterEngines(False);Main:=TMainForm.Create(nil);Main.Show;Pump;
+  RegisterEngines(False);CheckTimeControlRows(Chess);CheckTimeControlRows(Draughts);
+  Main:=TMainForm.Create(nil);Main.Show;Pump;
   Button(Main,'Tournament...').Click;Host:=Main.TournamentHost;Check(Host.Count=1,'First open creates one tab');
+  if ParamStr(1)='--controls-only' then begin
+    Starts.Original:=Host.OnStartGame;RegisterEngines(True);
+    CheckRefereeStop(Chess);CheckRefereeStop(Draughts);DiscardAll;
+  end else begin
   CheckHiddenHost;CheckRevealOrder;
   Starts.Original:=Host.OnStartGame;
   D:=Host.Dialogs[0];CheckTabReady(Host,D);Check(Host.ShowForVariant(Chess)=D,'Reopen selects existing same-game tab');
@@ -334,7 +424,8 @@ begin
   Check(Main.ActiveGameTree=Root,'Background starts and completions preserve main document');
   DiscardAll;
   CheckFairness(Chess);DiscardAll;CheckFairness(Draughts);DiscardAll;
-  RegisterEngines(True);NewFour;WaitStarted(Tabs[0]);WaitStarted(Tabs[2]);
+  RegisterEngines(True);CheckRefereeStop(Chess);CheckRefereeStop(Draughts);
+  NewFour;WaitStarted(Tabs[0]);WaitStarted(Tabs[2]);
   GuiTestConfirmationResult:=mrCancel;
   try Check(not Host.CloseTournament(Tabs[0]),'Cancel retains running tab');finally GuiTestConfirmationResult:=0;end;
   Check((Host.Count=4) and Tabs[0].IsRunning and Tabs[2].IsRunning,'Cancel does not stop either game');
@@ -430,6 +521,7 @@ begin
   GuiTestConfirmationResult:=mrNo;CanClose:=False;
   try Host.OnCloseQuery(Host,CanClose);finally GuiTestConfirmationResult:=0;end;
   Check(CanClose and (Host.Count=0),'Host Close retires every session after decisions');
+  end;
   WriteLn('Tournament tabs checks passed (',Checks,' checks)');
  finally
   GuiTestConfirmationOnShow:=nil;GuiTestConfirmationResult:=0;GuiTestFileDialogResult:=-1;
