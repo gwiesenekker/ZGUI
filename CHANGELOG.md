@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reuse tournament controls and compact measured fields — 2026-11-01
 
-Commit: pending.
+Commit: `68035d0`.
 
 - User authorisations: “Apply now; waive prior review” for the requested tournament
   layout and consistent measured numeric widths; “Implement in-place switching;
