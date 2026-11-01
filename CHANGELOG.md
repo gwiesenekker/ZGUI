@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Engine compatibility flags and optional DXP PV — 2026-11-01
 
-Commit: pending.
+Commit: `79c336c`.
 
 - User authorisation: “Waiver granted for these changes!” for finishing the
   existing engine feature flags, checkbox editor, ponder overrides, DXP stdout
