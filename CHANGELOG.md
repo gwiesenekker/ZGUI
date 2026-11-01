@@ -4,6 +4,44 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Retain specific tournament termination reasons — 2026-11-01
+
+Commit: pending.
+
+- User authorisation: “Please proceed!” on 2026-11-01, in direct response to the
+  named termination-reason proposal and prior-review waiver request. Scope:
+  rule/clock causes, ending engine name/colour and raw protocol reason codes;
+  shared implementation authorised for subsequent Claude review. Work notes:
+  `chatgpt/TOURNAMENT_GAME_END_REASON_PROPOSAL.md`.
+- Retain the existing adjudication reason through the existing orchestrator,
+  owned runner snapshots and running-game accessors. Both chess and draughts
+  tournament rows now show the actual clock/rule cause instead of generic
+  “Game finished” / “Draw” text. Preserve timeout-draw explanations in chess.
+- Engine endings show the configured name and colour. DXP reasons also retain
+  the raw code, for example “GWD (Black) claimed draw (DXP reason 2)”. Log the
+  source and raw code alongside the existing raw DXP packet interpretation.
+  Keep actual errors and operator results ahead of descriptive reasons. Follow-up
+  user request: “Orchestrator declared draw by repetition” and “if the user modifies
+  '*' to 0-2 the reason should be updated to 'GWD claimed win. Operator set result
+  to ..'”. Label orchestrator decisions in both games and preserve original claims
+  with “Operator set result to …” through later edits, completion and save/reload.
+  Clearing an override restores the original reason.
+- Save the resulting text in the existing tournament row field. No new schema,
+  result policies, rules, clock handling, pairing or layout. Older saved rows
+  retain their text. DXP move-cap/time-control mapping is explicitly outside
+  this fix. Update the built-in manual.
+- Verification: application compilation; focused termination GUI checks (266,
+  zero unfreed blocks), direct game-end checks (61), real draughts repetition,
+  endgame/25-move draws and terminal capture; raw-code DXP peer checks. Full
+  headless regression sweep, all 19 GUI suites and both tournament suites pass;
+  details recorded in the work notes.
+  GUI checks use isolated hidden displays. Native Windows QA remains outstanding.
+- While answering the 16-move-rule question, identify the FMJD 2024 long-diagonal
+  five-move exception missing from the existing material-only counter. Record the
+  discrepancy/source in the work notes for a separate reviewed rules fix;
+  adjudication remains outside this reason-display change.
+
+
 ### Propose specific tournament termination reasons — 2026-10-31
 
 Commit: `0dbb468`.

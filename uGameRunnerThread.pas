@@ -22,6 +22,7 @@ type
     FCurrentSide: TGameSide;
     FGameResult: string;
     FEngineEndReason: string;
+    FGameEndReason, FEngineEndActor, FEngineEndCode: string;
     FLastError: string;
     FLogLines: TStringList;
     FLogRevision: QWord;
@@ -60,6 +61,9 @@ type
     property CurrentSide: TGameSide read FCurrentSide;
     property GameResult: string read FGameResult;
     property EngineEndReason: string read FEngineEndReason;
+    property GameEndReason: string read FGameEndReason;
+    property EngineEndActor: string read FEngineEndActor;
+    property EngineEndCode: string read FEngineEndCode;
     property LastError: string read FLastError;
     property LogLines: TStringList read FLogLines;
     property LogRevision: QWord read FLogRevision;
@@ -253,6 +257,9 @@ begin
   FCurrentSide := ASource.FCurrentSide;
   FGameResult := ASource.FGameResult;
   FEngineEndReason := ASource.FEngineEndReason;
+  FGameEndReason := ASource.FGameEndReason;
+  FEngineEndActor := ASource.FEngineEndActor;
+  FEngineEndCode := ASource.FEngineEndCode;
   FLastError := ASource.FLastError;
   if (FLogRevision <> ASource.FLogRevision) or
     (FLogLines.Count <> ASource.FLogLines.Count) then
@@ -292,6 +299,7 @@ begin
   FState := gosStopped;
   FGameResult := '*';
   FEngineEndReason := '';
+  FGameEndReason := ''; FEngineEndActor := ''; FEngineEndCode := '';
   FLastError := AReason;
   if Trim(AReason) <> '' then
   begin
@@ -646,6 +654,8 @@ begin
   Result.FCurrentSide := FOrchestrator.CurrentSide;
   Result.FGameResult := FOrchestrator.GameResult;
   Result.FEngineEndReason := FOrchestrator.EngineEndReason;
+  Result.FGameEndReason := FOrchestrator.GameEndReason;
+  Result.FEngineEndCode := FOrchestrator.EngineEndCode;
   Result.FLastError := FOrchestrator.LastError;
   FLogLock.Acquire;
   try
@@ -695,6 +705,15 @@ begin
     FWhiteEngine);
   Result.FBlackPlayerName := PlayerDisplayName(FSetup.BlackPlayer,
     FBlackEngine);
+  if FOrchestrator.EngineEndHasSide then begin
+    if FOrchestrator.EngineEndSide=gsWhite then Result.FEngineEndActor:=Result.FWhitePlayerName
+    else Result.FEngineEndActor:=Result.FBlackPlayerName;
+    if (Trim(Result.FEngineEndActor)='') or (Result.FEngineEndActor='Engine') then
+      Result.FEngineEndActor:=FOrchestrator.EngineEndName;
+    if Trim(Result.FEngineEndActor)='' then Result.FEngineEndActor:='Engine';
+    if FOrchestrator.EngineEndSide=gsWhite then Result.FEngineEndActor+=' (White)'
+    else Result.FEngineEndActor+=' (Black)';
+  end;
   LPvText := '';
   LPvScore := '';
   LPvDepth := '';

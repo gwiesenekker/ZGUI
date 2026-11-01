@@ -191,10 +191,11 @@ A received DXP game-end reason means: `0` unspecified, `1` resignation,
 that the session end. Only resignation directly concedes a result. Other claims
 are checked by the shared game rules; a log entry with `result=*` means no final
 result was assigned by the DXP adapter. The tournament Reason column preserves the
-engine's termination reason: **Draw claimed**, **Win claimed**, **Resigned**,
-or **Engine ended game**. Unknown codes retain their number. A draw or win claim
+engine's name and colour, interpreted termination reason and raw code, for example
+**GWD (Black) claimed draw (DXP reason 2)** or
+**GWD (White) ended game (DXP reason 0)**. Unknown codes retain their number. A draw or win claim
 may therefore have result `*` and a known reason; the reason is not acceptance
-of the claim. Actual game errors take precedence. The raw code remains in the log.
+of the claim. Actual game errors take precedence. The raw code and source also remain in the log.
 
 ### 2.4 Launch arguments and configuration files
 
@@ -755,7 +756,20 @@ Draughts standings award two points for a win and one point for a draw.
 the earlier tournament files. It is unavailable while games are running or
 stopping. Use rescheduling to retry an individual game.
 
-A manually entered result is marked with the reason **Manual result**. Use
+The **Reason** column shows the actual rule or clock cause when available:
+checkmate, stalemate, repetition, move-count/endgame draw rules, or which side's
+clock expired. Rules-based endings identify the orchestrator, for example
+**Orchestrator declared draw by repetition; repetitions=3**. A chess timeout can still be a draw when the opponent cannot mate;
+the explanation is retained. Engine endings identify the engine and colour, with
+the raw protocol reason code when supplied. An unspecified engine ending does
+not identify a rule-based cause. These descriptions preserve the existing result
+and are saved with the tournament. Older completed rows retain their saved text.
+
+An operator result edit retains the original reason and appends, for example,
+**GWD (Black) claimed win (DXP reason 3). Operator set result to 0-2**.
+With no original reason it shows **Operator set result to 0-2**. Further edits
+replace the operator result suffix. Clearing the override with `*` restores the
+played result and its reason. Use
 **Reschedule selected game** to clear a game's result and make it pending again.
 
 The cross table ranks engines by points, wins, Sonnenborn-Berger score, and then

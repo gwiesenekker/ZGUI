@@ -43,6 +43,9 @@ type
     FEngines: array[TGameSide] of TGameEngine;
     FGameResult: string;
     FEngineEndReason: string;
+    FGameEndReason, FEngineEndCode, FEngineEndName: string;
+    FEngineEndHasSide: Boolean;
+    FEngineEndSide: TGameSide;
     FLastError: string;
     FLog: TStringList;
     FLogTarget: TStrings;
@@ -102,6 +105,11 @@ type
     property Engine[ASide: TGameSide]: TGameEngine read GetEngine write SetEngine;
     property GameResult: string read FGameResult;
     property EngineEndReason: string read FEngineEndReason;
+    property GameEndReason: string read FGameEndReason;
+    property EngineEndCode: string read FEngineEndCode;
+    property EngineEndName: string read FEngineEndName;
+    property EngineEndHasSide: Boolean read FEngineEndHasSide;
+    property EngineEndSide: TGameSide read FEngineEndSide;
     property LastError: string read FLastError;
     property Log: TStringList read FLog;
     property LogTarget: TStrings read FLogTarget write FLogTarget;
@@ -169,6 +177,8 @@ begin
   FState := gosWaiting;
   FGameResult := '*';
   FEngineEndReason := '';
+  FGameEndReason := ''; FEngineEndCode := ''; FEngineEndName := '';
+  FEngineEndHasSide := False;
   FStartingFEN := FVariant.DefaultStartingFEN;
   ResetClocks;
   LogMessage('created; state=' + OrchestratorStateToString(FState));
@@ -300,6 +310,8 @@ begin
   FLastError := '';
   FGameResult := '*';
   FEngineEndReason := '';
+  FGameEndReason := ''; FEngineEndCode := ''; FEngineEndName := '';
+  FEngineEndHasSide := False;
   ResetClocks;
   ChangeState(gosRunning, 'new game');
   LogMessage('new game; fen=' + FStartingFEN +
@@ -408,6 +420,7 @@ procedure TGameOrchestrator.FinishGame(const AResult, AReason: string);
 var
   LReason: string;
 begin
+  FGameEndReason := Trim(AReason);
   FGameResult := Trim(AResult);
   if FGameResult = '' then
     FGameResult := '*';
@@ -589,6 +602,12 @@ begin
     if Result = '' then
     begin
       FEngineEndReason := Trim(LEngine.GameEndReason);
+      FEngineEndCode := Trim(LEngine.GameEndCode);
+      FEngineEndName := Trim(LEngine.EngineName);
+      FEngineEndSide := LSide; FEngineEndHasSide := True;
+      LogMessage('engine termination; side=' + SideToString(LSide) +
+        '; engine=' + FEngineEndName + '; reason=' + FEngineEndReason +
+        '; code=' + FEngineEndCode);
       if FEngineEndReason <> '' then
         FinishGame(LEngine.GameResult, FEngineEndReason + '; side=' + SideToString(LSide))
       else if LEngine.GameResult <> '*' then

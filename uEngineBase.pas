@@ -40,6 +40,7 @@ type
     FMoveTimedOut: Boolean;
     FGameResult: string;
     FGameEndReason: string;
+    FGameEndCode: string;
     FGameResultLock: TCriticalSection;
     FLastDepth: string;
     FLastError: string;
@@ -60,6 +61,7 @@ type
     function ExtractMessageValue(const AMessage, AName: string; out AValue: string): Boolean;
     function GetGameResult: string;
     function GetGameEndReason: string;
+    function GetGameEndCode: string;
     function GetLastDepth: string;
     function GetLastError: string;
     function GetLastScore: string;
@@ -84,7 +86,8 @@ type
     procedure MarkMoveTimedOut;
     // An engine termination reason is descriptive metadata, not adjudication.
     // Existing result resets also clear the optional reason.
-    procedure SetGameResult(const AResult: string; const AReason: string = '');
+    procedure SetGameResult(const AResult: string; const AReason: string = '';
+      const ACode: string = '');
     property State: TEngineState read GetCurrentState;
   public
     function StopRequested: Boolean;
@@ -129,6 +132,7 @@ type
     property CurrentState: TEngineState read GetCurrentState;
     property GameResult: string read GetGameResult;
     property GameEndReason: string read GetGameEndReason;
+    property GameEndCode: string read GetGameEndCode;
     property LastDepth: string read GetLastDepth write SetLastDepth;
     property LastError: string read GetLastError;
     property LastScore: string read GetLastScore write SetLastScore;
@@ -373,7 +377,14 @@ begin
   end;
 end;
 
-procedure TGameEngine.SetGameResult(const AResult: string; const AReason: string);
+function TGameEngine.GetGameEndCode: string;
+begin
+  FGameResultLock.Acquire;
+  try Result := FGameEndCode; finally FGameResultLock.Release; end;
+end;
+
+procedure TGameEngine.SetGameResult(const AResult: string; const AReason: string;
+  const ACode: string);
 var
   LResult: string;
 begin
@@ -385,6 +396,7 @@ begin
   try
     FGameResult := LResult;
     FGameEndReason := Trim(AReason);
+    FGameEndCode := Trim(ACode);
   finally
     FGameResultLock.Release;
   end;

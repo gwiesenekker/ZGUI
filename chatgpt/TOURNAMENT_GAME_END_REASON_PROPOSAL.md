@@ -1,7 +1,22 @@
 # Preserve rule and clock termination reasons in tournament rows
 
 Date: 2026-10-31
-Status: proposed; no production changes made.
+Status: implemented and verified on 2026-11-01.
+
+User authorisation: **“Please proceed!”**, in direct response to the named
+termination-reason proposal and request for a prior-review waiver. This covers
+forwarding rule/clock causes, ending engine name/colour and raw protocol codes.
+It does not cover changing DXP move-limit/clock semantics or unrelated features.
+
+Follow-up within this named reason-display work, 2026-11-01: the user requested
+“Orchestrator declared draw by repetition” and “if the user modifies '*' to 0-2
+the reason should be updated to 'GWD claimed win. Operator set result to ..'”.
+Apply that requested presentation extension to both games: label rules-derived
+endings as orchestrator decisions, retain engine claims when an operator overrides
+the result, replace the operator suffix on subsequent edits and retain it through
+save/reload and late completion. Clearing an override restores the prior cause.
+This extends the earlier manual-reason wording scope, without changing results,
+claims policy, the override mechanism, rescheduling or record schemas.
 
 ## User report and requested behavior
 
@@ -69,7 +84,13 @@ Do not assume the reported game was a timeout without its actual log/state.
    `Engine ended game` becomes `X (Black) ended game`. Preserve unknown interpreted
    text and code rather than inventing an outcome. Keep manual-result and capture
    error overrides exactly where existing code applies them. For rule reasons,
-   capitalize the initial character and otherwise retain useful source detail.
+   identify the orchestrator as the source: “Orchestrator declared draw by …”,
+   “Orchestrator declared checkmate”, or “Orchestrator: Flag fell for …”. Retain
+   useful source detail. Following the user's additional request, operator edits
+   append “. Operator set result to RESULT” to the original cause/claim, rather
+   than replacing it with “Manual result”. Subsequent edits replace this suffix;
+   clearing the override restores the original cause. Load/save and late completion
+   retain the same provenance. Existing capture-error precedence remains.
 6. **Persistence**: the existing JSON row reason stores the final human-readable
    text, including actor/code. No new tournament schema, resumption policy,
    standings/pairing rule or layout. Existing completed rows lacking metadata are
@@ -83,15 +104,15 @@ These are source-derived labels, not newly inferred adjudications:
 
 | Cause | Example Reason |
 |---|---|
-| White's clock expires | Flag fell for white; engine move deadline expired |
-| Draughts repetition | Draw by repetition; repetitions=3 |
-| Draughts endgame limit | Draw by 16-move endgame rule |
-| Draughts reversible-move limit | Draw by 25-move rule; reversible_plies=50 |
-| No draughts legal move | White has no legal move |
-| Chess checkmate | Checkmate |
-| Chess stalemate | Stalemate |
-| Chess repetition | Draw by threefold repetition (claim accepted) |
-| Chess move-count limit | Draw by 75-move rule |
+| White's clock expires | Orchestrator: Flag fell for white; engine move deadline expired |
+| Draughts repetition | Orchestrator declared draw by repetition; repetitions=3 |
+| Draughts endgame limit | Orchestrator declared draw by 16-move endgame rule |
+| Draughts reversible-move limit | Orchestrator declared draw by 25-move rule; reversible_plies=50 |
+| No draughts legal move | Orchestrator: White has no legal move |
+| Chess checkmate | Orchestrator declared checkmate |
+| Chess stalemate | Orchestrator declared draw by stalemate |
+| Chess repetition | Orchestrator declared draw by threefold repetition (claim accepted) |
+| Chess move-count limit | Orchestrator declared draw by 75-move rule |
 | DXP draw claim | GWD (Black) claimed draw (DXP reason 2) |
 | DXP generic ending | GWD (White) ended game (DXP reason 0) |
 | DXP resignation | GWD (Black) resigned (DXP reason 1) |
@@ -140,5 +161,42 @@ of the reason-display fix.
 AGENTS.md requires prior Claude approval for new shared functionality, unless the
 user explicitly waives it for a named fix. This proposal adds general termination
 metadata to shared engine/orchestrator/snapshot interfaces, beyond the previous DXP-only
-waiver. The earlier GUI-only approval does not cover it. No implementation has been
-made pending review or a named user waiver for this rule/clock-reason fix.
+waiver. The earlier GUI-only approval does not cover it. The user authorised this
+named proposal with “Please proceed!” on 2026-11-01, as recorded above;
+Claude reviews the resulting commit afterwards.
+
+## Rule discrepancy found while answering the user's question
+
+The official [FMJD Annexes, August 2024, Annex 1 article 6.3, page 14](https://www.fmjd.org/downloads/FMJD_Annexes_2024_8-sig.pdf#page=14)
+retain the 16-move limit for three pieces including a king versus one king, but
+also specify five moves when the lone king occupies the long diagonal. The current
+`TEndgameDrawCounter` only observes material and does not model that diagonal
+condition. This predates the reason-display fix. No adjudication change is made
+here. A separate reviewed rules change should establish the exact diagonal/counter
+transition semantics and add real-board tests before implementation. The current
+reason text faithfully reports the existing counter's decision.
+
+## Implementation verification — 2026-11-01
+
+- Linux GTK2 application compiled successfully.
+- Full `tests/run_regression_checks.sh` passed, including chess/draughts rules,
+  engine clock/ponder/runner lifecycle checks, source audits, database checks,
+  manual/build identity and source-archive checks. Additional final targeted
+  `game_end_reason_check` passed 61 checks (both sides, both games, charged/idle/
+  engine-deadline timeout, chess timeout draw, roots and repetitions).
+- Extended `endgame_draw_check` passed real 5-move and 25-move noncapturing walks,
+  terminal capture and reset assertions. `tests/run_dxp_checks.sh` passed with
+  raw-code/source and log assertions for reason codes 0/1/2/3/9 and both colours.
+- After the user's follow-up wording changes, all 19 GUI suites passed, including
+  `multi_game_gui_check` (140), layout (9602), engine-end reasons (266) and
+  tournament tabs (200). The focused reason suite reports zero unfreed blocks.
+- Both `tests/run_tournament_checks.sh` suites passed again after operator wording
+  changes: draughts preservation and chess tournament checks (101), including
+  override/capture/reschedule persistence paths. GUI tests ran on hidden displays
+  with isolated preferences; no user windows or engine directories were touched.
+- Tested an isolated source snapshot containing only this fix, excluding the
+  pre-existing unfinished engine-feature changes. Compared staged source/tests
+  byte-for-byte with that tested snapshot. Native Windows execution remains QA.
+
+No rule or DXP clock/move-cap behavior was changed. The separately documented
+long-diagonal exception needs review before any future adjudication fix.

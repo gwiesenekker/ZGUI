@@ -95,6 +95,9 @@ type
     function BlackNameText: string;
     function LastErrorText: string;
     function EngineEndReasonText: string;
+    function GameEndReasonText: string;
+    function EngineEndActorText: string;
+    function EngineEndCodeText: string;
     function MainlineCount: Integer;
     function ResultText: string;
     function SetupTimeControl: TTimeControl;
@@ -380,6 +383,13 @@ function TRunningGame.EngineEndReasonText: string;
 begin
   Result := Trim(FSnapshot.EngineEndReason);
 end;
+
+function TRunningGame.GameEndReasonText: string;
+begin Result:=Trim(FSnapshot.GameEndReason);end;
+function TRunningGame.EngineEndActorText: string;
+begin Result:=Trim(FSnapshot.EngineEndActor);end;
+function TRunningGame.EngineEndCodeText: string;
+begin Result:=Trim(FSnapshot.EngineEndCode);end;
 
 function TRunningGame.LastErrorText: string;
 begin

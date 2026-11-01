@@ -60,10 +60,36 @@ begin
       if Ply < 10 then Check(Game.State = gosRunning, 'no premature five-move draw');
     end;
     Check((Game.GameResult = '1-1') and (Pos('5-move', Game.Log.Text) > 0), 'orchestrator applies five-move rule');
+    Check(Game.GameEndReason='draw by 5-move endgame rule','endgame cause retained');
     Game.NewGame('W:WK32:B27');
+    Check(Game.GameEndReason='','new game clears endgame cause');
     Game.PlayMove(Game.Position.LegalMove(0), gsWhite, 0, 'test');
     Check(Game.GameResult = '2-0', 'terminal capture is a win rather than a draw');
+    Check(Game.GameEndReason='Black has no legal move','terminal capture cause retained');
   finally Seen.Free; Candidate.Free; Game.Free; end;
 end;
+procedure CheckPlayedTwentyFiveMoveDraw;
+var Game:TGameOrchestrator;Candidate:TGamePosition;Seen:TStringList;
+ Ply,I:Integer;Move:string;Found:Boolean;
 begin
-  RegisterDefaultGameVariant(DraughtsVariant); CheckLimits; CheckPlayedFiveMoveDraw; WriteLn('OK'); end.
+ Game:=TGameOrchestrator.Create(DefaultGameVariant);Candidate:=nil;Seen:=TStringList.Create;
+ try
+  Game.NewGame('W:WK46,K47:BK1,K2');Seen.Add(Game.Position.PositionKey);
+  for Ply:=1 to 50 do begin
+   Found:=False;
+   for I:=0 to Game.Position.LegalMoveCount-1 do begin
+    Move:=Game.Position.LegalMove(I);AssignGamePosition(Candidate,Game.Position);Candidate.PlayMove(Move);
+    if (Candidate.LegalMoveCount>0) and (Seen.IndexOf(Candidate.PositionKey)<0) and
+     (Pos('x',Move)=0) and (Pos('x',Candidate.LegalMove(0))=0) then begin Found:=True;Break;end;
+   end;
+   Check(Found,'25-move fixture has a fresh noncapturing continuation');
+   Game.PlayMove(Move,Game.CurrentSide,0,'test');Seen.Add(Game.Position.PositionKey);
+   if Ply<50 then Check(Game.State=gosRunning,'no premature 25-move draw');
+  end;
+  Check(Game.GameResult='1-1','25-move draw result');
+  Check(Game.GameEndReason='draw by 25-move rule; reversible_plies=50','25-move cause retained');
+ finally Seen.Free;Candidate.Free;Game.Free;end;
+end;
+
+begin
+  RegisterDefaultGameVariant(DraughtsVariant); CheckLimits; CheckPlayedFiveMoveDraw; CheckPlayedTwentyFiveMoveDraw; WriteLn('OK'); end.

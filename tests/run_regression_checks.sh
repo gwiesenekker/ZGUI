@@ -25,6 +25,7 @@ CHECKS=(
   uci_engine_check.pas
   hub_worker_trace_check.pas
   hub_default_init_check.pas
+  game_end_reason_check.pas
   endgame_draw_check.pas
   board_regression_check.pas
   pdn_regression_check.pas

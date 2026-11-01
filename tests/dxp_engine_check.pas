@@ -217,6 +217,11 @@ begin
     Game.NewGame(Fen);
     Check(Game.Position.LegalMoveCount > 0, 'claim fixture must be nonterminal');
     Check(Game.PlayNextMove = '', 'GAMEEND should not manufacture a move');
+    Check((Engine.GameEndCode='DXP reason '+Reason) and
+      (Game.EngineEndCode=Engine.GameEndCode) and Game.EngineEndHasSide and
+      (Game.EngineEndSide=Side),'raw DXP reason code and source survive the adapter');
+    Check(Pos('DXP_GAMEEND received; reason='+Reason, Engine.StateLog.Text)>0,
+      'raw DXP reason remains in the engine log');
     Check(Game.GameResult = ExpectedResult,
       'unverified peer claim must not decide the result: reason=' + Reason);
     Check((Engine.GameEndReason=ExpectedReason) and (Game.EngineEndReason=ExpectedReason),

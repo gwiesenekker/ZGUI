@@ -202,6 +202,52 @@ end;
 const
   TournamentLaunchStaggerMs = 1000;
 
+function TournamentEngineEndText(AGame:TRunningGame):string;
+var Reason,Actor,Code:string;
+begin
+  Reason:=AGame.EngineEndReasonText;Actor:=AGame.EngineEndActorText;
+  Code:=AGame.EngineEndCodeText;
+  if Reason='' then Reason:=AGame.GameEndReasonText;
+  if Reason='' then Reason:='Engine ended game';
+  Reason:=UpperCase(Copy(Reason,1,1))+Copy(Reason,2,MaxInt);Result:=Reason;
+  if Actor<>'' then begin
+    if SameText(Reason,'Draw claimed') then Result:=Actor+' claimed draw'
+    else if SameText(Reason,'Win claimed') then Result:=Actor+' claimed win'
+    else if SameText(Reason,'Resigned') then Result:=Actor+' resigned'
+    else if Copy(Reason,1,Length('Engine ended game'))='Engine ended game' then
+      Result:=Actor+' ended game'+Copy(Reason,Length('Engine ended game')+1,MaxInt)
+    else Result:=Actor+': '+Reason;
+  end;
+  if (Code<>'') and (Pos(Code,Result)=0) then Result+=' ('+Code+')';
+end;
+
+function TournamentRuleEndText(const AReason:string):string;
+var Reason:string;
+begin
+  Reason:=Trim(AReason);
+  if Copy(LowerCase(Reason),1,8)='draw by ' then
+    Result:='Orchestrator declared '+LowerCase(Copy(Reason,1,1))+Copy(Reason,2,MaxInt)
+  else if SameText(Reason,'stalemate') then Result:='Orchestrator declared draw by stalemate'
+  else if SameText(Reason,'checkmate') then Result:='Orchestrator declared checkmate'
+  else Result:='Orchestrator: '+UpperCase(Copy(Reason,1,1))+Copy(Reason,2,MaxInt);
+end;
+
+function TournamentPlayedReason(const AReason:string):string;
+const Marker='. Operator set result to ';
+var P:Integer;
+begin
+  Result:=Trim(AReason);P:=Pos(Marker,Result);
+  if P>0 then Result:=Copy(Result,1,P-1)
+  else if (Pos('Operator set result to ',Result)=1) or SameText(Result,'Manual result') then Result:='';
+end;
+
+function TournamentOperatorReason(const AReason,AResult:string):string;
+begin
+  Result:=TournamentPlayedReason(AReason);
+  if Result<>'' then Result+='. ';
+  Result+='Operator set result to '+AResult;
+end;
+
 procedure ApplyTournamentGameResultToRow(AGrid: TStringGrid; ARow: Integer;
   AGame: TRunningGame; AFormat:TGameFileFormat);
 var
@@ -215,8 +261,11 @@ begin
   AGrid.Cells[TournamentColResult, ARow] := ResultText;
   if AGame.State = gosError then
     AGrid.Cells[TournamentColReason, ARow] := AGame.LastErrorText
-  else if AGame.EngineEndReasonText <> '' then
-    AGrid.Cells[TournamentColReason, ARow] := AGame.EngineEndReasonText
+  else if (AGame.EngineEndReasonText <> '') or (AGame.EngineEndActorText<>'') or
+    (AGame.EngineEndCodeText<>'') then
+    AGrid.Cells[TournamentColReason, ARow] := TournamentEngineEndText(AGame)
+  else if AGame.GameEndReasonText<>'' then
+    AGrid.Cells[TournamentColReason, ARow] := TournamentRuleEndText(AGame.GameEndReasonText)
   else if ResultText = '*' then
     AGrid.Cells[TournamentColReason, ARow] := 'Unknown result'
   else if ParseTournamentResult(ResultText,AFormat)=trDraw then
@@ -1493,10 +1542,13 @@ begin
   GameRecord(FGrid.Row).OverrideResult(AResultText);
   FGrid.Cells[TournamentColResult, FGrid.Row] := GameRecord(FGrid.Row).EffectiveResult;
   if GameRecord(FGrid.Row).ManualResult <> '' then
-    FGrid.Cells[TournamentColReason, FGrid.Row] := 'Manual result'
-  else if GameRecord(FGrid.Row).PlayedResult <> '' then
-    FGrid.Cells[TournamentColReason, FGrid.Row] := 'Played result'
-  else FGrid.Cells[TournamentColReason, FGrid.Row] := '';
+    FGrid.Cells[TournamentColReason, FGrid.Row] := TournamentOperatorReason(
+      FGrid.Cells[TournamentColReason,FGrid.Row],GameRecord(FGrid.Row).EffectiveResult)
+  else begin
+    FGrid.Cells[TournamentColReason,FGrid.Row]:=TournamentPlayedReason(FGrid.Cells[TournamentColReason,FGrid.Row]);
+    if (FGrid.Cells[TournamentColReason,FGrid.Row]='') and (GameRecord(FGrid.Row).PlayedResult<>'') then
+      FGrid.Cells[TournamentColReason,FGrid.Row]:='Played result';
+  end;
   UpdateCrossTable;
   AutoSaveTournament;
 end;
@@ -1820,7 +1872,8 @@ begin
           if Engine <> nil then FGrid.Cells[TournamentColBlack, Row] := DisplayNameForEngine(Engine);
           FGrid.Cells[TournamentColResult, Row] := GameRecord(Row).EffectiveResult;
           if GameRecord(Row).ManualResult <> '' then
-            FGrid.Cells[TournamentColReason, Row] := 'Manual result'
+            FGrid.Cells[TournamentColReason, Row] := TournamentOperatorReason(
+              Game.Get('reason',''),GameRecord(Row).EffectiveResult)
           else
             FGrid.Cells[TournamentColReason, Row] := Game.Get('reason', '');
           if GameRecord(Row).CaptureError <> '' then
@@ -2129,7 +2182,8 @@ begin
         if GameRecord(RunningGame.Row).ManualResult <> '' then
         begin
           FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
-          FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Manual result';
+          FGrid.Cells[TournamentColReason, RunningGame.Row] := TournamentOperatorReason(
+            FGrid.Cells[TournamentColReason,RunningGame.Row],GameRecord(RunningGame.Row).EffectiveResult);
         end;
         if GameRecord(RunningGame.Row).CaptureError <> '' then
           FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Capture failed: ' + GameRecord(RunningGame.Row).CaptureError;
@@ -2329,7 +2383,8 @@ begin
       if GameRecord(RunningGame.Row).ManualResult <> '' then
       begin
         FGrid.Cells[TournamentColResult, RunningGame.Row] := GameRecord(RunningGame.Row).EffectiveResult;
-        FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Manual result';
+        FGrid.Cells[TournamentColReason, RunningGame.Row] := TournamentOperatorReason(
+            FGrid.Cells[TournamentColReason,RunningGame.Row],GameRecord(RunningGame.Row).EffectiveResult);
       end;
       if GameRecord(RunningGame.Row).CaptureError <> '' then
         FGrid.Cells[TournamentColReason, RunningGame.Row] := 'Capture failed: ' + GameRecord(RunningGame.Row).CaptureError;

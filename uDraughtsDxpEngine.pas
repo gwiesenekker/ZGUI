@@ -1186,7 +1186,8 @@ begin
             Reason := Packet[2];
           if Length(Packet) >= 3 then
             StopCode := Packet[3];
-          SetGameResult(TranslateGameEndResult(Reason), TranslateGameEndReason(Reason));
+          SetGameResult(TranslateGameEndResult(Reason), TranslateGameEndReason(Reason),
+            'DXP reason ' + Reason);
           Log('DXP_GAMEEND received; reason=' + Reason + '; stop_code=' +
             StopCode + '; result=' + GameResult);
           try

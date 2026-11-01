@@ -97,7 +97,7 @@ begin
     Dialog.GameStopped(Game);
     Check(Grid.Cells[TournamentColResult, 1] = '2-0', 'first completion result');
     Dialog.SetSelectedResult('1-1');
-    Check(Grid.Cells[TournamentColReason, 1] = 'Manual result',
+    Check(Grid.Cells[TournamentColReason, 1] = 'Game finished. Operator set result to 1-1',
       'manual override must always have an explicit reason');
     Dialog.SetSelectedResult('*');
     Check(Grid.Cells[TournamentColResult, 1] = '2-0', 'clearing an override restores its played result');
