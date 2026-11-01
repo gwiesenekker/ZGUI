@@ -3,7 +3,7 @@ program dxp_engine_check;
 uses
   {$IFDEF UNIX}cthreads,{$ENDIF}
   Classes, SysUtils, sockets, ssockets, uSocketSafety,
-  uDraughtsBoard, uDraughtsDxpEngine, uDraughtsDxpTestConnection, uEngineRegistry, uGameOrchestrator, uDraughtsPosition, uGamePosition;
+  uDraughtsBoard, uDraughtsDxpEngine, uDraughtsDxpTestConnection, uEngineRegistry, uGameOrchestrator, uDraughtsPosition, uGamePosition,uEngineParamsJson,uDraughtsDxpProtocol;
 
 procedure Check(Condition: Boolean; const MessageText: string);
 begin
@@ -28,7 +28,7 @@ end;
 procedure FakePeer(Port: Word; Reason: Char);
 var
   Stream: TInetSocket;
-  Text: string;
+  Text,Move: string;
 begin
   Stream := TInetSocket.Create('127.0.0.1', Port, 3000);
   try
@@ -38,6 +38,14 @@ begin
     Check((Text <> '') and (Text[1] = 'R'), 'peer should receive GAMEREQ');
     Text := 'A' + StringOfChar(' ', 32) + '0' + #0;
     Stream.WriteBuffer(Text[1], Length(Text));
+    if Reason='P' then begin
+      Move:='32-28';if ParamStr(4)='black' then Move:='17-22';
+      Write('diagnostic line',#10,'info dep');Flush(Output);Sleep(20);
+      WriteLn('th=8 score=0.45 time=0.1 pv="'+Move+'"');WriteLn('done move=99-99');Flush(Output);Sleep(80);
+      Text:=DxpBuildMovePacket(Move,0)+#0;Stream.WriteBuffer(Text[1],Length(Text));
+      Text:=ReadPacket(Stream);Check((Text<>'') and (Text[1]='E'),'PV match ends through DXP');
+      Text:='E00'+#0;Stream.WriteBuffer(Text[1],Length(Text));Exit;
+    end;
     if Reason = 'C' then
       Exit; // Crash/disconnect immediately after accepting the game.
     if Reason = 'O' then
@@ -343,6 +351,29 @@ begin
   end;
 end;
 
+procedure CheckStdoutPv(Enabled:Boolean;Side:TGameSide);
+var D:TExternalEngineDefinition;G:TGameOrchestrator;E:TDxpEngine;P:TEngineParamArray;Port:Word;FileName,Move:string;
+begin
+  D:=TExternalEngineDefinition.Create;G:=TGameOrchestrator.Create(DraughtsVariant);Port:=AvailablePort;
+  FileName:=EngineParamsFileName(ExpandFileName(ParamStr(0)));P:=nil;
+  try
+    if Enabled then AddOrUpdateParam(P,'gui-feature-flags','string','["dxp-pv"]',False);
+    SaveEngineParamsToJson(FileName,'dxp',P);
+    D.Kind:=eekDxp;D.DxpRole:=derListen;D.DxpHost:='127.0.0.1';D.DxpPort:=Port;
+    D.ExePath:=ExpandFileName(ParamStr(0));D.Arguments:='--peer '+IntToStr(Port)+' P ';
+    if Side=gsBlack then D.Arguments:=D.Arguments+'black' else D.Arguments:=D.Arguments+'white';
+    E:=TDxpEngine.Create(D);G.Engine[Side]:=E;Check(E.LaunchAndInit,'PV peer initializes');
+    if Side=gsBlack then G.NewGame('B:W31-50:B1-20') else G.NewGame(DraughtsVariant.DefaultStartingFEN);
+    Move:=G.PlayNextMove;Check((Move<>'') and (G.MoveHistory.Count=1),'Only the DXP socket supplies the actual move');
+    if Enabled then begin
+      Check(G.MoveHistory[0].PrincipalVariation=Move,'Hub-format stdout PV is recorded for the actual DXP move');
+      if Side=gsWhite then Check(G.MoveHistory[0].PvScore='0.45','White stdout score')
+      else Check(G.MoveHistory[0].PvScore='-0.45','Black stdout score normalised to White');
+      Check((G.MoveHistory[0].PvDepth='8') and (G.MoveHistory[0].PvTimeText='0.1'),'Depth and time retained across fragmented stdout');
+    end else Check(G.MoveHistory[0].PrincipalVariation='','Ordinary DXP stdout remains diagnostic without opt-in');
+  finally G.Free;D.Free;DeleteFile(FileName);end;
+end;
+
 begin
   RegisterDefaultGameVariant(DraughtsVariant);
   if ParamStr(1) = '--peer' then
@@ -365,5 +396,6 @@ begin
   CheckDisconnectedPeerFailsPromptly;
   CheckUnorderedCaptureHistory;
   CheckSilentPeerLosesOnTime;
+  CheckStdoutPv(False,gsWhite);CheckStdoutPv(True,gsWhite);CheckStdoutPv(True,gsBlack);
   WriteLn('OK');
 end.

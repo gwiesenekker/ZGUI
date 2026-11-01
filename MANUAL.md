@@ -230,6 +230,7 @@ Important GUI parameters include:
 
 | Parameter | Meaning |
 | --- | --- |
+| `gui-feature-flags` | GUI compatibility flags as a JSON string; click its name or value to edit checkboxes |
 | `gui-engine-type` | Engine protocol: `hub`, `dxp` or `uci` |
 | `gui-uci-id` | UCI identity used by ZGUI |
 | `gui-uci-launch-arguments` | UCI command-line arguments |
@@ -273,6 +274,27 @@ the legal position. The retained `gui-evaluation-bar-depth-min` and
 The current score graph takes its display maximum and scale from **File >
 Preferences**. The seeded per-engine `gui-evaluation-bar-*` values are retained
 in parameter files for compatibility but are not the current graph controls.
+
+The `gui-feature-flags` value is a JSON array of names, for example
+`["no-ponder-hit", "dxp-pv"]`. Its checkbox editor preserves additional unknown
+flags; Cancel leaves the original value unchanged. These flags are GUI settings,
+not advertised engine options:
+
+- **no-pondering**: disable speculative searches for this Hub or UCI engine,
+  even when its saved Ponder option is enabled. This takes precedence over
+  **no-ponder-hit**.
+- **no-ponder-hit**: allow pondering, but stop and restart from the actual position
+  even when the predicted reply matches. Do not send `ponderhit` (UCI) or
+  `ponder-hit` (Hub).
+- **dxp-pv**: during a DXP match, read Hub-format `info` lines from the local
+  engine's stdout for PV, evaluation, depth and time. This works with GWD's
+  Hub-format stdout; it does not parse arbitrary other engine formats. Moves and
+  game-end claims still come exclusively from the DXP socket. This does not make
+  a DXP engine an annotator. Scores use `gui-score-perspective`, as for Hub.
+
+The earlier development spelling `gui-gwd-dxp-pv` remains readable and is saved
+as `dxp-pv` when accepted in the checkbox editor. All flags default to off.
+
 
 ### 2.6 Where engine settings are stored
 

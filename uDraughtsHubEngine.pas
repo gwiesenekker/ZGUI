@@ -44,7 +44,6 @@ type
     procedure ExecuteWorkerCommand(ACommand: TObject);
     function ExtractDoneMove(const ALine: string): string;
     function IsWorkerThread: Boolean;
-    function NormalizeScoreToWhitePerspective(const AScore: string): string;
     function ParamBool(const AName: string; ADefault: Boolean): Boolean;
     procedure ParsePositionMessage(const AMessage: string);
     procedure ProcessData(Sender: TObject; const AText: string);
@@ -92,6 +91,7 @@ type
   end;
 
 implementation
+uses uHubSearchInfo,uEngineFeatureFlags;
 
 const
   HubWorkerWaitPollMs = 1000;
@@ -159,43 +159,6 @@ begin
   Result := Format('%.3f', [ASeconds], FormatSettings);
 end;
 
-function ScoreText(AValue: Double): string;
-var
-  FormatSettings: TFormatSettings;
-begin
-  if Abs(AValue) < 0.0000005 then
-    AValue := 0.0;
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  Result := FormatFloat('0.###', AValue, FormatSettings);
-end;
-
-function TryHubFloat(const AText: string; out AValue: Double): Boolean;
-var
-  FormatSettings: TFormatSettings;
-begin
-  FormatSettings := DefaultFormatSettings;
-  FormatSettings.DecimalSeparator := '.';
-  Result := TryStrToFloat(StringReplace(Trim(AText), ',', '.', []), AValue,
-    FormatSettings);
-end;
-
-function SideToMoveFromPosition(const AStartingFEN: string;
-  AMoveCount: Integer): TDraughtsSide;
-begin
-  if (Trim(AStartingFEN) <> '') and (UpCase(Trim(AStartingFEN)[1]) = 'B') then
-    Result := dsBlack
-  else
-    Result := dsWhite;
-  if Odd(AMoveCount) then
-  begin
-    if Result = dsWhite then
-      Result := dsBlack
-    else
-      Result := dsWhite;
-  end;
-end;
-
 constructor THubWorkerCommand.Create(AKind: THubWorkerCommandKind);
 const
   CommandNames: array[THubWorkerCommandKind] of string = (
@@ -255,7 +218,6 @@ end;
 procedure THubEngine.ProcessData(Sender: TObject; const AText: string);
 var
   DepthText: string;
-  InfoLine: string;
   Line: string;
   LoggedPvText: string;
   LoggedScoreText: string;
@@ -291,34 +253,8 @@ begin
         begin
           FWorker.AddReceivedLine(Line);
         end;
-        if (Pos('info ', LowerCase(Line)) = 1) or
-          (Pos('info=', LowerCase(Line)) = 1) then
-        begin
-          if Pos('info=', LowerCase(Line)) = 1 then
-            InfoLine := 'info ' + Copy(Line, Length('info=') + 1, MaxInt)
-          else
-            InfoLine := Line;
-          PvText := ExtractHubArgument(InfoLine, 'pv');
-          if PvText <> '' then
-          begin
-            LoggedPvText := PvText;
-          end;
-          ScoreText := ExtractHubArgument(InfoLine, 'score');
-          if ScoreText <> '' then
-          begin
-            LoggedScoreText := NormalizeScoreToWhitePerspective(ScoreText);
-          end;
-          DepthText := ExtractHubArgument(InfoLine, 'depth');
-          if DepthText <> '' then
-          begin
-            LoggedDepthText := DepthText;
-          end;
-          TimeText := ExtractHubArgument(InfoLine, 'time');
-          if TimeText <> '' then
-          begin
-            LoggedTimeText := TimeText;
-          end;
-        end;
+        MergeHubSearchInfo(Line,FParams,StartingFEN,MovesPlayed.Count,
+          LoggedPvText,LoggedScoreText,LoggedDepthText,LoggedTimeText);
       end;
     end;
   finally
@@ -599,33 +535,6 @@ begin
     (Value = 'on');
 end;
 
-function THubEngine.NormalizeScoreToWhitePerspective(
-  const AScore: string): string;
-var
-  Perspective: string;
-  ScoreValue: Double;
-begin
-  Result := Trim(AScore);
-  if (Result = '') or (not TryHubFloat(Result, ScoreValue)) then
-    Exit;
-
-  Perspective := LowerCase(Trim(EngineParamValue(FParams,
-    'gui-score-perspective', 'side-to-move')));
-  if Perspective = '' then
-    Perspective := 'side-to-move';
-
-  if (Perspective = 'black') or (Perspective = 'b') then
-    ScoreValue := -ScoreValue
-  else if (Perspective = 'side-to-move') or (Perspective = 'stm') or
-    (Perspective = 'side') then
-  begin
-    if SideToMoveFromPosition(StartingFEN, MovesPlayed.Count) = dsBlack then
-      ScoreValue := -ScoreValue;
-  end;
-
-  Result := ScoreText(ScoreValue);
-end;
-
 procedure THubEngine.ParsePositionMessage(const AMessage: string);
 var
   LowerMessage: string;
@@ -721,7 +630,7 @@ procedure THubEngine.Accepted(const Root:string;Moves:TStrings;const Clock:TEngi
 var Trial:TGamePosition;I:Integer;Reply:string;
 begin
   if WorkerStopping or FStopFailed or FForcePonderOff or not FGameMode or not FSupportsPonder or
-    not ParamBool('ponder',False) or (FNextReply='') then Exit;
+    not ParamBool('ponder',False) or EngineHasFeatureFlag(FParams,FeatureNoPondering) or (FNextReply='') then Exit;
   if (Root<>FSearchRoot) or (Moves.Text<>FSearchMoves+FBestMove+LineEnding) then Exit;
   Trial:=TDraughtsPosition.Create;
   try
@@ -745,7 +654,7 @@ begin
   if FPonderActive then begin
     if not FHasPending or not FHasClock then raise EInvalidOperation.Create('Fresh actual position and clocks required after Hub pondering');
     Own:=FPonderClock.SideToMove;
-    Hit:=(FPendingRoot=FSearchRoot) and (FPendingMoves.Text=FSearchMoves) and
+    Hit:=not EngineHasFeatureFlag(FParams,FeatureNoPonderHit) and (FPendingRoot=FSearchRoot) and (FPendingMoves.Text=FSearchMoves) and
       (FClock.SideToMove=Own) and (FClock.Remaining[Own]=FPonderClock.Remaining[Own]) and
       (FClock.Increment[Own]=FPonderClock.Increment[Own]) and (FClock.MovesRemaining=FPonderClock.MovesRemaining);
     // Hub may finish early. Its queued done is reusable only for the exact prediction.

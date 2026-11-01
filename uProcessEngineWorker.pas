@@ -62,6 +62,7 @@ type
     property LastWaitFailure: string read FLastWaitFailure;
   end;
 implementation
+uses uProcessOutputLines;
 const WorkerWaitPollMs=1000; WorkerWaitLogMs=10000;
 type
   TProcessWorkerThread=class(TThread)
@@ -123,38 +124,10 @@ begin Result:=FQueue.IsClosed; end;
 function TProcessEngineWorker.Post(Command: TProcessEngineCommand): Boolean;
 begin Result:=FQueue.TryPost(Command); end;
 procedure TProcessEngineWorker.FrameData(const AText: string; ALines: TStrings);
-var DelimiterLength,LineEnd: Integer; Line: string;
 begin
   FLineLock.Acquire;
-  try
-    FBuffer += AText;
-    while True do
-    begin
-      DelimiterLength := Length(LineEnding);
-      LineEnd := Pos(LineEnding, FBuffer);
-      if LineEnd = 0 then
-      begin
-        LineEnd := Pos(#10, FBuffer);
-        DelimiterLength := 1;
-      end;
-      if LineEnd = 0 then
-      begin
-        if Length(FBuffer) > 65536 then
-        begin FBuffer := ''; FDroppingOutputLine := True; end;
-        Break;
-      end;
-      if FDroppingOutputLine or (LineEnd > 65537) then
-      begin
-        Delete(FBuffer, 1, LineEnd + DelimiterLength - 1);
-        FDroppingOutputLine := False;
-        Continue;
-      end;
-
-      Line := Trim(Copy(FBuffer, 1, LineEnd - 1));
-      Delete(FBuffer, 1, LineEnd + DelimiterLength - 1);
-      if Line<>'' then ALines.Add(Line);
-    end;
-  finally FLineLock.Release; end;
+  try FrameProcessOutput(FBuffer,FDroppingOutputLine,AText,ALines);
+  finally FLineLock.Release;end;
 end;
 procedure TProcessEngineWorker.AddReceivedLine(const Line: string);
 begin

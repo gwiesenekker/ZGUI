@@ -87,13 +87,15 @@ begin
     Def.Kind:=eekHub;Def.HubId:='Ponder peer';Def.ExePath:=ExpandFileName(ParamStr(0));
     Def.Arguments:='--peer '+Mode+' "'+Trace+'"';Def.InitText:='init';Params:=nil;
     AddOrUpdateParam(Params,'ponder','bool',BoolToStr(Enabled,True),False);
+    if (Mode='no-pondering') or (Mode='no-ponder-hit') then AddOrUpdateParam(Params,'gui-feature-flags','string','["'+Mode+'"]',False);
+    if Mode='both-flags' then AddOrUpdateParam(Params,'gui-feature-flags','string','["no-pondering","no-ponder-hit"]',False);
     SaveEngineParamsToJson(EngineParamsFileName(Def.ExePath),'hub',Params);
     E:=THubEngine.Create(Def);G.Engine[gsWhite]:=E;E.SetGamePonderAllowed(not ForceOff);
     Check(E.LaunchAndInit,'Hub ready');TC:=DefaultTimeControl;TC.MinutesPerPeriod:=0.1;
     TC.MovesPerPeriod:=0;TC.IncrementSeconds:=0.2;G.TimeControl:=TC;G.NewGame(DraughtsVariant.DefaultStartingFEN);
     Move:=G.PlayNextMove;Check((Move<>'') and (G.MoveHistory.Count=1),'First clocked Hub move recorded');
     Tick:=GetTickCount64;
-    if Enabled and not ForceOff and (Mode<>'nooption') and (Mode<>'badreply') then begin
+    if Enabled and not ForceOff and (Mode<>'nooption') and (Mode<>'badreply') and (Mode<>'no-pondering') and (Mode<>'both-flags') then begin
       repeat Sleep(10);until (Pos('# drained',Wire)>0) or (GetTickCount64-Tick>4000);
       Check(Pos('# drained',Wire)>0,'Idle worker drains ponder output without runner polling');Sleep(80);
       E.ReadSearchInfo(Pv,Score,Depth,TimeText);Check((Score='') and (Depth=''),'Speculative scores remain hidden');
@@ -106,8 +108,8 @@ begin
     Check((Move<>'') and (G.MoveHistory.Count=3),'Actual next move accepted legally');
     Check(G.MoveHistory[2].PvScore='0.3','Accepted result retains its own score, including early ponder completion');
     E.Stop; // Joins the worker before inspecting its wire trace.
-    if not Enabled or ForceOff or (Mode='nooption') or (Mode='badreply') then Check(Pos('go ponder',Wire)=0,'Ponder requires option, opt-in and game permission')
-    else if not Hit or (Mode='changed-clock') then Check((Pos('stop',Wire)>0) and (Pos('ponder-hit',Wire)=0),'Miss stops/drains and starts a fresh search')
+    if not Enabled or ForceOff or (Mode='nooption') or (Mode='badreply') or (Mode='no-pondering') or (Mode='both-flags') then Check(Pos('go ponder',Wire)=0,'Ponder requires option, opt-in and game permission')
+    else if not Hit or (Mode='changed-clock') or (Mode='no-ponder-hit') then Check((Pos('stop',Wire)>0) and (Pos('ponder-hit',Wire)=0),'Miss stops/drains and starts a fresh search')
     else if Mode='early' then Check(Pos('ponder-hit',Wire)=0,'Early Hub completion reused without sending ponder-hit')
     else Check(Pos('ponder-hit',Wire)>0,'Hit reuses live search through Hub ponder-hit');
     Check(Pos(' inc=0.200',Wire)>0,'Hub clock carries the pre-move increment');
@@ -148,7 +150,7 @@ begin
     Scenario('early',True,True,False);Scenario('early',False,True,False);
     Scenario('normal',True,False,False);Scenario('normal',True,True,True);
     Scenario('nooption',True,True,False);Scenario('badreply',True,True,False);
-    Scenario('changed-clock',True,True,False);
+    Scenario('changed-clock',True,True,False);Scenario('both-flags',True,True,False);Scenario('no-pondering',True,True,False);Scenario('no-ponder-hit',True,True,False);
     WriteLn('Hub ponder contract checks passed (',Checks,' checks)');end;
   finally DeleteFile(Trace);end;
 end.

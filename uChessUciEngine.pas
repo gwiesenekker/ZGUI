@@ -70,7 +70,7 @@ type
     procedure Stop; override;
   end;
 implementation
-uses Math, uChessUciProtocol;
+uses uEngineFeatureFlags, Math, uChessUciProtocol;
 type
   TUciCommandKind=(ucInit,ucPosition,ucNewGame,ucBudget,ucAnalyze,ucThink,ucPoll,ucStopSearch,ucShutdown,ucData,ucButton,ucBegin,ucClock,ucAccepted);
   TUciCommand=class(TProcessEngineCommand)
@@ -298,7 +298,7 @@ end;
 procedure TUciEngine.Accepted(const Root: string; Moves: TStrings; const Clock: TEngineGameClockState);
 var I: Integer; Enabled: Boolean; Trial: TChessPosition; Reply,Line: string;
 begin
-  if WorkerStopping or FFaulted or FForcePonderOff or not FGameMode or (FNextReply='') then Exit;
+  if WorkerStopping or FFaulted or FForcePonderOff or EngineHasFeatureFlag(FParams,FeatureNoPondering) or not FGameMode or (FNextReply='') then Exit;
   Enabled:=False;
   for I:=0 to High(FOptions) do if SameText(FOptions[I].Name,'Ponder') and
     (FOptions[I].ParamType='check') and SameText(FOptions[I].Value,'true') then Enabled:=True;
@@ -340,7 +340,7 @@ begin
         FOptions[I].Name,FOptions[I].DefaultValue));
     end else if SameText(FOptions[I].Name,'Ponder') and (FOptions[I].ParamType='check') then begin
       Value:='false';
-      if FGameMode and not FForcePonderOff and SameText(EngineParamValue(FParams,'Ponder','false'),'true') then Value:='true';
+      if FGameMode and not FForcePonderOff and not EngineHasFeatureFlag(FParams,FeatureNoPondering) and SameText(EngineParamValue(FParams,'Ponder','false'),'true') then Value:='true';
     end else Continue;
     if FOptions[I].Value=Value then Continue;
     FWorker.SendLine('setoption name '+FOptions[I].Name+' value '+Value);
@@ -428,7 +428,7 @@ begin
     Own:=FPonderClock.SideToMove;
     // M5: the opponent's clocks are stale by design. Only our own budget
     // and the complete actual history determine whether this search is reusable.
-    Hit:=(FPendingRoot=FSearchRoot) and (FPendingMoves.Text=FSearchMoves) and
+    Hit:=not EngineHasFeatureFlag(FParams,FeatureNoPonderHit) and (FPendingRoot=FSearchRoot) and (FPendingMoves.Text=FSearchMoves) and
       (FClock.SideToMove=Own) and (FClock.Remaining[Own]=FPonderClock.Remaining[Own]) and
       (FClock.Increment[Own]=FPonderClock.Increment[Own]) and
       (FClock.MovesRemaining=FPonderClock.MovesRemaining);

@@ -52,6 +52,7 @@ type
     procedure UciLog(Sender: TObject; const AText: string);
     procedure FinishUciDiscovery;
     procedure ParamDoubleClick(Sender: TObject);
+    procedure EditFeatureFlags(Row:Integer);
     function IsComboParamRow(Row: Integer): Boolean;
     procedure AcceptClick(Sender: TObject);
     procedure ButtonPanelResize(Sender: TObject);
@@ -100,7 +101,7 @@ type
 
 implementation
 
-uses
+uses uEngineFeatureFlagsForm,uEngineFeatureFlags,
   LCLType, uGuiDialogs, uGameGuiProfile;
 type TUciEditorLog=class(TThreadMessage)
   Text: string;
@@ -546,12 +547,15 @@ begin
   StoreArgumentParams;
   FreeAndNil(FAcceptedEngine);
   FAcceptedEngine := CurrentEngineDefinition;
-  if FAcceptedEngine.Kind in [eekHub,eekUci] then
-    try
+  try
+    ParseEngineFeatureFlags(EngineParamValue(FCapturedParams,'gui-feature-flags','[]')).Free;
+    if FAcceptedEngine.Kind in [eekHub,eekUci] then
+    begin
       if FAcceptedEngine.Kind=eekUci then begin
         for I:=0 to High(FCapturedParams) do
           if Copy(LowerCase(FCapturedParams[I].Name),1,4)<>'gui-' then ValidateUciValue(FCapturedParams[I],FCapturedParams[I].Value);
       end else ValidateHubParams(FCapturedParams);
+    end;
     except
       on E: EConvertError do
       begin
@@ -1111,6 +1115,10 @@ begin
     Exit;
 
   FSelectedParamRow := Row;
+  if (Col in [0,2]) and SameText(FParamsGrid.Cells[0,Row],'gui-feature-flags') then begin
+    FInlineParamCombo.Visible:=False;EditFeatureFlags(Row);Exit;
+  end;
+
   if (Col = 2) and
     (IsBoolParamRow(Row) or IsComboParamRow(Row) or IsScorePerspectiveParamRow(Row)) then
   begin
@@ -1396,6 +1404,14 @@ begin
 end;
 function TEngineEditForm.IsComboParamRow(Row: Integer): Boolean;
 begin Result:=(Row>0) and (Row<FParamsGrid.RowCount) and SameText(FParamsGrid.Cells[1,Row],'combo'); end;
+procedure TEngineEditForm.EditFeatureFlags(Row:Integer);
+var Value:string;
+begin
+  Value:=FParamsGrid.Cells[2,Row];
+  try if EditEngineFeatureFlags(Self,Value) then FParamsGrid.Cells[2,Row]:=Value;
+  except on E:Exception do ShowGuiOkDialog(Self,'Engine feature flags',E.Message);end;
+end;
+
 procedure TEngineEditForm.ParamDoubleClick(Sender: TObject);
 var Row: Integer;
 begin

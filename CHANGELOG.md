@@ -4,6 +4,38 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Engine compatibility flags and optional DXP PV — 2026-11-01
+
+Commit: pending.
+
+- User authorisation: “Waiver granted for these changes!” for finishing the
+  existing engine feature flags, checkbox editor, ponder overrides, DXP stdout
+  PV and shared parsers before release 1.0. The user requested renaming
+  `gui-gwd-dxp-pv` to `dxp-pv`. Scope and review notes:
+  `chatgpt/ENGINE_COMPATIBILITY_FLAGS_NOTES.md`.
+- Add `gui-feature-flags`, a JSON string containing an array of names, to the
+  existing engine parameter grid. Clicking its name/value opens a font-measured
+  checkbox dialog. Validate input, preserve unknown flags and retain the exact
+  original value on Cancel. GUI flags are not sent as engine options.
+- Support `no-pondering` and `no-ponder-hit` in both chess/UCI and draughts/Hub.
+  The first prevents speculative searches; the second uses the existing
+  stop/drain/restart path even on a hit. Disabling pondering takes precedence.
+  Saved Ponder preferences are preserved; default behaviour is unchanged.
+- With `dxp-pv`, collect Hub-format PV, score, depth and time from local DXP
+  engine stdout during matches, using the existing Hub parser and score
+  perspective. Actual moves/results remain socket-only; DXP cannot annotate.
+  Accept the earlier flag spelling when reading and normalize on editor accept.
+- Reuse bounded output framing for Hub/UCI/DXP. Frame mixed LF/CRLF lines
+  separately on Windows, preserve fragmented lines and recover after oversized
+  output. Preserve existing engine ownership, game, clock and tournament logic.
+- Update built-in Help. Parser checks pass 23 assertions; both-game regressions,
+  DXP socket checks, both tournament suites and application compilation pass.
+  All 20 GUI suites pass (including 22 flags-editor, 10,410 layout and 380
+  tournament-tab checks); UCI pondering passes 188 assertions and Hub 90.
+  All GUI runs use isolated hidden displays.
+  Native Windows QA and a matching Windows executable rebuild remain pending.
+
+
 ### Guard tournament Play and refresh switched-game titles — 2026-11-01
 
 Commit: `bdba1f7`.

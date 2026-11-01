@@ -47,6 +47,13 @@ type
 
   TDxpEngine = class(TDraughtsEngine)
   private
+    FStdoutLock:TCriticalSection;
+    FStdoutBuffer,FPvRoot:string;
+    FDiscardStdout,FReadingMatchPv,FUseDxpPv:Boolean;
+    FPvMoveCount:Integer;
+    FPvText,FPvScore,FPvDepth,FPvTime:string;
+    procedure ArmStdoutPv(const Root:string;MoveCount:Integer);
+  private
     FAcceptThread: TDxpAcceptThread;
     FBoard: TDraughtsBoard;
     FEngine: TExternalEngineDefinition;
@@ -125,7 +132,7 @@ type
 
 implementation
 
-uses uSocketSafety;
+uses uSocketSafety,uProcessOutputLines,uHubSearchInfo,uEngineFeatureFlags;
 
 {$IFDEF UNIX}
 const
@@ -554,6 +561,7 @@ begin
     EngineName := ChangeFileExt(FEngine.ExecutableName, '');
   FExchangedMoves := TStringList.Create;
   FBoard := TDraughtsBoard.Create;
+  FStdoutLock:=TCriticalSection.Create;
   FProcess := TPlatformProcess.Create;
   FProcess.SynchronizeData := False;
   FProcess.OnData := @ProcessData;
@@ -565,6 +573,7 @@ begin
   FGameIncrementSeconds := 0;
   FDxpSupportsFischer := False;
   ChangeState(esWaiting, 'DXP adapter created');
+  FUseDxpPv:=EngineHasFeatureFlag(FParams,FeatureDxpPv);
 end;
 
 destructor TDxpEngine.Destroy;
@@ -583,20 +592,42 @@ begin
   FSocketLock.Free;
   FProcess.Free;
   FBoard.Free;
+  FStdoutLock.Free;
   FExchangedMoves.Free;
   FEngine.Free;
   inherited Destroy;
 end;
 
-procedure TDxpEngine.ProcessData(Sender: TObject; const AText: string);
+procedure TDxpEngine.ArmStdoutPv(const Root:string;MoveCount:Integer);
 begin
-  if not IsWorkerThread then
-  begin
-    QueueProcessData(AText);
-    Exit;
-  end;
-  // DXP uses its socket for protocol data; stdout is only diagnostic output.
-  Log('stdout; text=' + StringReplace(AText, LineEnding, '\n', [rfReplaceAll]));
+  FStdoutLock.Acquire;
+  try
+    if not FReadingMatchPv or (FPvRoot<>Root) or (FPvMoveCount<>MoveCount) then begin
+      FPvRoot:=Root;FPvMoveCount:=MoveCount;FStdoutBuffer:='';FDiscardStdout:=False;
+      FPvText:='';FPvScore:='';FPvDepth:='';FPvTime:='';
+    end;
+    FReadingMatchPv:=True;
+    PublishSearchInfo(FPvText,FPvScore,FPvDepth,FPvTime);
+  finally FStdoutLock.Release;end;
+end;
+
+procedure TDxpEngine.ProcessData(Sender:TObject;const AText:string);
+var Lines:TStringList;I:Integer;
+begin
+  // Windows delivers stdout on its reader thread while the worker waits on the
+  // DXP socket. Protect the parser and its frozen search position independently.
+  FStdoutLock.Acquire;
+  try
+    if FUseDxpPv and FReadingMatchPv then begin
+      Lines:=TStringList.Create;
+      try
+        FrameProcessOutput(FStdoutBuffer,FDiscardStdout,AText,Lines);
+        for I:=0 to Lines.Count-1 do MergeHubSearchInfo(Lines[I],FParams,FPvRoot,FPvMoveCount,FPvText,FPvScore,FPvDepth,FPvTime);
+        PublishSearchInfo(FPvText,FPvScore,FPvDepth,FPvTime);
+      finally Lines.Free;end;
+    end;
+  finally FStdoutLock.Release;end;
+  Log('stdout; text='+StringReplace(AText,LineEnding,'\n',[rfReplaceAll]));
 end;
 
 procedure TDxpEngine.WaitForWorkerCommand(ACommand: TThreadMessage;
@@ -1315,6 +1346,8 @@ begin
   if FSocket = nil then
     raise EInvalidOperation.Create('DXP socket is not connected');
 
+  // The peer may begin its first search as soon as it accepts GAMEREQ.
+  if CurrentSide=ASide then ArmStdoutPv(StartingFEN,0);
   GameReq := GameRequestPacket(ASide, PacketName);
   SendPacket(PacketName, GameReq);
   FGameStarted := True;
@@ -1346,6 +1379,8 @@ var
   PacketName: string;
   HasOpponentMove: Boolean;
 begin
+  ArmStdoutPv(StartingFEN,MovesPlayed.Count);
+  try
   if FSocket = nil then
     raise EInvalidOperation.Create('DXP socket is not connected');
 
@@ -1372,6 +1407,12 @@ begin
   ChangeState(esWaitingForDone, 'waiting for DXP_MOVE');
   Result := WaitForDxpMove(MoveTimeLimitMs);
   if Result <> '' then FExchangedMoves.Add(NormalizeMoveNotation(Result));
+  finally
+    if FProcess.NeedsPolling then FProcess.ReadAvailable;
+    FStdoutLock.Acquire;
+    try FReadingMatchPv:=False;FStdoutBuffer:='';finally FStdoutLock.Release;end;
+  end;
+
 end;
 
 procedure TDxpEngine.DoStop;

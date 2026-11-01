@@ -21,6 +21,7 @@ procedure AddOrUpdateParam(var AParams: TEngineParamArray; const AName,
   AType, AValue: string; AKeepExistingValue: Boolean);
 function EngineParamValue(const AParams: TEngineParamArray; const AName,
   ADefault: string): string;
+function EngineHasFeatureFlag(const AParams:TEngineParamArray;const Flag:string):Boolean;
 function EngineStartupTimeoutMs(const AParams: TEngineParamArray): Integer;
 function EngineLaunchArgumentParamName(AKind: TExternalEngineKind): string;
 function EngineParamsFileName(const AEngineFileName: string): string;
@@ -40,8 +41,11 @@ procedure SaveEngineDefinitionParams(AEngine: TExternalEngineDefinition;
 
 implementation
 
-uses
+uses uEngineFeatureFlags,
   Classes, FPJSON, JSONParser, SysUtils;
+
+function EngineHasFeatureFlag(const AParams:TEngineParamArray;const Flag:string):Boolean;
+begin Result:=HasEngineFeatureFlag(EngineParamValue(AParams,'gui-feature-flags','[]'),Flag);end;
 
 function EngineStartupTimeoutMs(const AParams: TEngineParamArray): Integer;
 begin
@@ -299,6 +303,7 @@ var
   ProtocolText: string;
   RoleText: string;
 begin
+  AddOrUpdateParam(AParams,'gui-feature-flags','string','[]',True);
   AddOrUpdateParam(AParams, 'gui-startup-timeout-ms', 'string', '60000', True);
   if (AEngine<>nil) and (AEngine.Kind=eekUci) then begin
     AddOrUpdateParam(AParams,'gui-engine-type','string','uci',False);

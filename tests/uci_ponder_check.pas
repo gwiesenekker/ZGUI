@@ -121,6 +121,8 @@ begin
  D:=Def(Mode);E:=TUciEngine.Create(D);G:=TGameOrchestrator.Create(V);Observer:=TWireObserver.Create;
  try
   G.Engine[Side]:=E;E.OnLog:=@Observer.Observe;E.SetGamePonderAllowed(not ForceOff);Params:=nil;
+  if (Mode='no-pondering') or (Mode='no-ponder-hit') then AddOrUpdateParam(Params,'gui-feature-flags','string','["'+Mode+'"]',False);
+    if Mode='both-flags' then AddOrUpdateParam(Params,'gui-feature-flags','string','["no-pondering","no-ponder-hit"]',False);
   if Enable then AddOrUpdateParam(Params,'pOnDeR','check','TrUe',False);
   AddOrUpdateParam(Params,'gui-stop-timeout-ms','string','150',False);E.ConfigureOptions(Params);
   if Mode='slowstop' then begin
@@ -134,8 +136,12 @@ begin
   G.NewGame(Root);T:=GetTickCount64;Reply:=G.PlayNextMove;
   Check(GetTickCount64-T<1500,'Acceptance notification does not wait for ponder result');
   Check(G.MoveHistory.Count=1,'Only accepted move in history');
-  if ForceOff or not Enable or (Mode='badreply') or (Mode='nooption') then begin
-   E.PollOutput;Check(Pos('go ponder ',Wire)=0,'No pondering without explicit opt-in/legal candidate');Exit;
+  if ForceOff or not Enable or (Mode='badreply') or (Mode='nooption') or (Mode='no-pondering') or (Mode='both-flags') then begin
+   E.PollOutput;Check(Pos('go ponder ',Wire)=0,'No pondering without explicit opt-in/legal candidate');
+   if (Mode='no-pondering') or (Mode='both-flags') then
+    Check((Pos('setoption name Ponder value true',Wire)=0) and
+      (Pos('setoption name Ponder value false',Wire)>0),'No-pondering forces runtime Ponder off');
+   Exit;
   end;
   if Mode='crash' then Sleep(150) else WaitPonder;
   Sleep(60);E.ReadSearchInfo(Reply,Before,Root,Reply);
@@ -154,7 +160,7 @@ begin
    Check(G.MoveHistory.Count=2,'Fault never plays speculative result');Exit;
   end;
   Check(not Failed and (G.MoveHistory.Count=3) and (Reply<>''),'Real reply accepted exactly once');
-  if Hit then begin
+  if Hit and (Mode<>'no-ponder-hit') then begin
    if Mode='early' then Check(Count(Wire,'ponderhit')=0,'M4 early completed hit returns without ponderhit')
    else Check(Count(Wire,'ponderhit')=1,'Hit sends exactly one ponderhit');
    Check(Count(Wire,'go wtime ')=1,'Hit does not restart ordinary search');
@@ -297,6 +303,7 @@ begin
   Scenario('slowstop',False,True);Scenario('badreply',True,True);
   Scenario('nooption',True,True);Scenario('hold',True,False);Scenario('illegal',True,True);
   Scenario('duplicate',True,True);Scenario('crash',True,True);Scenario('noack',False,True);
+  Scenario('both-flags',True,True);Scenario('no-pondering',True,True);Scenario('no-ponder-hit',True,True);
   NotificationBoundary;
   DirectContext(False,False);DirectContext(True,False);DirectContext(False,True);DirectContext(False,False,True);
   CancelRealTurn(True);CancelRealTurn(False);
