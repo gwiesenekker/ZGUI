@@ -4,7 +4,24 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
-No unreleased changes.
+### Fit the complete MCTS grid at startup — 2026-11-02
+
+Commit: pending.
+
+- User authorisation: “Apply now; waive prior review” for fitting all eight
+  measured MCTS rows and reserving analysis-panel height in both games.
+  Scope: `chatgpt/MCTS_GRID_STARTUP_SIZING_NOTES.md`.
+- After the existing layout pass measures row heights, resize the existing
+  statistics grid to its full content plus native borders. Include that height
+  in the analysis panel's minimum. Chess and draughts retain the same grid,
+  columns, labels, font, scroll behavior and engine/game infrastructure.
+- Add startup/game-switch/font/window regressions to the existing readability
+  suite. The new check reproduces 136 pixels of content in a 104-pixel viewport
+  before the fix. Afterwards all 125 focused checks pass, including full rows,
+  ancestor bounds and existing FEN/notation/laptop-height checks, without leaks.
+- Application compilation, all 20 GUI suites and both tournament suites pass.
+  Layout sweep: 10,426 checks; tournament tabs: 380 checks. GUI execution uses
+  isolated hidden displays; native Windows visual confirmation remains pending.
 
 ## 1.0 — 2026-11-01
 

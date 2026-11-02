@@ -1,7 +1,7 @@
 program main_readability_gui_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
- StdCtrls,Math,uMainForm,uGameNotationView,uGamePosition,uChessPosition,
+ StdCtrls,Grids,Math,uMainForm,uGameNotationView,uGamePosition,uChessPosition,
  uDraughtsPosition,uGameGuiProfile,uGuiDialogs;
 type TErrors=class
  procedure Report(Sender:TObject;E:Exception);
@@ -14,6 +14,23 @@ begin Inc(Checks);if not B then raise Exception.Create(S);end;
 procedure Pump;
 var I:Integer;
 begin for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;end;
+procedure CheckMctsRows(Main:TMainForm);
+var Grid:TStringGrid;I:Integer;C:TControl;
+begin
+ Grid:=nil;
+ for I:=0 to Main.ComponentCount-1 do
+  if Main.Components[I] is TStringGrid then
+   if TStringGrid(Main.Components[I]).Cells[0,0]='nshootouts' then Grid:=TStringGrid(Main.Components[I]);
+ Check(Grid<>nil,'Existing MCTS statistics grid present');
+ Check((Grid.RowCount=8) and (Grid.Cells[0,7]='lcb-ucb'),'All eight MCTS statistics rows retained');
+ Check((Grid.TopRow=0) and (Grid.GridHeight<=Grid.ClientHeight),
+  'All MCTS rows fit without scrolling: required='+IntToStr(Grid.GridHeight)+' viewport='+IntToStr(Grid.ClientHeight));
+ C:=Grid;
+ while C.Parent<>nil do begin
+  Check((C.Top>=0) and (C.Top+C.Height<=C.Parent.ClientHeight),'MCTS grid is not clipped by '+C.Parent.ClassName);
+  C:=C.Parent;
+ end;
+end;
 const LongChessFEN='r3k2r/p1ppqpb1/bn2pnp1/2pP4/1p2P3/2N2N2/PPQBBPPP/R3K2R w KQkq - 0 1';
 var Main:TMainForm;Fen:TEdit;Moves:TGameNotationView;Errors:TErrors;
  I,J,Size,Mode,Required:Integer;
@@ -23,11 +40,11 @@ begin
  RegisterGame(TChessVariant.Create,ChessGuiProfile);RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
  RegisterDefaultGameVariant(RegisteredGame(0));Main:=nil;
  try
-  Main:=TMainForm.Create(nil);Main.Show;Pump;
+  Main:=TMainForm.Create(nil);Main.Show;Pump;CheckMctsRows(Main);
   Fen:=TEdit(Main.FindComponent('MainFenEdit'));Moves:=TGameNotationView(Main.FindComponent('GameMoveMemo'));
   Check((Fen<>nil) and (Moves<>nil),'Existing FEN and notation controls present');
   for J:=0 to 1 do begin
-   Main.SelectGameVariant(RegisteredGame(J));Pump;
+   Main.SelectGameVariant(RegisteredGame(J));Pump;CheckMctsRows(Main);
    // Exercise the visible empty-game marker without changing any game tree.
    Moves.Lines.Text:='*';Moves.TopLine:=1;
    for Size:=0 to 1 do begin
@@ -35,7 +52,7 @@ begin
     for Mode:=0 to 1 do begin
      if Mode=0 then begin Main.Width:=Main.Constraints.MinWidth;Main.Height:=650;end
      else begin Main.Width:=Max(1040,Main.Constraints.MinWidth);Main.Height:=Max(1100,Main.Constraints.MinHeight);end;
-     Pump;
+     Pump;CheckMctsRows(Main);
      Required:=MeasureGuiText(Fen.Text,Fen.Font).cx+MeasureGuiText('MM',Fen.Font).cx;
      Check(Fen.Width>=Required,'Full FEN fits with a margin');
      if Mode=1 then Check(Moves.LinesInWindow>=10,'Notation shows ten lines when space permits')

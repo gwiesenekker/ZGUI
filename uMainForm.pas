@@ -2564,7 +2564,7 @@ begin
 end;
 
 procedure TMainForm.UpdateAnalyzerTextSizes(Sender:TObject);
-var HeaderHeight,PvHeight,LogHeight,MctsHeight,Edges,Padding,Required:Integer;
+var HeaderHeight,PvHeight,LogHeight,MctsHeight,Edges,Padding,Required,StatsHeight:Integer;
     Panel:TControl;
 begin
   if FClosing or (FAnalyzerMemo=nil) or (FAnalyzerPvMemo=nil) or (FMctsMemo=nil) then Exit;
@@ -2582,6 +2582,13 @@ begin
   FMctsMemo.Height:=MctsHeight;
   Panel:=FAnalyzerMemo.Parent.Parent;
   Required:=HeaderHeight+PvHeight+LogHeight+MctsHeight+FMctsMemo.BorderSpacing.Top;
+  if FMctsStatsGrid<>nil then begin
+    // The layout pass measures new row heights after the grid is constructed.
+    // Fit the complete statistics table using those heights, not the old pixels.
+    StatsHeight:=FMctsStatsGrid.GridHeight+Edges;
+    FMctsStatsGrid.Height:=StatsHeight;
+    Required:=Max(Required,StatsHeight);
+  end;
   Panel.Constraints.MinHeight:=Required;
   if Panel.Height<Required then Panel.Height:=Required;
 end;
