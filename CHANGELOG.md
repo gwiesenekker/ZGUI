@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Fit the complete MCTS grid at startup — 2026-11-02
 
-Commit: pending.
+Commit: `e6a1724`.
 
 - User authorisation: “Apply now; waive prior review” for fitting all eight
   measured MCTS rows and reserving analysis-panel height in both games.
