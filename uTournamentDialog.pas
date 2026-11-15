@@ -697,7 +697,7 @@ begin
   FBallotBrowseButton.Enabled:=Editable;
   FBallotClearButton.Enabled:=Editable and (FBallotPositions.Count>0);
   FBallotPathEdit.Text:=FBallotFileName;FBallotPathEdit.Hint:=FBallotFileName;
-  if FBallotPositions.Count=0 then FBallotCountLabel.Caption:='No ballot'
+  if FBallotPositions.Count=0 then FBallotCountLabel.Caption:=''
   else FBallotCountLabel.Caption:=IntToStr(FBallotPositions.Count)+' positions';
   FStartingFENEdit.Enabled:=FBallotPositions.Count=0;
   FRoundRobinGroup.Enabled:=FBallotPositions.Count=0;
@@ -752,10 +752,23 @@ end;
 
 procedure TTournamentDialog.RefreshLayout;
 const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
-var FieldWidth,ContentWidth,GameWidth,I:Integer;Fields:TWinControl;
+var FieldWidth,ContentWidth,GameWidth,I,CountWidth,Extra:Integer;Fields:TWinControl;
 begin
   inherited RefreshLayout;
   if FStartingFENEdit=nil then Exit;
+  if (FBallotCountLabel<>nil) and (FBallotCountLabel.Parent<>nil) then begin
+    CountWidth:=Max(MeasureGuiText('9999 positions',FBallotCountLabel.Font).cx,
+      MeasureGuiText(FBallotCountLabel.Caption,FBallotCountLabel.Font).cx)+
+      MeasureGuiText('MM',FBallotCountLabel.Font).cx;
+    // Reserve the count cell even while its caption is empty. Keep the
+    // containing row's minimum in step with its measured fixed-width cell.
+    Extra:=Max(0,CountWidth-FBallotCountLabel.Constraints.MinWidth);
+    FBallotCountLabel.Constraints.MaxWidth:=0;
+    FBallotCountLabel.Constraints.MinWidth:=CountWidth;
+    FBallotCountLabel.Constraints.MaxWidth:=CountWidth;
+    FBallotCountLabel.Parent.Constraints.MinWidth:=
+      FBallotCountLabel.Parent.Constraints.MinWidth+Extra;
+  end;
   FieldWidth:=MeasureGuiText(FStartingFENEdit.Text,FStartingFENEdit.Font).cx;
   if GameVariantId(FVariant)='chess' then
     FieldWidth:=Max(FieldWidth,MeasureGuiText(ChessFenSample,FStartingFENEdit.Font).cx);

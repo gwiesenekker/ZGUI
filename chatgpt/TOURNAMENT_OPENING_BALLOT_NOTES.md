@@ -63,3 +63,19 @@ The actual supplied ballot also passes the optional GUI check: 79 positions and
 158 persisted rows, with every row's FEN checked through GameSetupForRow. The
 combined focused GUI run passes 255 assertions without reported leaks. Full
 GUI suite: 21 passed, 0 failed; layout: 10,618 checks; tournament tabs: 392.
+
+## Follow-up: blank status and reserved count width — 2026-11-15
+
+Within the authorised opening-ballot work, the user agreed to blank the empty
+status and requested: “OK, but you should leave more space otherwise '79
+positions' won't fit.” Remove the redundant “No ballot” caption, retain the
+label's row cell, and reserve a font-measured representative count plus a margin.
+Measure the actual caption too, so larger counts remain supported. Recalculate
+after the existing layout measurement and include the reserved width in the row
+minimum; do not modify the shared layout helper or game behavior.
+
+Extend the existing GUI fixture for blank startup/clear/reset, reserved width,
+parent bounds, normal/enlarged fonts and the actual 79-position set. The focused
+combined run passes 284 assertions with no reported leaks. Full GUI/tournament
+and application results are recorded in CHANGELOG.md. All GUI execution uses
+isolated hidden displays; native Windows visual QA remains outstanding.

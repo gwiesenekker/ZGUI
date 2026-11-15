@@ -36,6 +36,15 @@ begin
   SaveExternalEngines(EnginesJsonFileName,L);
  finally L.Free;end;
 end;
+procedure CheckCountSpace(D:TTournamentDialog);
+var L:TLabel;Required:Integer;
+begin
+ L:=TLabel(D.FindComponent('TournamentBallotCount'));
+ Required:=MeasureGuiText('9999 positions',L.Font).cx+MeasureGuiText('MM',L.Font).cx;
+ Check(L.Width>=Required,'Count reserves measured space plus margin: width='+IntToStr(L.Width)+' required='+IntToStr(Required));
+ Check((L.Left>=0) and (L.Left+L.Width<=L.Parent.ClientWidth),'Reserved count fits inside ballot row');
+ Check(MeasureGuiText(L.Caption,L.Font).cx<L.Width,'Loaded count text fits with breathing room');
+end;
 procedure ForVariant(V:TGameVariant;const Name:string);
 var D,Loaded:TTournamentDialog;P:TGamePosition;Fens:TStringList;List:TCheckListBox;
  Grid:TStringGrid;I,Row:Integer;Setup:TGameSetup;FileName,Snapshot,Bad,Identity:string;
@@ -49,6 +58,8 @@ begin
   P.LoadFromFEN(V.DefaultStartingFEN);P.PlayMove(P.LegalMove(0));Fens.Add(P.ToFEN);
   P.PlayMove(P.LegalMove(0));Fens.Add(P.ToFEN);WriteFile(FileName,Fens.Text);
   D:=TTournamentDialog.Create(nil,V);D.Show;Pump;
+  Check(TLabel(D.FindComponent('TournamentBallotCount')).Caption='','No placeholder text before choosing a ballot');
+  CheckCountSpace(D);
   List:=nil;
   for I:=0 to D.ComponentCount-1 do if D.Components[I] is TCheckListBox then List:=TCheckListBox(D.Components[I]);
   Check((List<>nil) and (List.Items.Count=2),'Only engines for the selected game offered');
@@ -56,6 +67,8 @@ begin
   GuiTestFileName:=FileName;GuiTestFileDialogResult:=mrOk;
   try Click(D,'LoadOpeningBallot');finally GuiTestFileDialogResult:=-1;end;
   Check(TLabel(D.FindComponent('TournamentBallotCount')).Caption='2 positions','File chooser reports position count');
+  D.Font.Size:=16;D.RefreshLayout;Pump;CheckCountSpace(D);
+  D.Font.Size:=10;D.RefreshLayout;Pump;CheckCountSpace(D);
   Check(not TEdit(D.FindComponent('TournamentStartingFEN')).Enabled,'Single FEN cannot override ballot');
   Check(not TRadioGroup(D.FindComponent('TournamentPairingOptions')).Enabled,'Ballot retains double round-robin');
   Click(D,'CreatePairing');Grid:=TStringGrid(D.FindComponent('TournamentPairings'));
@@ -115,10 +128,10 @@ begin
   try Click(Loaded,'ClearPairing');finally GuiTestConfirmationResult:=0;end;
   Click(Loaded,'ClearOpeningBallot');
   Check(TEdit(Loaded.FindComponent('TournamentStartingFEN')).Enabled,'Clearing ballot restores ordinary single-FEN tournament');
-  Check(TLabel(Loaded.FindComponent('TournamentBallotCount')).Caption='No ballot','Clearing removes position count');
+  Check(TLabel(Loaded.FindComponent('TournamentBallotCount')).Caption='','Clearing removes position count');CheckCountSpace(Loaded);
   WriteFile(FileName,Fens.Text);Loaded.LoadBallotFromFile(FileName);
   if V=RegisteredGame(0) then Loaded.ResetForVariant(RegisteredGame(1)) else Loaded.ResetForVariant(RegisteredGame(0));
-  Check(TLabel(Loaded.FindComponent('TournamentBallotCount')).Caption='No ballot','Switching games clears game-specific ballot state');
+  Check(TLabel(Loaded.FindComponent('TournamentBallotCount')).Caption='','Switching games clears game-specific ballot state');
  finally Loaded.Free;D.Free;P.Free;Fens.Free;Exported.Free;Probe.Positions.Free;Probe.Free;end;
 end;
 procedure RealBallot(const Name:string);
@@ -127,10 +140,10 @@ var D:TTournamentDialog;Fens:TStringList;I:Integer;List:TCheckListBox;
 begin
  Fens:=TStringList.Create;D:=TTournamentDialog.Create(nil,RegisteredGame(1));
  try
-  LoadOpeningBallot(Name,RegisteredGame(1),Fens);D.LoadBallotFromFile(Name);
+  LoadOpeningBallot(Name,RegisteredGame(1),Fens);D.LoadBallotFromFile(Name);D.Show;Pump;
   List:=nil;for I:=0 to D.ComponentCount-1 do if D.Components[I] is TCheckListBox then List:=TCheckListBox(D.Components[I]);
   for I:=0 to List.Items.Count-1 do List.Checked[I]:=True;
-  Click(D,'CreatePairing');Grid:=TStringGrid(D.FindComponent('TournamentPairings'));
+  Click(D,'CreatePairing');Grid:=TStringGrid(D.FindComponent('TournamentPairings'));CheckCountSpace(D);
   Check(Grid.RowCount=1+2*Fens.Count,'Actual ballot creates exactly two rows per entry');
   for I:=1 to 2*Fens.Count do
    Check(D.GameSetupForRow(I,Setup) and (Setup.StartingFEN=Fens[(I-1) div 2]),'Every actual ballot row reaches the normal setup path');

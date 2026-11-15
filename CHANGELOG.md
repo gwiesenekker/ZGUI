@@ -4,6 +4,24 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Reserve space for the ballot position count — 2026-11-15
+
+Commit: pending.
+
+- Follow-up within the authorised opening-ballot feature: “OK, but you should
+  leave more space otherwise '79 positions' won't fit.” Leave the empty status
+  blank and reserve measured count space plus a font-based margin. Account for
+  longer actual captions and include the count cell in the row's minimum width.
+  Both chess and draughts use this presentation; game/scheduling/storage
+  behavior is unchanged.
+- Extend the existing GUI check for blank startup, clear/reset and text/bounds
+  fit at normal/enlarged fonts. The actual 79-position file passes 284 combined
+  assertions without reported leaks. Application compilation, all 21 GUI suites
+  and both tournament suites pass; layout sweep: 10,618 checks. All GUI execution
+  uses hidden displays. Native Windows visual confirmation remains pending.
+- Notes: `chatgpt/TOURNAMENT_OPENING_BALLOT_NOTES.md`.
+
+
 ### Opening ballot files for chess and draughts tournaments — 2026-11-15
 
 Commit: `5df84c1`.
