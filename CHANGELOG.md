@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Opening ballot files for chess and draughts tournaments — 2026-11-15
 
-Commit: pending.
+Commit: `5df84c1`.
 
 - User authorisation: “Implement now; waive prior review” for the opening-ballot
   tournament extension, with the user's follow-up requesting chess applicability.
