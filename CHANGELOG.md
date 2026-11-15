@@ -4,6 +4,38 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Opening ballot files for chess and draughts tournaments — 2026-11-15
+
+Commit: pending.
+
+- User authorisation: “Implement now; waive prior review” for the opening-ballot
+  tournament extension, with the user's follow-up requesting chess applicability.
+  Scope and design: `chatgpt/TOURNAMENT_OPENING_BALLOT_NOTES.md`.
+- Add Ballot file / Clear ballot to the existing tournament setup. Validate and
+  normalize one full FEN per line with the selected game's existing position
+  adapter; report invalid lines, ignore blanks/comment lines and accept UTF-8 BOM.
+  Keep file order and repeated positions. Select double round-robin for a ballot.
+- Each engine pair gets two consecutive ordinary game rows per opening, with
+  engine colours reversed and the identical position. Round identifies the ballot
+  entry. The supplied 79-position ballot validates and yields 158 games for GWD
+  versus Kingsrow. The source ballot and engine directories are untouched.
+- Reuse existing pair generation, game records, scheduler, runners, clocks,
+  reservations, result/reason handling and PGN/PDN renderers. Each row carries its
+  own FEN for play, replay and export. Both chess and draughts support the feature.
+- Embed the validated ballot and per-game FENs in version-4 snapshots, so reopening
+  does not depend on an external file. Validate snapshots before replacing state;
+  older versions reject these files. Ordinary tournament formats remain unchanged.
+  Clear pairing before changing/clearing a ballot; game switching resets it.
+- Add both-game parser/pairing/record checks and a GUI workflow suite, and update
+  the manual/README. Focused checks pass: 31 core assertions with the actual ballot,
+  and 94 GUI assertions including scheduler handoff, FEN export and missing files.
+  Application compilation, full both-game regressions, DXP peer checks, all 21
+  GUI suites and both tournament suites pass.
+  The actual file also passes 255 GUI assertions, including all 158 saved game
+  setups; layout sweep passes 10,618 checks and tournament tabs 392. GUI runs use
+  isolated hidden displays; native Windows visual QA remains outstanding.
+
+
 ### Fit the complete MCTS grid at startup — 2026-11-02
 
 Commit: `e6a1724`.

@@ -157,6 +157,7 @@ var
 begin
   CheckInteger(Data, 'attempt', 1);
   CheckField(Data, 'pdn', [jtString]);
+  CheckField(Data, 'starting_fen', [jtString]);
   CheckField(Data, 'start_date', [jtString]);
   Value:=Data.Get('start_date','');
   if (AFormat=gffPgn) and (Value<>'') then
@@ -196,17 +197,36 @@ end;
 procedure ValidateDocument(Data: TJSONObject; AFormat:TGameFileFormat);
 var
   Value: TJSONData;
-  Games, Engines: TJSONArray;
-  Game: TJSONObject;
+  Games, Engines, Positions: TJSONArray;
+  Game, Ballot, RecordData: TJSONObject;
   I: Integer;
   PairingType, ResultText: string;
   Seen: TStringList;
   PairingKey: string;
 begin
   CheckInteger(Data, 'storage_version', 1);
-  if Data.Get('storage_version', 1) > 3 then
+  if Data.Get('storage_version', 1) > 4 then
     raise EConvertError.Create('Unsupported tournament storage version');
-  if Data.Get('storage_version',1)=3 then begin
+  if Data.Get('storage_version',1)=4 then begin
+    CheckField(Data,'game_variant',[jtString]);CheckField(Data,'notation_format',[jtString]);
+    CheckField(Data,'force_ponder_off',[jtBoolean]);
+    if ((AFormat=gffPgn) and ((Data.Get('game_variant','')<>'chess') or
+      (Data.Get('notation_format','')<>'pgn') or not Data.Get('force_ponder_off',False))) or
+      ((AFormat=gffPdn) and ((Data.Get('game_variant','')<>'draughts') or
+      (Data.Get('notation_format','')<>'pdn') or Data.Get('force_ponder_off',True))) then
+      raise EConvertError.Create('Unsupported tournament variant, format or ponder policy');
+    CheckField(Data,'opening_ballot',[jtObject]);
+    Ballot:=TJSONObject(Data.Find('opening_ballot'));
+    if Ballot=nil then raise EConvertError.Create('Opening ballot is missing');
+    CheckField(Ballot,'file_name',[jtString]);CheckField(Ballot,'positions',[jtArray]);
+    Positions:=TJSONArray(Ballot.Find('positions'));
+    if (Positions=nil) or (Positions.Count=0) then raise EConvertError.Create('Opening ballot has no positions');
+    for I:=0 to Positions.Count-1 do
+      if (Positions[I].JSONType<>jtString) or (Trim(Positions[I].AsString)='') then
+        raise EConvertError.Create('Invalid opening ballot position');
+    if Data.Get('pairing_type','')<>TournamentTypeDoubleRoundRobin then
+      raise EConvertError.Create('Opening ballots require double round-robin');
+  end else if Data.Get('storage_version',1)=3 then begin
     CheckField(Data,'game_variant',[jtString]);CheckField(Data,'notation_format',[jtString]);
     CheckField(Data,'force_ponder_off',[jtBoolean]);
     if (AFormat<>gffPgn) or (Data.Get('game_variant','')<>'chess') or
@@ -217,6 +237,8 @@ begin
     if (Data.Find('game_variant')<>nil) or (Data.Find('notation_format')<>nil) or
       (Data.Find('force_ponder_off')<>nil) then raise EConvertError.Create('Unexpected tournament format metadata');
   end;
+  if (Data.Get('storage_version',1)<4) and (Data.Find('opening_ballot')<>nil) then
+    raise EConvertError.Create('Opening ballots require tournament storage version 4');
   if (Data.Find('tournament_id') <> nil) and
     (Data.Find('tournament_id').JSONType = jtString) and
     (Trim(Data.Find('tournament_id').AsString) = '') then
@@ -284,8 +306,19 @@ begin
       ValidateRecord(TJSONObject(Game.Find('record')), True,AFormat)
     else if Data.Get('storage_version', 1) >= 2 then
       raise EConvertError.Create('Tournament game record is missing');
+    if Data.Get('storage_version',1)=4 then begin
+      RecordData:=TJSONObject(Game.Find('record'));
+      if Trim(RecordData.Get('starting_fen',''))='' then
+        raise EConvertError.Create('Opening ballot game position is missing');
+    end;
     CheckInteger(Game, 'game', 1);
     CheckInteger(Game, 'round', 1);
+    if Data.Get('storage_version',1)=4 then begin
+      if Game.Get('round',1)>Positions.Count then
+        raise EConvertError.Create('Opening ballot game index is out of range');
+      if RecordData.Get('starting_fen','')<>Positions.Strings[Game.Get('round',1)-1] then
+        raise EConvertError.Create('Opening ballot game position does not match its entry');
+    end;
     CheckField(Game, 'white', [jtString]);
     CheckField(Game, 'black', [jtString]);
     CheckField(Game, 'result', [jtString]);

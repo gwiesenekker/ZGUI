@@ -11,6 +11,7 @@ type
     FCaptureError: string;
     FPlayedResult: string;
     FStartDate: string;
+    FStartingFEN: string;
     FManualResult: string;
     FHistory: TJSONArray;
     function CurrentJson: TJSONObject;
@@ -30,6 +31,7 @@ type
     function RenderGame(AFormat:TGameFileFormat;const ATournamentId,AEvent,ARound,AGameNo,
       AWhite,ABlack,AFen:string):string;
     property StartDate:string read FStartDate write FStartDate;
+    property StartingFEN:string read FStartingFEN write FStartingFEN;
     property WhiteEngineKey: string read FWhiteEngineKey write FWhiteEngineKey;
     property BlackEngineKey: string read FBlackEngineKey write FBlackEngineKey;
     property CaptureError: string read FCaptureError;
@@ -60,6 +62,7 @@ begin
   Result.Add('white_engine_key', FWhiteEngineKey);
   Result.Add('black_engine_key', FBlackEngineKey);
   Result.Add('pdn', FPdn);
+  if FStartingFEN<>'' then Result.Add('starting_fen',FStartingFEN);
   if FStartDate<>'' then Result.Add('start_date',FStartDate);
   if FCaptureError <> '' then Result.Add('capture_error', FCaptureError);
   Result.Add('played_result', FPlayedResult);
@@ -79,6 +82,7 @@ var
 begin
   FWhiteEngineKey := AGame.Get('white_engine_key', '');
   FBlackEngineKey := AGame.Get('black_engine_key', '');
+  FStartingFEN := AGame.Get('starting_fen', '');
   Data := TJSONObject(AGame.Find('record'));
   if Data = nil then
   begin
@@ -96,6 +100,7 @@ begin
   FBlackEngineKey := Data.Get('black_engine_key', FBlackEngineKey);
   FAttempt := Data.Get('attempt', 1);
   FPdn := Data.Get('pdn', '');FStartDate:=Data.Get('start_date','');
+  FStartingFEN:=Data.Get('starting_fen',FStartingFEN);
   FCaptureError := Data.Get('capture_error', '');
   FPlayedResult := Data.Get('played_result', '');
   FManualResult := Data.Get('manual_result', '');

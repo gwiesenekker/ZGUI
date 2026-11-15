@@ -1,6 +1,6 @@
 # ZGUI User Manual
 
-Updated 1 November 2026.
+Updated 15 November 2026.
 
 ZGUI plays, analyses and stores orthodox chess and international 10×10 draughts.
 Chess uses UCI engines and PGN files; draughts uses Hub/DXP engines and PDN files.
@@ -755,6 +755,39 @@ repeat pairing is impossible.
 Changing accepted tournament settings after creating pairings invalidates the
 schedule. Choose **Apply change** to clear the existing pairings and results, or
 **Revert** to restore the accepted settings.
+
+### Opening ballots (chess and draughts)
+
+To play the same set of opening positions with both engine colours:
+
+1. Select the engines in the tournament window.
+2. Click **Ballot file...** and select a text `.fen` file with one complete FEN
+   per line, using the selected game's FEN notation. Blank lines and lines
+   beginning with `#`, `;` or `//` are ignored. A UTF-8 BOM is accepted. Invalid
+   positions report the source line; no partial ballot is installed.
+3. Click **Create pairing**. Ballots select **Double round-robin** automatically.
+   Every pair of selected engines plays each position twice, in consecutive rows,
+   with White and Black reversed. The position itself, including side to move and
+   chess move counters, stays the same. Round is the ballot entry number.
+4. Set time controls/concurrency and click **Play** as usual.
+
+For two engines and 79 positions this creates **158 games**. Positions are used
+in file order, including repeated entries. Each game remains a normal tournament
+row with the existing engine reservations, clock, result, reason and replay rules.
+This does not apply a ballot to Swiss pairings.
+
+While a ballot is loaded, the ordinary Starting FEN field shows the first
+position and is disabled. **Ballot file...** and **Clear ballot** are available
+only before pairings exist: clear the pairing first to change the opening set.
+Clearing the ballot restores ordinary single-FEN operation. Switching between
+chess and draughts clears the ballot with the other game-specific settings.
+
+Save/recovery files embed both the validated position list and each game's
+starting FEN. Reopening or replaying uses those saved positions even if the
+original ballot file was moved, edited or removed. PGN/PDN exports retain the
+appropriate starting FEN for each recorded game. Ballot tournaments use save-file
+version 4; older ZGUI versions reject them rather than ignoring the openings.
+Ordinary tournaments retain their existing save formats.
 
 ### 7.2 Playing the tournament
 

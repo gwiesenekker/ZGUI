@@ -18,6 +18,8 @@ analysis, tournament and database infrastructure.
   matches; DXP remains a game protocol, not an annotator protocol.
 - Tabbed round-robin and Swiss tournaments, concurrent games, shared engine
   reservations and oldest-waiting-first allocation across tournaments.
+- Opening ballot files for either game: every engine pair plays each FEN twice
+  with colours reversed, with positions retained in tournament saves.
 - SQLite game databases, import and duplicate detection, player/event filters,
   position searches and move-based navigation.
 - Separate chess/draughts preferences where appropriate, a global engine-use

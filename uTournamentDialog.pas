@@ -77,9 +77,18 @@ type
     FLegacyPdnFileName: string;
     FStartStopButton: TButton;
     FStartingFENEdit: TEdit;
+    FBallotPositions:TStringList;
+    FBallotFileName:string;
+    FBallotPathEdit:TEdit;
+    FBallotCountLabel:TLabel;
+    FBallotBrowseButton,FBallotClearButton:TButton;
     FTimer: TTimer;
     FTournamentNameEdit: TEdit;
     FWhiteEngines: TStringList;
+    procedure BrowseBallotClick(Sender:TObject);
+    procedure ClearBallotClick(Sender:TObject);
+    procedure UpdateBallotControls;
+    function StartingFENForRow(ARow:Integer):string;
     function ReadSettings:TTimeControl;
     function ConfirmSharedExecutables:Boolean;
     function GameFileExtension:string;
@@ -142,6 +151,8 @@ type
     function CaptureGamePdn(AGame: TObject): string; virtual;
   public
     procedure RefreshLayout; override;
+    procedure LoadBallotFromFile(const FileName:string);
+    procedure ClearOpeningBallot;
     procedure ResetForVariant(AVariant:TGameVariant);
     procedure LoadTournamentFromFile(const AFileName: string);
     procedure SaveTournamentToFile(const AFileName: string);
@@ -181,7 +192,7 @@ uses
   uGameDocumentContext, Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
-  uAtomicFile, uGameTreePdn, uDraughtsPdn, LazLoggerBase, uTournamentEngineQueue;
+  uAtomicFile, uTournamentBallot, uGameTreePdn, uDraughtsPdn, LazLoggerBase, uTournamentEngineQueue;
 
 procedure DrawGridText(AGrid: TStringGrid; ACol, ARow: Integer;
   const ARect: TRect);
@@ -352,6 +363,7 @@ begin
   FEngines := TExternalEngineList.Create;
   FRunningGames := TList.Create;
   FGameRecords := TObjectList.Create(True);
+  FBallotPositions:=TStringList.Create;
   FPdnWriteLock := TCriticalSection.Create;
 
   ButtonPanel := TPanel.Create(Self);
@@ -648,6 +660,14 @@ begin
     FenRow:=LayoutRow(SettingsColumn,[FGameCombo,FenLabel,FStartingFENEdit],2)
   else FenRow:=LayoutRow(SettingsColumn,[FenLabel,FStartingFENEdit],1);
   FenRow.Top:=1;
+  FBallotPathEdit:=TEdit.Create(Self);FBallotPathEdit.Name:='TournamentBallotFile';
+  FBallotPathEdit.ReadOnly:=True;FBallotPathEdit.ShowHint:=True;
+  FBallotCountLabel:=TLabel.Create(Self);FBallotCountLabel.Name:='TournamentBallotCount';
+  FBallotBrowseButton:=TButton.Create(Self);FBallotBrowseButton.Name:='LoadOpeningBallot';
+  FBallotBrowseButton.Caption:='Ballot file...';FBallotBrowseButton.OnClick:=@BrowseBallotClick;
+  FBallotClearButton:=TButton.Create(Self);FBallotClearButton.Name:='ClearOpeningBallot';
+  FBallotClearButton.Caption:='Clear ballot';FBallotClearButton.OnClick:=@ClearBallotClick;
+  with LayoutRow(SettingsColumn,[FBallotBrowseButton,FBallotPathEdit,FBallotClearButton,FBallotCountLabel],1) do Top:=2;
   PairingActions:=LayoutStack(ButtonPanel);
   with LayoutRow(PairingActions,[CreateButton]) do Top:=0;
   with LayoutRow(PairingActions,[ClearButton]) do Top:=1;
@@ -667,6 +687,67 @@ procedure TTournamentDialog.StartingFENChanged(Sender:TObject);
 begin
   InvalidateTournamentResults(Sender);
   InvalidateLayout;
+end;
+
+procedure TTournamentDialog.UpdateBallotControls;
+var Editable:Boolean;
+begin
+  if FBallotPathEdit=nil then Exit;
+  Editable:=not IsRunning and TournamentPairingGridIsEmpty(FGrid) and (FStorageError='');
+  FBallotBrowseButton.Enabled:=Editable;
+  FBallotClearButton.Enabled:=Editable and (FBallotPositions.Count>0);
+  FBallotPathEdit.Text:=FBallotFileName;FBallotPathEdit.Hint:=FBallotFileName;
+  if FBallotPositions.Count=0 then FBallotCountLabel.Caption:='No ballot'
+  else FBallotCountLabel.Caption:=IntToStr(FBallotPositions.Count)+' positions';
+  FStartingFENEdit.Enabled:=FBallotPositions.Count=0;
+  FRoundRobinGroup.Enabled:=FBallotPositions.Count=0;
+end;
+
+procedure TTournamentDialog.LoadBallotFromFile(const FileName:string);
+begin
+  if IsRunning or not TournamentPairingGridIsEmpty(FGrid) then
+    raise EInvalidOperation.Create('Clear pairing before changing the opening ballot');
+  LoadOpeningBallot(FileName,FVariant,FBallotPositions);
+  FBallotFileName:=ExpandFileName(FileName);
+  FStartingFENEdit.Text:=FBallotPositions[0];
+  FRoundRobinGroup.ItemIndex:=TournamentPairingIndexDoubleRoundRobin;
+  FAcceptedTournamentSignature:=TournamentSignature;
+  UpdateButtons;InvalidateLayout;
+end;
+
+procedure TTournamentDialog.ClearOpeningBallot;
+begin
+  if IsRunning or not TournamentPairingGridIsEmpty(FGrid) then
+    raise EInvalidOperation.Create('Clear pairing before changing the opening ballot');
+  FBallotPositions.Clear;FBallotFileName:='';
+  UpdateButtons;InvalidateLayout;
+end;
+
+procedure TTournamentDialog.BrowseBallotClick(Sender:TObject);
+var D:TOpenDialog;
+begin
+  D:=TOpenDialog.Create(Self);
+  try
+    D.Title:='Select opening ballot (one FEN per line)';
+    D.Filter:='FEN files (*.fen)|*.fen|All files (*)|*';
+    D.Options:=D.Options+[ofFileMustExist];
+    if ExecuteGuiFileDialog(D) then
+      try LoadBallotFromFile(D.FileName);
+      except on E:Exception do ShowGuiOkDialog(Self,'Opening ballot',E.Message);end;
+  finally D.Free;end;
+end;
+
+procedure TTournamentDialog.ClearBallotClick(Sender:TObject);
+begin
+  try ClearOpeningBallot;
+  except on E:Exception do ShowGuiOkDialog(Self,'Opening ballot',E.Message);end;
+end;
+
+function TTournamentDialog.StartingFENForRow(ARow:Integer):string;
+begin
+  Result:=GameRecord(ARow).StartingFEN;
+  if Result='' then Result:=Trim(FStartingFENEdit.Text);
+  if Result='' then Result:=FVariant.DefaultStartingFEN;
 end;
 
 procedure TTournamentDialog.RefreshLayout;
@@ -719,6 +800,7 @@ begin
     FPdnPublishedHash:='';FVerifiedPdnFingerprint:='';FLegacyPdnFileName:='';
     FStorageNotice:='';FStorageError:='';FTournamentId:=GUIDToString(Id);
     FVariant:=AVariant;FProfile:=Profile;
+    FBallotPositions.Clear;FBallotFileName:='';
     FStartingFENEdit.Text:=FVariant.DefaultStartingFEN;
     FMovesEdit.Text:=IntToStr(FProfile.DefaultClock.MovesPerPeriod);
     FMinutesEdit.Text:=FloatToStr(FProfile.DefaultClock.MinutesPerPeriod);
@@ -792,7 +874,7 @@ begin
   try
     CollectSelectedEngines(Selected);
     Result := TournamentSignature + '|' + FTournamentNameEdit.Text + '|' +
-      FConcurrentGamesEdit.Text + '|' + Selected.Text;
+      FConcurrentGamesEdit.Text + '|' + Selected.Text+'|'+FBallotFileName+'|'+FBallotPositions.Text;
   finally Selected.Free; end;
 end;
 
@@ -855,6 +937,7 @@ begin
   end;
   FRunningGames.Free;
   FGameRecords.Free;
+  FBallotPositions.Free;
   FPdnWriteLock.Free;
   FEngines.Free;
   FBlackEngines.Free;
@@ -880,6 +963,8 @@ begin Result:='.'+FProfile.FileExtension;end;
 function TTournamentDialog.ReadSettings:TTimeControl;
 var Setup:TGameSetup;
 begin
+  if (FBallotPositions.Count>0) and not TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex) then
+    raise EConvertError.Create('Opening ballots require double round-robin');
   Result:=FProfile.DefaultClock;
   if not TryStrToInt(Trim(FMovesEdit.Text),Result.MovesPerPeriod) then
     raise EConvertError.Create('Moves must be a nonnegative integer');
@@ -1154,7 +1239,7 @@ begin
         Output.WriteString(GameRecord(Row).RenderGame(FProfile.FileFormat,FTournamentId,
           FTournamentNameEdit.Text, FGrid.Cells[TournamentColRound, Row],
           FGrid.Cells[TournamentColGame, Row], FGrid.Cells[TournamentColWhite, Row],
-          FGrid.Cells[TournamentColBlack, Row], FStartingFENEdit.Text) + LineEnding);
+          FGrid.Cells[TournamentColBlack, Row], StartingFENForRow(Row)) + LineEnding);
     PdnText := Output.DataString;
   finally
     Output.Free;
@@ -1316,6 +1401,7 @@ var
   Results: TStringList;
   Rounds: TStringList;
   WhiteEngines: TStringList;
+  I:Integer;
 begin
   if IsRunning or (FStorageError <> '') then
     Exit;
@@ -1345,7 +1431,9 @@ begin
       Exit;
     end;
 
-    PairingRound := BuildTournamentPairingRound(
+    if FBallotPositions.Count>0 then
+      PairingRound:=BuildBallotPairingRound(Engines,FBallotPositions)
+    else PairingRound := BuildTournamentPairingRound(
       TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex),
       TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex), Engines,
       WhiteEngines, BlackEngines, Results, Rounds,FProfile.FileFormat);
@@ -1362,6 +1450,9 @@ begin
       ClearTournamentPairingGrid(FGrid);
     end;
     ApplyTournamentPairingRoundToGrid(FGrid, PairingRound,FProfile.FileFormat);
+    if FBallotPositions.Count>0 then
+      for I:=0 to High(PairingRound.Pairings) do
+        GameRecord(I+1).StartingFEN:=PairingRound.Pairings[I].StartingFEN;
     FAcceptedTournamentSignature := TournamentSignature;
     if FInvalidationPanel <> nil then
       FInvalidationPanel.Visible := False;
@@ -1787,7 +1878,8 @@ var
   Data: TJSONObject;
   EngineArray, EngineKeys: TJSONArray;
   Game: TJSONObject;
-  Games: TJSONArray;
+  Games,Positions:TJSONArray;
+  Ballot:TJSONObject;
   I: Integer;
   NextPdnFileName: string;
   Clock:TTimeControl;
@@ -1800,7 +1892,13 @@ begin
     NextPdnFileName := UnusedTournamentPdnPath(NextPdnFileName,FProfile.FileFormat);
   Data := TJSONObject.Create;
   try
-    if FProfile.FileFormat=gffPgn then begin
+    if FBallotPositions.Count>0 then begin
+      Data.Add('storage_version',4);Data.Add('game_variant',GameVariantId(FVariant));
+      Data.Add('notation_format',FProfile.FileExtension);Data.Add('force_ponder_off',FProfile.TournamentForcePonderOff);
+      Ballot:=TJSONObject.Create;Data.Add('opening_ballot',Ballot);Ballot.Add('file_name',FBallotFileName);
+      Positions:=TJSONArray.Create;Ballot.Add('positions',Positions);
+      for I:=0 to FBallotPositions.Count-1 do Positions.Add(FBallotPositions[I]);
+    end else if FProfile.FileFormat=gffPgn then begin
       Data.Add('storage_version',3);Data.Add('game_variant','chess');
       Data.Add('notation_format','pgn');Data.Add('force_ponder_off',FProfile.TournamentForcePonderOff);
     end else Data.Add('storage_version', 2);
@@ -1881,6 +1979,7 @@ var
   PairingType,TimeUnit: string;
   Id: TGUID;
   Setup:TGameSetup;
+  Ballot:TJSONObject;Positions:TJSONArray;RecordData:TJSONObject;
 begin
   if IsRunning then
     Exit;
@@ -1895,9 +1994,26 @@ begin
     if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
     ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
     TimeUnit:=Data.Get('time_unit','minutes');
+    Ballot:=TJSONObject(Data.Find('opening_ballot'));
+    if Ballot<>nil then begin
+      Positions:=TJSONArray(Ballot.Find('positions'));
+      for I:=0 to Positions.Count-1 do NormalizeBallotFEN(FVariant,Positions.Strings[I]);
+    end;
+    Games:=Data.Find('games');
+    if Games<>nil then for I:=0 to Games.Count-1 do begin
+      RecordData:=TJSONObject(TJSONObject(Games.Items[I]).Find('record'));
+      if (RecordData<>nil) and (RecordData.Get('starting_fen','')<>'') then
+        NormalizeBallotFEN(FVariant,RecordData.Get('starting_fen',''));
+    end;
   except Data.Free;raise;end;
   FLoadingTournament := True;
   try
+    FBallotPositions.Clear;FBallotFileName:='';
+    if Ballot<>nil then begin
+      Positions:=TJSONArray(Ballot.Find('positions'));
+      for I:=0 to Positions.Count-1 do FBallotPositions.Add(NormalizeBallotFEN(FVariant,Positions.Strings[I]));
+      FBallotFileName:=Ballot.Get('file_name','');
+    end;
     FTournamentNameEdit.Text := TJSONObject(Data).Get('tournament_name',
       'Tournament');
     FStartingFENEdit.Text := TJSONObject(Data).Get('starting_fen',
@@ -2125,7 +2241,7 @@ begin
   ASetup.WhiteEngine:=EngineForRow(ARow,True);ASetup.BlackEngine:=EngineForRow(ARow,False);
   if (ASetup.WhiteEngine=nil) or (ASetup.BlackEngine=nil) then
   begin FGrid.Cells[TournamentColReason,ARow]:='Missing engine';Exit;end;
-  ASetup.StartingFEN:=Trim(FStartingFENEdit.Text);
+  ASetup.StartingFEN:=StartingFENForRow(ARow);
   if ASetup.StartingFEN='' then ASetup.StartingFEN:=FVariant.DefaultStartingFEN;
   try
     ASetup.TimeControl:=ReadSettings;
@@ -2525,6 +2641,7 @@ const
 begin
   if FClosing then
     Exit;
+  UpdateBallotControls;
   for I := Low(PairingActions) to High(PairingActions) do
   begin
     Button := FindComponent(PairingActions[I]);

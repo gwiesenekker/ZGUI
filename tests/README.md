@@ -410,3 +410,12 @@ It embeds two existing tournament dialogs with their main-form component owner,
 and exercises sizing, independent fields, focus, default/cancel roles, mnemonics
 and Tab traversal (160 GTK2 checks). Run with `--interactive` for the native
 Windows checklist in `chatgpt/TOURNAMENT_EMBEDDING_WINDOWS_CHECK.md`.
+
+
+`tournament_ballot_check` validates the shared one-FEN-per-line loader and
+colour-reversed expansion for both games, preserving side/move counters, repeated
+entries and replay/save positions. An optional argument checks an external
+draughts ballot without changing or copying it. `tournament_ballot_gui_check`
+checks the file selector, paired rows, scheduler setup handoff, PGN/PDN positions,
+version-4 snapshots, missing source files, replay, invalid input and game reset.
+Both are included in the normal regression/GUI scripts.

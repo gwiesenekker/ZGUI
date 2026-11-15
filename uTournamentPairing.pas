@@ -12,6 +12,7 @@ type
     White: string;
     Black: string;
     RoundNumber: Integer;
+    StartingFEN: string;
   end;
 
   TTournamentPairingArray = array of TTournamentPairing;
@@ -25,6 +26,7 @@ type
 function BuildTournamentPairingRound(AIsSwiss, ADoubleRoundRobin: Boolean;
   AEngines, AWhiteEngines, ABlackEngines, AResults,
   ARounds: TStrings; AFormat:TGameFileFormat=gffPdn): TTournamentPairingRound;
+function BuildBallotPairingRound(AEngines,APositions:TStrings):TTournamentPairingRound;
 function TournamentAllResultsKnown(AWhiteEngines, ABlackEngines,
   AResults: TStrings; AFormat:TGameFileFormat=gffPdn): Boolean;
 function TournamentNextRoundNumber(ARounds: TStrings): Integer;
@@ -38,6 +40,25 @@ implementation
 
 uses
   SysUtils, uTournamentResults;
+
+function BuildBallotPairingRound(AEngines,APositions:TStrings):TTournamentPairingRound;
+var Base:TTournamentPairingArray;P,I,N:Integer;
+begin
+  Result.HasRepeat:=False;Result.RoundNumber:=1;Result.Pairings:=nil;
+  GenerateRoundRobinPairings(AEngines,False,Base);
+  if (Length(Base)=0) or (APositions.Count=0) then Exit;
+  if APositions.Count>High(Integer) div 2 div Length(Base) then
+    raise EConvertError.Create('Opening ballot creates too many pairings');
+  SetLength(Result.Pairings,2*Length(Base)*APositions.Count);N:=0;
+  for P:=0 to APositions.Count-1 do
+    for I:=0 to High(Base) do begin
+      Result.Pairings[N]:=Base[I];Result.Pairings[N].RoundNumber:=P+1;
+      Result.Pairings[N].StartingFEN:=APositions[P];
+      Result.Pairings[N+1]:=Result.Pairings[N];
+      Result.Pairings[N+1].White:=Base[I].Black;Result.Pairings[N+1].Black:=Base[I].White;
+      Inc(N,2);
+    end;
+end;
 
 procedure AppendPairing(var APairings: TTournamentPairingArray;
   const AWhite, ABlack: string; ARoundNumber: Integer = 1);

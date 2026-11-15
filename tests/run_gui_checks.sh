@@ -45,6 +45,8 @@ run_check "engine_end_reason_gui_check (GTK2, engine reason snapshots and tourna
 
 run_check "engine_feature_flags_gui_check (GTK2, compatibility flags editor)" engine_feature_flags_gui_check "/feature-flags" 45s
 
+run_check "tournament_ballot_gui_check (GTK2, ballot positions and colour-reversed game rows)" tournament_ballot_gui_check "/ballots" 60s
+
 XDG_CONFIG_HOME="$OUT_DIR/tabs-recovery" run_check "tournament_tabs_check (GTK2, tab lifecycle and fair cross-tournament allocation)" tournament_tabs_check "/tournament-tabs" 100s
 
 echo "GUI suites passed: $PASSED; failed: ${#FAILED[@]}"
