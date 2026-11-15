@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Reserve space for the ballot position count — 2026-11-15
 
-Commit: pending.
+Commit: `e233ed9`.
 
 - Follow-up within the authorised opening-ballot feature: “OK, but you should
   leave more space otherwise '79 positions' won't fit.” Leave the empty status
