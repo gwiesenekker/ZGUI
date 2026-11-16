@@ -4,6 +4,19 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Document Windows interactive CLI testing — 2026-11-16
+
+Commit: pending.
+
+- Add a Windows walkthrough to the built-in manual: launch --cli, list engines,
+  start/query a short tournament, use an opening ballot, and check GUI Stop,
+  modal BUSY, EOF and normal close behavior for chess and draughts.
+- Include cmd pipe and multi-command-file examples, expected JSON output,
+  session-ID lifetime, immediate query semantics, separate diagnostics and the
+  five-tournament stdout-isolation check. Native Windows QA remains outstanding.
+- Documentation only; application behavior and layout are unchanged. Manual
+  document and built-in Help checks pass.
+
 ### Address Claude's interactive CLI implementation review — 2026-11-16
 
 Commit: `3627fda`.

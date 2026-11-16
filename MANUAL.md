@@ -179,6 +179,115 @@ retained tournament and file. Invalid unpublished setups are discarded.
 
 Native Windows console/pipe validation remains outstanding for this release.
 
+#### Testing the interactive CLI on Windows
+
+These steps are a native Windows QA checklist; they do not imply that Windows
+validation has already been completed. Rebuild the latest ZGUI with `build.bat`
+before testing. Register two available engines for the same game through
+**Engines...** first.
+
+1. Open PowerShell in the ZGUI directory and start:
+
+   ```powershell
+   .\zgui.exe --cli
+   ```
+
+   Expect the normal GUI and a separate console with a `zgui>` prompt. Enter the
+   following commands in that new console, not at the PowerShell prompt.
+
+2. List the registered engines:
+
+   ```text
+   list_engines
+   ```
+
+   Expect `OK` followed by JSON. Choose two available engines of the same game
+   and use their returned IDs in place of `1` and `2` below.
+
+3. Start a short tournament:
+
+   ```text
+   run_tournament engine1_id=1 engine2_id=2 name="Windows CLI test" time=30 moves=0 increment=0 concurrent=1
+   ```
+
+   This creates two colour-reversed games, each with 30 seconds per player and
+   no increment. Expect a normal tournament tab and an immediate `OK` response
+   containing `"tournament":N`; the command does not wait for completion.
+   If two UCI registrations share one executable, retry with
+   `allow_shared_executable=true` appended to explicitly accept that configuration.
+   The refused attempt should leave no extra tab or pairing files.
+
+4. Query the returned tournament ID (replace `1` if necessary):
+
+   ```text
+   query_tournament id=1
+   ```
+
+   Repeat while it runs. Check `state`, `games_completed`, `pairs_completed`,
+   `wins`, `draws` and `losses`. Results are from engine1's perspective. After
+   both games finish with known results, expect two completed games and one
+   completed pair. Unresolved `*` results do not count as completed.
+
+5. To test an opening ballot, use an existing file and suitable engine IDs:
+
+   ```text
+   run_tournament engine1_id=1 engine2_id=2 name="Ballot test" ballot="C:\Matches\ballot2.fen" time=600 moves=75 increment=0 concurrent=1
+   ```
+
+   Each position produces two games with colours reversed. This works with
+   either chess or draughts ballots and two engines for that game. Add the
+   shared-executable option when applicable, then query the new returned ID.
+
+6. Check interaction with the live GUI:
+
+   - Click a tournament game row to watch its board, moves and PV.
+   - Click **Stop**, then query again. Active games should drain to zero.
+   - Open Preferences and issue a command. Expect `ERROR` with code `BUSY`;
+     close Preferences and retry successfully.
+   - Press **Ctrl+Z**, then Enter in the CLI console. Input should end while
+     the GUI and its tournaments remain open.
+   - Close ZGUI through its GUI and check the normal save/discard/cancel handling.
+
+7. Test pipes from **cmd.exe**, in the ZGUI directory:
+
+   ```bat
+   echo list_engines | zgui.exe --cli > replies.txt 2> diagnostics.txt
+   ```
+
+   `replies.txt` should contain one complete `OK` JSON response, without a prompt,
+   banner or Lazarus messages. Diagnostics belong in `diagnostics.txt`; do not
+   merge stderr into stdout with `2>&1`. Input EOF should leave the GUI open.
+   Close it normally before the next test.
+
+   For a multi-command test, create a UTF-8 text file without a BOM named
+   `commands.txt`, with the following lines, substituting the two engine IDs. In this fresh process,
+   the first successfully created CLI tournament has ID 1:
+
+   ```text
+   list_engines
+   run_tournament engine1_id=1 engine2_id=2 name="Pipe test" time=30 moves=0 increment=0 concurrent=1
+   query_tournament id=1
+   ```
+
+   Append `allow_shared_executable=true` to the tournament command if required.
+   Then run from cmd:
+
+   ```bat
+   type commands.txt | zgui.exe --cli > replies.txt 2> diagnostics.txt
+   ```
+
+   Expect exactly three complete response lines. The query is an immediate
+   snapshot, not a wait for completion. For repeated polling, a client must keep
+   stdin/stdout pipes open and send further queries in the same ZGUI process.
+   Launching a new process does not retain the previous session's IDs.
+
+For the stdout-isolation regression check, create and query at least five
+successful tournaments in one pipe session. Every stdout line, including through
+normal GUI shutdown, must be a complete `OK ` or `ERROR ` JSON response, with no
+partial diagnostic text. Also check GUI close with idle input or a client that
+stops reading responses. The transport helper and further Windows checks are
+described in `tests/CLI_WINDOWS_TRANSPORT_CHECK.md`.
+
 ## 1. Getting started
 
 When ZGUI starts, the main window shows:
