@@ -28,4 +28,4 @@ This review verifies the C13, T16, T17 and U28 fixes in `3627fda`; it raises no 
 
 ## Commit
 
-Pending.
+Review record: `e880527`.

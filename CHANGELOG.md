@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Record Claude's verification of the CLI fixes — 2026-11-16
 
-Commit: pending.
+Commit: `e880527`.
 
 - Review review-00e3d3e.md: Claude confirms C13, T16, T17 and U28 are fixed and
   raises no new findings. No application behavior or GUI changes are needed for
