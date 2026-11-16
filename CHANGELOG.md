@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Shared interactive-CLI actions and transport validation — 2026-11-16
 
-Commit: pending.
+Commit: `0d80b72`.
 
 - Implement the approved shared GUI seams from Claude's interactive-CLI review:
   typed fresh-match configuration, result-returning pairing creation, command-mode
