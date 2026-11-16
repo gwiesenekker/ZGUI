@@ -4,6 +4,21 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Record Claude's verification of the CLI fixes — 2026-11-16
+
+Commit: pending.
+
+- Review review-00e3d3e.md: Claude confirms C13, T16, T17 and U28 are fixed and
+  raises no new findings. No application behavior or GUI changes are needed for
+  either game. Record the assessment in chatgpt/CLI_REVIEW_00E3D3E_NOTES.md.
+- Update the open C11 Coder comments in both review tables; retain native Windows
+  QA as outstanding under the existing waiver. Preserve closed comments and
+  reviewer-owned statuses/evidence. Optional form-resource logging cleanup and
+  the historical full review remain outside this follow-up.
+- Fresh GTK2 build, CLI GUI (97 checks), integrated application (65 checks),
+  terminal transport (20 checks) and manual checks pass. Both games and the
+  actual executable are covered; native Windows validation remains outstanding.
+
 ### Add interactive CLI command and parameter reference — 2026-11-16
 
 Commit: `c8e938b`.
