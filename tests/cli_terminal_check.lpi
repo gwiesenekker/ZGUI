@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags><MainUnitHasCreateFormStatements Value="False"/></Flags>
+      <MainUnit Value="0"/>
+      <Title Value="cli_terminal_check"/>
+    </General>
+    <RequiredPackages Count="2">
+      <Item1><PackageName Value="LCL"/></Item1>
+      <Item2><PackageName Value="SynEdit"/></Item2>
+    </RequiredPackages>
+    <Units Count="1">
+      <Unit0>
+        <Filename Value="cli_terminal_check.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit0>
+    </Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target><Filename Value="cli_terminal_check"/></Target>
+    <SearchPaths><OtherUnitFiles Value=".."/></SearchPaths>
+    <Linking><Options><Win32><GraphicApplication Value="True"/></Win32></Options></Linking>
+    <Other><CustomOptions Value="-Cr -gl"/></Other>
+  </CompilerOptions>
+</CONFIG>

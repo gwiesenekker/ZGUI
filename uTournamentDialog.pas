@@ -5,7 +5,7 @@ unit uTournamentDialog;
 interface
 
 uses
-  uTournamentFileLocks,
+  FPJSON, uTournamentFileLocks,
   CheckLst, uGuiLayout, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
   Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord,
   uGameGuiProfile,uGamePosition,uGameOrchestrator;
@@ -22,6 +22,12 @@ type
 
   TTournamentContextEvent=procedure(Sender:TObject;Variant:TGameVariant;const FileName:string) of object;
   TTournamentTargetsEvent=procedure(Sender:TObject;const JsonFile,Publication,Identity:string) of object;
+  TTournamentMatchSettings=record
+    Engine1Key,Engine2Key,Name,Ballot:string;
+    HasTime,HasMoves,HasIncrement,HasConcurrency:Boolean;
+    Seconds,Increment:Double;
+    Moves,Concurrency:Integer;
+  end;
   TTournamentStartResult = (tsrStarted, tsrAlreadyRunning, tsrNothingEligible, tsrCancelled, tsrFailed);
 
   TTournamentStartGameEvent = procedure(Sender: TObject; const ASetup: TGameSetup;
@@ -95,7 +101,7 @@ type
     procedure UpdateBallotControls;
     function StartingFENForRow(ARow:Integer):string;
     function ReadSettings:TTimeControl;
-    function ConfirmSharedExecutables:Boolean;
+    function ConfirmSharedExecutables(CommandMode:Boolean=False;AllowShared:Boolean=False):Boolean;
     function GameFileExtension:string;
     procedure AddLabelledEdit(AParent: TWinControl; const ACaption: string;
       AEdit: TEdit; var ATop: Integer);
@@ -155,7 +161,12 @@ type
   protected
     function CaptureGamePdn(AGame: TObject): string; virtual;
   public
-    function StartTournament(out AMessage:string):TTournamentStartResult;
+    procedure ConfigureNewTournament(const Settings:TTournamentMatchSettings);
+    function CreatePairing(out AMessage:string;CommandMode:Boolean=False):Boolean;
+    function MatchSnapshot(const Engine1Key,Engine2Key:string):TJSONObject;
+    function AbandonUnpublished:Boolean;
+    function StartTournament(out AMessage:string;CommandMode:Boolean=False;
+      AllowShared:Boolean=False):TTournamentStartResult;
     procedure RefreshLayout; override;
     procedure LoadBallotFromFile(const FileName:string);
     procedure ClearOpeningBallot;
@@ -196,7 +207,7 @@ type
 implementation
 
 uses
-  uGameDocumentContext, Dialogs, SHA1, FPJSON, Graphics, JSONParser, Math, LazFileUtils,
+  uGameDocumentContext, Dialogs, SHA1, Graphics, JSONParser, Math, LazFileUtils,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
   uAtomicFile, uTournamentBallot, uGameTreePdn, uDraughtsPdn, LazLoggerBase, uTournamentEngineQueue;
@@ -1009,7 +1020,7 @@ begin
   ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
 end;
 
-function TTournamentDialog.ConfirmSharedExecutables:Boolean;
+function TTournamentDialog.ConfirmSharedExecutables(CommandMode:Boolean;AllowShared:Boolean):Boolean;
 var Seen,Keys:TStringList;Row:Integer;
  function Participant(D:TExternalEngineDefinition):Boolean;
  var Path,Key:string;
@@ -1031,6 +1042,7 @@ begin
       if TournamentGridHasPairingAtRow(FGrid,Row) then
         if not Participant(EngineForRow(Row,True)) or
           not Participant(EngineForRow(Row,False)) then begin
+          if CommandMode then Exit(AllowShared);
           Result:=ShowGuiConfirmationDialog(Self,'Tournament',
             'Two participants use the same executable and share one UCI options file.'+LineEnding+
             'They cannot use different saved settings. Use separate executable paths for that comparison.'+LineEnding+
@@ -1425,7 +1437,7 @@ begin
   CollectTournamentRoundRows(FGrid, ARounds);
 end;
 
-procedure TTournamentDialog.CreatePairingClick(Sender: TObject);
+function TTournamentDialog.CreatePairing(out AMessage:string;CommandMode:Boolean):Boolean;
 var
   BlackEngines: TStringList;
   Engines: TStringList;
@@ -1435,12 +1447,13 @@ var
   WhiteEngines: TStringList;
   I:Integer;
 begin
+  Result:=False;AMessage:='';
   if FReadOnly or IsRunning or (FStorageError <> '') then
     Exit;
   if PendingInvalidatingChange then
     Exit;
   try ReadSettings;MaxConcurrentGames;
-  except on E:Exception do begin ShowGuiOkDialog(Self,'Tournament',E.Message);Exit;end;end;
+  except on E:Exception do begin AMessage:=E.Message;Exit;end;end;
   Engines := TStringList.Create;
   WhiteEngines := TStringList.Create;
   BlackEngines := TStringList.Create;
@@ -1450,7 +1463,7 @@ begin
     CollectSelectedEngines(Engines);
     if Engines.Count < 2 then
     begin
-      ShowGuiOkDialog(Self, 'Tournament', 'Select at least two engines.');
+      AMessage:='Select at least two engines.';
       Exit;
     end;
     CollectPairingRows(WhiteEngines, BlackEngines, Results);
@@ -1458,8 +1471,7 @@ begin
     if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) and
       not TournamentAllResultsKnown(WhiteEngines, BlackEngines, Results,FProfile.FileFormat) then
     begin
-      ShowGuiOkDialog(Self, 'Tournament',
-        'Finish the current Swiss round first.');
+      AMessage:='Finish the current Swiss round first.';
       Exit;
     end;
 
@@ -1469,12 +1481,12 @@ begin
       TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex),
       TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex), Engines,
       WhiteEngines, BlackEngines, Results, Rounds,FProfile.FileFormat);
-    if PairingRound.HasRepeat and
-      (ShowGuiConfirmationDialog(Self, 'Tournament',
-      'The proposed Swiss round includes repeated opponents.' +
-      LineEnding + 'Continue with repeated pairing?', 'Continue', '',
-      mrCancel) <> mrYes) then
-      Exit;
+    if PairingRound.HasRepeat then begin
+      if CommandMode then begin AMessage:='Repeated Swiss pairing requires GUI confirmation';Exit;end;
+      if ShowGuiConfirmationDialog(Self,'Tournament',
+        'The proposed Swiss round includes repeated opponents.'+LineEnding+
+        'Continue with repeated pairing?','Continue','',mrCancel)<>mrYes then Exit;
+    end;
     if not TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) then
     begin
       if not StartNewTournamentStorage then Exit;
@@ -1498,6 +1510,107 @@ begin
     Engines.Free;
   end;
   AutoSaveTournament;
+  AMessage:=FStorageError;Result:=FStorageError='';
+end;
+
+procedure TTournamentDialog.ConfigureNewTournament(const Settings:TTournamentMatchSettings);
+var I:Integer;A,B:TExternalEngineDefinition;
+begin
+  if FReadOnly or IsRunning or (FFileName<>'') or not TournamentPairingGridIsEmpty(FGrid) then
+    raise EInvalidOperation.Create('Configure requires a fresh unpublished tournament');
+  A:=FindEngineByIdentityKey(FEngines,Settings.Engine1Key);
+  B:=FindEngineByIdentityKey(FEngines,Settings.Engine2Key);
+  if (A=nil) or (B=nil) or (A=B) or not (A.Kind in FProfile.EngineKinds) or
+    not (B.Kind in FProfile.EngineKinds) then raise EConvertError.Create('Choose two distinct engines for this game');
+  if (EngineIdentityKey(A)<>Settings.Engine1Key) or (EngineIdentityKey(B)<>Settings.Engine2Key) then
+    raise EConvertError.Create('Engine registration changed while configuring');
+  DisableAlign;FLoadingTournament:=True;
+  try
+    if Settings.Name<>'' then FTournamentNameEdit.Text:=Settings.Name;
+    for I:=0 to FEngineCheckList.Items.Count-1 do
+      FEngineCheckList.Checked[I]:=(FEngineCheckList.Items.Objects[I]=A) or (FEngineCheckList.Items.Objects[I]=B);
+    FRoundRobinGroup.ItemIndex:=TournamentPairingIndexDoubleRoundRobin;
+    if Settings.HasTime then begin FTimeUnitCombo.ItemIndex:=1;FMinutesEdit.Text:=FloatToStr(Settings.Seconds);end;
+    if Settings.HasMoves then FMovesEdit.Text:=IntToStr(Settings.Moves);
+    if Settings.HasIncrement then FIncrementEdit.Text:=FloatToStr(Settings.Increment);
+    if Settings.HasConcurrency then FConcurrentGamesEdit.Text:=IntToStr(Settings.Concurrency);
+    ReadSettings;MaxConcurrentGames;
+    if Settings.Ballot<>'' then LoadBallotFromFile(Settings.Ballot);
+    FAcceptedTournamentSignature:=TournamentSignature;
+  finally FLoadingTournament:=False;EnableAlign;end;
+  UpdateButtons;RefreshLayout;
+end;
+
+function TTournamentDialog.AbandonUnpublished:Boolean;
+begin
+  Result:=(not IsRunning) and (FFileName='') and TournamentPairingGridIsEmpty(FGrid) and (FGameRecords.Count=0);
+  if Result then FLoadingTournament:=True; // destructor must not autosave an abandoned setup
+end;
+
+function TTournamentDialog.MatchSnapshot(const Engine1Key,Engine2Key:string):TJSONObject;
+var Row,Total,Done,ActiveCount,Pending,Unresolved,Wins,Draws,Losses,Manual,Pairs,I,P,N:Integer;
+  R:TTournamentGameRecord;Outcome:TTournamentResult;FirstReason,AttentionReason,Reason,State,Err:string;
+  PairCounts:array of Integer;PairKnown:array of Integer;PairFen,PairWhite:array of string;
+  WhiteIsOne,Known:Boolean;
+begin
+  Total:=FGrid.RowCount-1;N:=FBallotPositions.Count;if N=0 then N:=1;
+  if (Engine1Key=Engine2Key) or (Total<>2*N) or (FGameRecords.Count<Total) then
+    raise EInvalidOperation.Create('MATCH_CHANGED');
+  SetLength(PairCounts,N);SetLength(PairKnown,N);SetLength(PairFen,N);SetLength(PairWhite,N);
+  Done:=0;ActiveCount:=0;Pending:=0;Unresolved:=0;Wins:=0;Draws:=0;Losses:=0;Manual:=0;Pairs:=0;
+  FirstReason:='';AttentionReason:='';Err:=FStorageError;
+  for Row:=1 to Total do begin
+    R:=TTournamentGameRecord(FGameRecords[Row-1]);
+    WhiteIsOne:=R.WhiteEngineKey=Engine1Key;
+    if not (((R.WhiteEngineKey=Engine1Key) and (R.BlackEngineKey=Engine2Key)) or
+      ((R.WhiteEngineKey=Engine2Key) and (R.BlackEngineKey=Engine1Key))) then raise EInvalidOperation.Create('MATCH_CHANGED');
+    P:=0;if FBallotPositions.Count>0 then P:=StrToIntDef(FGrid.Cells[TournamentColRound,Row],0)-1;
+    if (P<0) or (P>=N) then raise EInvalidOperation.Create('MATCH_CHANGED');
+    Inc(PairCounts[P]);
+    if PairCounts[P]=1 then begin PairFen[P]:=StartingFENForRow(Row);PairWhite[P]:=R.WhiteEngineKey;end
+    else if (PairCounts[P]>2) or (PairFen[P]<>StartingFENForRow(Row)) or
+      (PairWhite[P]=R.WhiteEngineKey) then raise EInvalidOperation.Create('MATCH_CHANGED');
+    Outcome:=ParseTournamentResult(R.EffectiveResult,FProfile.FileFormat);Known:=TournamentResultIsKnown(Outcome);
+    Reason:=Trim(FGrid.Cells[TournamentColReason,Row]);
+    if (FirstReason='') and (Reason<>'') then FirstReason:=Reason;
+    if (Err='') and (R.CaptureError<>'') then Err:=R.CaptureError;
+    if Known then begin
+      Inc(Done);Inc(PairKnown[P]);if R.ManualResult<>'' then Inc(Manual);
+      if Outcome=trDraw then Inc(Draws)
+      else if ((Outcome=trWhiteWin) and WhiteIsOne) or ((Outcome=trBlackWin) and not WhiteIsOne) then Inc(Wins)
+      else Inc(Losses);
+    end;
+    if IsRowRunning(Row) then Inc(ActiveCount)
+    else if not Known then
+      if (Reason<>'') and not TournamentReasonIsTransient(Reason) then begin
+        Inc(Unresolved);if AttentionReason='' then AttentionReason:=Reason;
+      end else Inc(Pending);
+  end;
+  for I:=0 to N-1 do begin
+    if PairCounts[I]<>2 then raise EInvalidOperation.Create('MATCH_CHANGED');
+    if PairKnown[I]=2 then Inc(Pairs);
+    if (FBallotPositions.Count>0) and (PairFen[I]<>FBallotPositions[I]) then raise EInvalidOperation.Create('MATCH_CHANGED');
+  end;
+  if Err<>'' then begin State:='error';Reason:=Err;end
+  else begin
+    Reason:=FirstReason;
+    if FRefereeStopPending then State:='stopping'
+    else if Done=Total then State:='completed'
+    else if FRunning then begin if ActiveCount>0 then State:='running' else State:='waiting';end
+    else if Unresolved>0 then begin State:='attention';Reason:=AttentionReason;end else State:='stopped';
+  end;
+  Result:=TJSONObject.Create;
+  Result.Add('state',State);Result.Add('reason',Reason);Result.Add('games_total',Total);
+  Result.Add('games_completed',Done);Result.Add('games_active',ActiveCount);Result.Add('games_pending',Pending);
+  Result.Add('unresolved_games',Unresolved);Result.Add('wins',Wins);Result.Add('draws',Draws);Result.Add('losses',Losses);
+  Result.Add('referee_results',Manual);Result.Add('pairs_total',N);Result.Add('pairs_completed',Pairs);
+end;
+
+procedure TTournamentDialog.CreatePairingClick(Sender:TObject);
+var MessageText:string;
+begin
+  CreatePairing(MessageText);
+  if MessageText<>'' then ShowGuiOkDialog(Self,'Tournament',MessageText);
 end;
 
 procedure TTournamentDialog.ClearPairingsClick(Sender: TObject);
@@ -2331,7 +2444,7 @@ begin
   end;
 end;
 
-function TTournamentDialog.StartTournament(out AMessage:string):TTournamentStartResult;
+function TTournamentDialog.StartTournament(out AMessage:string;CommandMode:Boolean;AllowShared:Boolean):TTournamentStartResult;
 var Row:Integer;Eligible:Boolean;
 begin
   AMessage:='';
@@ -2351,7 +2464,9 @@ begin
       AMessage:='No eligible games. Finished results are preserved; use Reschedule for stopped or failed games.';
       UpdateButtons;Exit(tsrNothingEligible);
     end;
-    if not ConfirmSharedExecutables then begin AMessage:='Tournament start cancelled';Exit(tsrCancelled);end;
+    if not ConfirmSharedExecutables(CommandMode,AllowShared) then begin
+      if CommandMode then AMessage:='Shared executable requires allow_shared_executable=true'
+      else AMessage:='Tournament start cancelled';Exit(tsrCancelled);end;
     AutoSaveTournament;
     if FStorageError<>'' then begin AMessage:=FStorageError;Exit(tsrFailed);end;
     FCloseStopped:=False;FRunning:=True;FLastGameStartTick:=0;

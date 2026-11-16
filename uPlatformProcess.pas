@@ -49,6 +49,7 @@ type
     procedure StopReaderThread(AWaitForThread: Boolean);
     {$ELSE}
     FProcess: TProcess;
+    {$IFDEF UNIX}procedure IsolateChild(Sender:TObject);{$ENDIF}
     {$ENDIF}
     procedure DeliverData(const AText: string);
   public
@@ -74,6 +75,14 @@ function ReadAuxiliaryProcessOutput(AProcess: TProcess): string;
 
 implementation
 
+{$IFDEF UNIX}
+function SetProcessGroup(Pid,GroupId:cint):cint;cdecl;external 'c' name 'setpgid';
+procedure TPlatformProcess.IsolateChild(Sender:TObject);
+begin
+  // Child after fork, before exec: use only async-signal-safe OS calls.
+  if SetProcessGroup(0,0)<>0 then fpExit(127);
+end;
+{$ENDIF}
 const LocalFdCloseOnExec = 1;
 var LaunchLock: TCriticalSection;
 
@@ -309,6 +318,7 @@ begin
     FProcess.Parameters.Add(ALaunchArgs[I]);
   FProcess.CurrentDirectory := ACurrentDirectory;
   FProcess.Options := [poUsePipes, poStderrToOutPut];
+  {$IFDEF UNIX}FProcess.OnForkEvent:=@IsolateChild;{$ENDIF}
   FProcess.ShowWindow := swoHIDE;
   FProcess.Execute;
   {$IFDEF UNIX}

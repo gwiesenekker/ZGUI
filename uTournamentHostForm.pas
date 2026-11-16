@@ -72,6 +72,10 @@ type
     function PrepareCloseAll:Boolean;
     function FinishCloseAll:Boolean;
     procedure BeginShutdown;
+    function SessionTabId(Dialog:TTournamentDialog):PtrInt;
+    function DialogById(Id:PtrInt):TTournamentDialog;
+    function DiscardUnpublished(Dialog:TTournamentDialog):Boolean;
+    function IsBusy:Boolean;
     property Count:Integer read GetCount;
     property Dialogs[Index:Integer]:TTournamentDialog read GetDialog;
     property Pages:TPageControl read FPages;
@@ -108,6 +112,23 @@ begin
   FDisposing:=True;Application.RemoveAsyncCalls(Self);
   while FTabs.Count>0 do RemoveTab(TTournamentTab(FTabs[FTabs.Count-1]));
   FTabs.Free;inherited Destroy;
+end;
+function TTournamentHostForm.SessionTabId(Dialog:TTournamentDialog):PtrInt;
+var Tab:TTournamentTab;
+begin Tab:=TabFor(Dialog);if Tab=nil then Exit(0);Result:=Tab.Id;end;
+function TTournamentHostForm.DialogById(Id:PtrInt):TTournamentDialog;
+var I:Integer;
+begin
+  Result:=nil;for I:=0 to FTabs.Count-1 do
+    if TTournamentTab(FTabs[I]).Id=Id then Exit(TTournamentTab(FTabs[I]).Dialog);
+end;
+function TTournamentHostForm.IsBusy:Boolean;
+begin Result:=FBusy or FDisposing or FPreparingAll;end;
+function TTournamentHostForm.DiscardUnpublished(Dialog:TTournamentDialog):Boolean;
+var Tab:TTournamentTab;
+begin
+  Tab:=TabFor(Dialog);Result:=(Tab<>nil) and not IsBusy and Dialog.AbandonUnpublished;
+  if Result then RemoveTab(Tab);
 end;
 function TTournamentHostForm.GetCount:Integer;
 begin Result:=FTabs.Count;end;
@@ -193,6 +214,7 @@ function TTournamentHostForm.NewTournament(Variant:TGameVariant):TTournamentDial
 var Tab:TTournamentTab;
 begin
   if FBusy then Exit(nil);
+  FDefaultVariant:=Variant;
   BeginTabUpdate;
   try
    Tab:=TTournamentTab.Create;

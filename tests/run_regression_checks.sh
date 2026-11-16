@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
 OUT_DIR="${TMPDIR:-/tmp}/gwdgui-regression-checks"
 export GWDGUI_ROOT="$ROOT_DIR"
 CHECKS=(
+  interactive_command_check.pas
   startup_command_check.pas
   engine_feature_flags_check.pas
   position_contract_check.pas
@@ -95,6 +96,10 @@ fpc -B -dGWDGUI_TEST_NO_HARDLINK -Fu"$ROOT_DIR" -FU"$OUT_DIR" -FE"$OUT_DIR" \
 "$OUT_DIR/atomic_file_check"
 
 bash "$ROOT_DIR/tests/run_database_import_performance_checks.sh" 3
+
+echo "==> cli_terminal_transport_check"
+fpc -B -Fu"$ROOT_DIR" -FU"$OUT_DIR" -FE"$OUT_DIR" "$ROOT_DIR/tests/cli_terminal_check.pas" > "$OUT_DIR/terminal-build.log" 2>&1 || { cat "$OUT_DIR/terminal-build.log"; exit 1; }
+python3 "$ROOT_DIR/tests/cli_terminal_transport_check.py" "$OUT_DIR/cli_terminal_check"
 
 bash "$ROOT_DIR/tests/source_audit_check.sh"
 

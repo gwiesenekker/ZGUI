@@ -4,6 +4,33 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Shared interactive-CLI actions and transport validation — 2026-11-16
+
+Commit: pending.
+
+- Implement the approved shared GUI seams from Claude's interactive-CLI review:
+  typed fresh-match configuration, result-returning pairing creation, command-mode
+  start and read-only match snapshots. Reuse the existing visible tabs, controls,
+  pairing builders, clocks, reservation queue, runners, saves and results for both
+  games. GUI button behavior and the saved-file startup command are preserved.
+- Prepare list_engines, two-engine run_tournament and query_tournament handlers,
+  with session IDs, identity checks, engine1-perspective counts, complete opening
+  pairs, referee/replay handling and typed errors. Reject modal/reentrant commands
+  with BUSY; keep partly published events and discard only unpublished invalid tabs.
+- Isolate Unix engines in their own process groups before exec (D11), including
+  normal GUI launches. Adapt SCU tokenization so unquoted Windows backslashes are
+  literal (C12). Route shutdown diagnostics to stderr.
+- Prepare the cancellable terminal/pipe transport, Unicode Windows dedicated
+  console backend (C11), and a native Windows helper. The executable's interactive
+  `--cli` connection remains gated on the reviewed native Windows transport check
+  or an explicit user waiver; neither is assumed complete.
+- Tests: application build, full regression suite, both tournament suites and all
+  23 GUI suites pass on hidden displays. Text/UTF-8: 42 checks; Linux transport:
+  20 checks, including Ctrl+C with two engine peers, background terminal input
+  and preserving shell terminal flags. Extended GUI handler check: 85 assertions. Native Windows execution is outstanding.
+- Notes: `chatgpt/INTERACTIVE_CLI_IMPLEMENTATION_NOTES.md`.
+
+
 ### CLI review fixes and read-only tournament viewing — 2026-11-16
 
 Commit: `2770b5a`.

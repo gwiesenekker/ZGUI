@@ -301,7 +301,7 @@ begin
         '; plies=' + IntToStr(LPlyCount) +
         '; reservations=' + ReservationSummary;
       FSnapshot.LogLines.Add(WarningText);
-      WriteLn(WarningText);
+      try WriteLn(StdErr,WarningText);except on E:EInOutError do ;end;
       LastWarningTick := GetTickCount64;
     end;
     Sleep(10);

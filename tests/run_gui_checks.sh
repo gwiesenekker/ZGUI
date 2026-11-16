@@ -24,6 +24,8 @@ run_check() {
   fi
 }
 
+run_check "interactive_cli_gui_check (GTK2, shared match setup, queries and modal BUSY)" interactive_cli_gui_check "/interactive-cli" 90s
+
 run_check "startup_cli_gui_check (GTK2, live CLI tournaments and cross-process file leases)" startup_cli_gui_check "/startup-cli" 60s
 
 run_check "standalone_preservation_check (GTK2, hidden main form)" standalone_preservation_check "" 60s

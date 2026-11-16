@@ -17,6 +17,9 @@ var First, Second: TPlatformProcess; Args: TStringList; Probe: TOutputProbe;
   {$IFDEF LINUX}I: Integer; Target, InputPipe, OutputPipe, ErrorPipe: string;{$ENDIF}
 begin
   RegisterDefaultGameVariant(DraughtsVariant);
+  {$IFDEF UNIX}
+  if ParamStr(1)='--group-probe' then begin WriteLn(fpGetPid, ' ',fpGetPGrp);Halt(0);end;
+  {$ENDIF}
   if ParamStr(1) = '--chunked-output' then
   begin
     Write('first chunk'); Flush(Output); Sleep(30);
@@ -56,6 +59,17 @@ begin
   Args := TStringList.Create; Probe := TOutputProbe.Create; Auxiliary := nil;
   try
     First.SynchronizeData := False; Second.SynchronizeData := False;
+    Args.Add('--group-probe');Second.OnData:=@Probe.Data;
+    Second.Start(ExpandFileName(ParamStr(0)),Args,GetTempDir);
+    Tick:=GetTickCount64;
+    repeat Second.ReadAvailable;Sleep(5);until (Pos(' ',Probe.Text)>0) or (GetTickCount64-Tick>3000);
+    Lines:=TStringList.Create;
+    try
+      ExtractStrings([' ',#10,#13],[],PChar(Probe.Text),Lines);
+      Check((Lines.Count=2) and (Lines[0]=Lines[1]) and (StrToIntDef(Lines[1],0)<>fpGetPGrp),
+        'Engine owns a separate process group before exec');
+    finally Lines.Free;end;
+    Second.Close;Probe.Text:='';Args.Clear;
     First.Start('/bin/cat', Args, GetTempDir);
     Auxiliary := TProcess.Create(nil); Lines := TStringList.Create;
     try

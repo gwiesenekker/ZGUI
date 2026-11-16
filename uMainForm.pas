@@ -5,7 +5,7 @@ unit uMainForm;
 interface
 
 uses
-  uStartupCommand,
+  uStartupCommand, uInteractiveCommands,
   uGuiLayout, uTournamentEngineQueue, uTournamentHostForm, Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uGameGuiProfile, uGameFileReader,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
@@ -207,6 +207,9 @@ type
     FStandaloneEventName: string;
     FStandaloneWhitePlayerName: string;
     FTournamentHost:TTournamentHostForm;
+    FInteractiveCommands:TInteractiveCommands;
+    procedure CliTournamentOpened(Dialog:TTournamentDialog);
+  private
     FStartupCommand:TStartupCommand;
     FStartupError:string;
     FStartupQueued:Boolean;
@@ -562,6 +565,7 @@ type
     procedure CollectBusyEngineKeys(AKeys: TStrings);
     function EngineReservationDescription(const Key:string):string;
     procedure DrainTournamentClose;
+    function InteractiveCommand(const Line:string):string;
     procedure QueueStartupCommand(const Request:TStartupCommand;const ErrorText:string);
     function ExecuteStartupCommand(const Request:TStartupCommand;out MessageText:string):Boolean;
     property TournamentHost:TTournamentHostForm read FTournamentHost;
@@ -1499,6 +1503,7 @@ var I:Integer;C:TGameUiContext;View:TDocumentView;
 begin
   FClosing := True;
   CaptureGameContext;
+  FreeAndNil(FInteractiveCommands);
   if FTournamentHost<>nil then FTournamentHost.BeginShutdown;
   Application.RemoveAsyncCalls(Self);
   if FGuiEventTimer <> nil then
@@ -6129,6 +6134,20 @@ begin
   ShowFormCenteredOnOwner(FTournamentHost,Self);
 end;
 
+procedure TMainForm.CliTournamentOpened(Dialog:TTournamentDialog);
+begin SelectGameVariant(Dialog.Variant);ShowFormCenteredOnOwner(FTournamentHost,Self);end;
+function TMainForm.InteractiveCommand(const Line:string):string;
+begin
+  if FClosing then Exit(CliError('SHUTDOWN','ZGUI is closing'));
+  if Application.ModalLevel>0 then Exit(CliError('BUSY','Close the modal dialog first'));
+  EnsureTournamentHost;
+  if FInteractiveCommands=nil then begin
+    FInteractiveCommands:=TInteractiveCommands.Create(FTournamentHost);
+    FInteractiveCommands.OnTournament:=@CliTournamentOpened;
+  end;
+  Result:=FInteractiveCommands.Execute(Line);
+end;
+
 procedure TMainForm.QueueStartupCommand(const Request:TStartupCommand;const ErrorText:string);
 begin
   if FStartupQueued or ((Request.Kind=sckNone) and (ErrorText='')) then Exit;
@@ -6437,7 +6456,7 @@ begin
       WarningText := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now) +
         ' [gui] waiting for games to stop; remaining_games=' +
         IntToStr(FGames.Count) + '; pending=' + PendingText;
-      WriteLn(WarningText);
+      try WriteLn(StdErr,WarningText);except on E:EInOutError do ;end;
       LastWarningTick := GetTickCount64;
     end;
     Sleep(10);
