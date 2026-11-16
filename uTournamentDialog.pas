@@ -101,7 +101,6 @@ type
     procedure UpdateBallotControls;
     function StartingFENForRow(ARow:Integer):string;
     function ReadSettings:TTimeControl;
-    function ConfirmSharedExecutables(CommandMode:Boolean=False;AllowShared:Boolean=False):Boolean;
     function GameFileExtension:string;
     procedure AddLabelledEdit(AParent: TWinControl; const ACaption: string;
       AEdit: TEdit; var ATop: Integer);
@@ -161,6 +160,7 @@ type
   protected
     function CaptureGamePdn(AGame: TObject): string; virtual;
   public
+    function ConfirmSharedExecutables(CommandMode:Boolean=False;AllowShared:Boolean=False):Boolean;
     procedure ConfigureNewTournament(const Settings:TTournamentMatchSettings);
     function CreatePairing(out AMessage:string;CommandMode:Boolean=False):Boolean;
     function MatchSnapshot(const Engine1Key,Engine2Key:string):TJSONObject;
@@ -1021,7 +1021,7 @@ begin
 end;
 
 function TTournamentDialog.ConfirmSharedExecutables(CommandMode:Boolean;AllowShared:Boolean):Boolean;
-var Seen,Keys:TStringList;Row:Integer;
+var Seen,Keys:TStringList;Row:Integer;HasPairing,Conflict:Boolean;
  function Participant(D:TExternalEngineDefinition):Boolean;
  var Path,Key:string;
  begin
@@ -1036,19 +1036,26 @@ begin
   Seen:=TStringList.Create;Keys:=TStringList.Create;
   try
     Seen.CaseSensitive:={$IFDEF MSWINDOWS}False{$ELSE}True{$ENDIF};
-    // The current pairing rows are authoritative, even if the checklist was
-    // edited in preparation for a later round.
+    // Existing pairings are authoritative; a fresh CONFIGURE preflight uses
+    // the selected registrations, before pairing can publish any files.
+    HasPairing:=False;Conflict:=False;
     for Row:=1 to FGrid.RowCount-1 do
-      if TournamentGridHasPairingAtRow(FGrid,Row) then
+      if TournamentGridHasPairingAtRow(FGrid,Row) then begin
+        HasPairing:=True;
         if not Participant(EngineForRow(Row,True)) or
-          not Participant(EngineForRow(Row,False)) then begin
-          if CommandMode then Exit(AllowShared);
-          Result:=ShowGuiConfirmationDialog(Self,'Tournament',
-            'Two participants use the same executable and share one UCI options file.'+LineEnding+
-            'They cannot use different saved settings. Use separate executable paths for that comparison.'+LineEnding+
-            'Continue with the shared settings?', 'Continue','',mrCancel)=mrYes;
-          Exit;
-        end;
+          not Participant(EngineForRow(Row,False)) then Conflict:=True;
+      end;
+    if not HasPairing then
+      for Row:=0 to FEngineCheckList.Items.Count-1 do
+        if FEngineCheckList.Checked[Row] then
+          if not Participant(EngineByDisplayName(FEngineCheckList.Items[Row])) then Conflict:=True;
+    if Conflict then begin
+      if CommandMode then Exit(AllowShared);
+      Result:=ShowGuiConfirmationDialog(Self,'Tournament',
+        'Two participants use the same executable and share one UCI options file.'+LineEnding+
+        'They cannot use different saved settings. Use separate executable paths for that comparison.'+LineEnding+
+        'Continue with the shared settings?', 'Continue','',mrCancel)=mrYes;
+    end;
   finally Keys.Free;Seen.Free;end;
 end;
 

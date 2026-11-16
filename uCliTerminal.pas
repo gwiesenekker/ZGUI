@@ -40,7 +40,7 @@ type
     function TryPop(out Request:TCliLineRequest):Boolean;
   end;
 implementation
-uses uInteractiveProtocol
+uses uInteractiveProtocol,uCliProtocolOutput
  {$IFDEF UNIX},BaseUnix,Unix,Termio{$ENDIF}{$IFDEF LINUX},Linux{$ENDIF}
  {$IFDEF MSWINDOWS},Windows{$ENDIF};
 {$IFDEF UNIX}
@@ -89,10 +89,11 @@ constructor TCliTerminal.Create;
 begin
  inherited Create(True);FreeOnTerminate:=False;FOldOutputFlags:=-1;
  FOldErrorFlags:=-1;FQueue:=TThreadMessageQueue.Create(False);
+ PrepareCliProtocolOutput;
  {$IFDEF UNIX}
- FInput:=0;FOutput:=1;FError:=2;
+ FInput:=0;FOutput:=CliProtocolOutputHandle;FError:=2;
  // Reopen output descriptors rather than changing a shell's shared tty flags.
- CopyFd:=IndependentOutput(1);if CopyFd>=0 then begin FOutput:=CopyFd;FOwnOutput:=True;end;
+ CopyFd:=IndependentOutput(FOutput);if CopyFd>=0 then begin FOutput:=CopyFd;FOwnOutput:=True;end;
  CopyFd:=IndependentOutput(2);if CopyFd>=0 then begin FError:=CopyFd;FOwnError:=True;end;
  FConsoleInput:=IsATTY(FInput)=1;FConsoleOutput:=IsATTY(FOutput)=1;
  FOldOutputFlags:=fpFcntl(FOutput,F_GETFL);FOldErrorFlags:=fpFcntl(FError,F_GETFL);
@@ -102,7 +103,7 @@ begin
  OldInt:=fpSignal(SIGINT,@InterruptLine);OldPipe:=fpSignal(SIGPIPE,SignalHandler(SIG_IGN));
  OldTtin:=fpSignal(SIGTTIN,SignalHandler(SIG_IGN));OldTtou:=fpSignal(SIGTTOU,SignalHandler(SIG_IGN));FSignalsInstalled:=True;
  {$ELSE}
- FInput:=GetStdHandle(STD_INPUT_HANDLE);OriginalOut:=GetStdHandle(STD_OUTPUT_HANDLE);OriginalErr:=GetStdHandle(STD_ERROR_HANDLE);
+ FInput:=GetStdHandle(STD_INPUT_HANDLE);OriginalOut:=CliProtocolOutputHandle;OriginalErr:=GetStdHandle(STD_ERROR_HANDLE);
  RedirectedInput:=(GetFileType(FInput) in [FILE_TYPE_PIPE,FILE_TYPE_DISK]);
  if not RedirectedInput then begin
    FreeConsole;
@@ -114,11 +115,14 @@ begin
  if RedirectedInput and (GetFileType(OriginalOut)=FILE_TYPE_CHAR) then
    AttachParentConsole(DWORD(-1)); // read only the pipe, never the shell keyboard
  FOutput:=OriginalOut;
- if not (GetFileType(FOutput) in [FILE_TYPE_PIPE,FILE_TYPE_DISK]) then FOutput:=GetStdHandle(STD_OUTPUT_HANDLE);
+ // Only a newly allocated console replaces the saved protocol destination.
+ // With piped input, missing stdout must not silently fall back to stderr.
+ if FNewConsole then FOutput:=GetStdHandle(STD_OUTPUT_HANDLE);
  FError:=OriginalErr;if not (GetFileType(FError) in [FILE_TYPE_PIPE,FILE_TYPE_DISK]) then FError:=GetStdHandle(STD_ERROR_HANDLE);
  if (FInput=0) or (FInput=INVALID_HANDLE_VALUE) or (FOutput=0) or (FOutput=INVALID_HANDLE_VALUE) then
    raise EInOutError.Create('CLI needs usable stdin and stdout handles');
  FConsoleInput:=GetConsoleMode(FInput,Mode);FConsoleOutput:=GetConsoleMode(FOutput,Mode);
+ RedirectCliDiagnostics(FError);TextRec(StdErr).Handle:=FError;
  SetConsoleCtrlHandler(@ConsoleControl,True);FSignalsInstalled:=True;
  {$ENDIF}
  FInteractive:=FConsoleInput and FConsoleOutput;
@@ -149,7 +153,7 @@ begin
  end;
  {$ELSE}
  if FSignalsInstalled then SetConsoleCtrlHandler(@ConsoleControl,False);
- if FNewConsole then FreeConsole;
+ if FNewConsole then ReleaseCliConsole;
  {$ENDIF}
  inherited Destroy;
 end;

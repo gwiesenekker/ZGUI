@@ -1,10 +1,10 @@
 program interactive_cli_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uCliProtocolOutput,Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
  ExtCtrls,Grids,Dialogs,FPJSON,JSONParser,uMainForm,uTournamentDialog,uTournamentHostForm,
  uTournamentStorage,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
  uEngineRegistry,uEngineParamsJson,uGameSetupTypes,uDraughtsHubEngine,uChessUciEngine,uGuiDialogs,
- uStartupCommand,uRunningGame,uGameTree,uAtomicFile;
+ uStartupCommand,uRunningGame,uGameTree,uAtomicFile,FileUtil;
 var Chess,Draughts:TGameVariant;Checks:Integer=0;Directory:string;Main:TMainForm;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
@@ -107,17 +107,25 @@ begin
   Engines.Free;
  end;
 end;
+function RecoveryFiles:string;
+var L:TStringList;
+begin
+ L:=TStringList.Create;
+ try FindAllFiles(L,IncludeTrailingPathDelimiter(GetAppConfigDir(False))+'tournaments','*',True);
+  L.Sort;Result:=L.Text;
+ finally L.Free;end;
+end;
 procedure RelativeBallot;
-var Launch,FileName:string;L:TStringList;J:TJSONObject;D:TTournamentDialog;OriginalMain:TMainForm;
+var Launch,FileName,Before:string;L:TStringList;J:TJSONObject;OriginalMain:TMainForm;
 begin
  OriginalMain:=Main;
  Launch:=GetCurrentDir;FileName:='cli-relative-'+IntToStr(GetProcessID)+'.fen';L:=TStringList.Create;
  try
   L.Add(Chess.DefaultStartingFEN);L.SaveToFile(FileName);Main:=TMainForm.Create(nil);SetCurrentDir(Directory);
+  Before:=RecoveryFiles;
   J:=Response('run_tournament engine1="CLI Chess 0" engine2="CLI Chess 1" ballot='+FileName,'ERROR','CONFIRMATION_REQUIRED');
-  try Check(J.Get('tournament',0)>0,'Relative ballot resolves from launch directory after GUI cwd changes');finally J.Free;end;
-  D:=Main.TournamentHost.Dialogs[Main.TournamentHost.Count-1];GuiTestConfirmationResult:=mrNo;
-  try Check(Main.TournamentHost.CloseTournament(D),'Close unstarted relative-ballot fixture');finally GuiTestConfirmationResult:=0;end;
+  try Check(J.Find('tournament')=nil,'Relative ballot resolves from launch directory; refusal publishes no handle');finally J.Free;end;
+  Check((Main.TournamentHost.Count=0) and (RecoveryFiles=Before),'Refused relative-ballot match leaves no tab or files');
  finally
   SetCurrentDir(Launch);if Main<>OriginalMain then Main.Free;Main:=OriginalMain;
   DeleteFile(FileName);L.Free;
@@ -130,7 +138,10 @@ begin
  try
   LoadExternalEngines(EnginesJsonFileName,Engines);SavedArgs:=Engines[0].Arguments;Key:=EngineIdentityKey(Engines[0]);
   Engines[0].Arguments:=SavedArgs+' changed';SaveExternalEngines(EnginesJsonFileName,Engines);
-  Error('run_tournament engine1_id=1 engine2_id=2','UNKNOWN_ENGINE');
+  J:=Response('run_tournament engine1_id=1 engine2_id=2','ERROR','UNKNOWN_ENGINE');
+  try Check(J.Get('message','')='Engine registration no longer exists','Removed session ID retains precise message');finally J.Free;end;
+  J:=Response('run_tournament engine1_key="'+Key+'" engine2_id=2','ERROR','UNKNOWN_ENGINE');
+  try Check(J.Get('message','')='Engine registration no longer exists','Removed registration key retains precise message');finally J.Free;end;
   Engines[0].Arguments:=SavedArgs;SaveExternalEngines(EnginesJsonFileName,Engines);
   Clone:=TExternalEngineDefinition.Create;Clone.Assign(Engines[0]);Clone.Arguments:=SavedArgs+' clone';Engines.Add(Clone);
   SaveExternalEngines(EnginesJsonFileName,Engines);
@@ -151,8 +162,10 @@ begin
   Args:='engine1="'+A+'" engine2="'+B+'" ballot="'+FenFile+'" time=600 moves=75 increment=0.25 concurrent=1';
   Count:=Main.TournamentHost.Count;
   if V=Chess then begin
+   Before:=RecoveryFiles;
    J:=Response('run_tournament '+Args,'ERROR','CONFIRMATION_REQUIRED');
-   try Check(J.Get('tournament',0)>0,'Rejected confirmation keeps published tournament ID');finally J.Free;end;
+   try Check(J.Find('tournament')=nil,'Rejected confirmation has no published tournament ID');finally J.Free;end;
+   Check((Main.TournamentHost.Count=Count) and (RecoveryFiles=Before),'Refusal leaves no tab, archive, publication or lock file');
    Check(Main.TestGameCount=0,'No game started before named confirmation');
   end;
   J:=Response('run_tournament '+Args+' allow_shared_executable=true','OK');
@@ -215,7 +228,7 @@ begin TForm(Data).ModalResult:=mrCancel;end;
 type TSessionProbe=class
   Timer:TTimer;
   ReportName:string;
-  Closing,Stopped,ChessViewed,DraughtsViewed,ModalSeen,ModalShowing:Boolean;
+  Closing,Stopped,ChessViewed,DraughtsViewed,ModalSeen,ModalShowing,EngineNoticeSeen:Boolean;
   ModalDialog:TForm;
   ModalTimer:TTimer;
   Ticks:Integer;
@@ -245,7 +258,14 @@ begin
   finally GuiTestConfirmationOnShow:=nil;FreeAndNil(ModalTimer);ModalDialog:=nil;ModalShowing:=False;
     WriteTextFileAtomically(ReportName+'.modal.closed','closed');end;
  end;
+ if FileExists(ReportName+'.engine-problem') and not EngineNoticeSeen then begin
+  EngineNoticeSeen:=True;
+  Main.TestReportEngineProblem('Chess engine failed','Injected UCI failure');
+  Main.TestReportEngineProblem('Draughts engine failed','Injected Hub failure');
+ end;
  Inc(Ticks);ChessPlies:=0;DraughtsPlies:=0;
+ // Buffered diagnostics with no newline must never share the protocol stream.
+ if Ticks mod 3=0 then begin Write(Output,'diagnostic-probe ');Flush(Output);end;
  if FileExists(ReportName+'.stop') and not Stopped then begin
   Stopped:=True;
   if Main.TournamentHost<>nil then for I:=0 to Main.TournamentHost.Count-1 do
@@ -267,6 +287,9 @@ begin
  end;
  J:=TJSONObject.Create;
  try
+  J.Add('engine_notices',(Pos('Injected UCI failure',Main.TestAnalyzerLog.Text)>0) and
+    (Pos('Injected Hub failure',Main.TestAnalyzerLog.Text)>0));
+  if Main.TournamentHost<>nil then J.Add('tabs',Main.TournamentHost.Count) else J.Add('tabs',0);
   J.Add('ticks',Ticks);J.Add('games',Main.TestGameCount);J.Add('chess_plies',ChessPlies);J.Add('draughts_plies',DraughtsPlies);
   J.Add('chess_viewed',ChessViewed);J.Add('draughts_viewed',DraughtsViewed);J.Add('main_visible',Main.Visible);
   J.Add('host_visible',(Main.TournamentHost<>nil) and Main.TournamentHost.Visible);
@@ -292,6 +315,7 @@ begin
  Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
  RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
  if ParamStr(1)='--peer' then begin try Peer;finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;end;Halt(0);end;
+ if ParamStr(1)='--session' then begin PrepareCliProtocolOutput;Write(Output,'early diagnostic-probe ');end;
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  if ParamStr(1)='--session' then begin Session;RegisterDefaultGameVariant(nil);ClearRegisteredGames;Halt(0);end;
  Directory:=GetTempDir+'zgui-interactive-'+IntToStr(GetProcessID);ForceDirectories(Directory);RegisterPeers;
@@ -299,7 +323,8 @@ begin
  try
   try
    J:=Response('list_engines','OK');try Check(TJSONArray(J.Find('engines')).Count=4,'List existing registrations');finally J.Free;end;
-   Error('run_tournament engine1="missing" engine2_id=2','UNKNOWN_ENGINE');
+   J:=Response('run_tournament engine1="missing" engine2_id=2','ERROR','UNKNOWN_ENGINE');
+   try Check(J.Get('message','')='No engine named "missing" (see list_engines)','Unknown name gives actionable message');finally J.Free;end;
    Error('run_tournament engine1_id=1 engine2_id=3','GAME_MISMATCH');
    Error('run_tournament engine1_id=1 engine2_id=1','BAD_ARGUMENT');
    Error('run_tournament engine1_id=1 engine2_id=2 time=nan','BAD_ARGUMENT');

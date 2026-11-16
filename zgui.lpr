@@ -6,6 +6,7 @@ uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
+  uCliProtocolOutput, // reserve protocol stdout before LCL/widgetset initialization
   Interfaces,
   Forms, Classes, SysUtils, LazUTF8, uStartupCommand,
   uMainForm,
@@ -25,6 +26,8 @@ begin
     try Request:=ParseStartupCommand(Arguments);
     except on E:Exception do ErrorText:=E.Message;end;
   finally Arguments.Free;end;
+  if (Request.Kind=sckInteractive) and (ErrorText='') then
+    try PrepareCliProtocolOutput;except on E:Exception do begin ErrorText:=E.Message;Request.Kind:=sckNone;end;end;
   RequireDerivedFormResource := False;
   // Select the game explicitly before any GUI object asks for the default.
   // Linked draughts adapters stay available to their existing legacy consumers.

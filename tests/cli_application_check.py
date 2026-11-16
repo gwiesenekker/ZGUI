@@ -24,6 +24,15 @@ class Client:
   raw,self.buffer=self.buffer.split(b'\n',1)
   prefix,payload=raw.split(b' ',1);check(prefix.decode()==expected,'response prefix for '+line+': '+raw.decode(errors='replace'))
   return json.loads(payload)
+ def check_tail(self):
+  tail=self.buffer;end=time.monotonic()+3;closed=False
+  while time.monotonic()<end:
+   if select.select([self.p.stdout],[],[],.1)[0]:
+    data=os.read(self.p.stdout.fileno(),65536)
+    if not data:closed=True;break
+    tail+=data
+  check(closed,'protocol stdout closes with the GUI')
+  check(not tail,'no unsolicited or partial stdout bytes at shutdown: '+repr(tail[:300]))
  def cleanup(self):
   if self.p.poll() is None:
    self.p.terminate()
@@ -63,6 +72,15 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   while not pathlib.Path(str(state)+'.modal.closed').exists() and time.monotonic()<end:time.sleep(.05)
   check(pathlib.Path(str(state)+'.modal.closed').exists(),'modal dialog closed normally')
   c.command('list_engines')
+  for i in range(3):
+   extra=c.command(f'run_tournament engine1_id=1 engine2_id=2 name="Extra {i}" time=120 allow_shared_executable=true')
+   check(extra['games_total']==2,'additional tournament uses normal pairing')
+  report(state,lambda x:x['tabs']==5)
+  pathlib.Path(str(state)+'.engine-problem').touch()
+  report(state,lambda x:x['engine_notices'])
+  c.command('list_engines')
+  q=c.command('query_tournament id='+str(a['tournament']))
+  check(q['games_total']==2,'queued engine notices do not block read-only CLI')
   state.with_suffix('.json.stop').touch()
   for match in [a,b]:
    end=time.monotonic()+6
@@ -76,6 +94,7 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   after=report(state,lambda x:x['ticks']>before)
   check(c.p.poll() is None and after['main_visible'],'input EOF leaves GUI and tournament window open')
   state.with_suffix('.json.close').touch();c.p.wait(timeout=5);check(c.p.returncode==0,'GUI close shuts down integrated session')
+  c.check_tail();check(b'diagnostic-probe' in (live/'stderr.log').read_bytes(),'buffered diagnostics go to stderr')
  finally:c.cleanup()
  for blocked in [False,True]:
   folder=root/('blocked' if blocked else 'idle');folder.mkdir();state=folder/'state.json';c=Client(helper,['--session',str(state)],folder)
@@ -89,15 +108,19 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
  if actual and os.name=='posix':
   # Run the identical release binary in a private directory, never the user's configs.
   folder=root/'actual';folder.mkdir();exe=folder/'zgui';shutil.copy2(actual,exe)
-  (folder/'engines.json').write_text('[]')
+  shutil.copy2(pathlib.Path(helper).parent/'engines.json',folder/'engines.json')
   c=Client(str(exe),['--cli'],folder)
   try:
-   data=c.command('list_engines');check(data['engines']==[],'actual zgui --cli reaches the GUI dispatcher')
+   data=c.command('list_engines');check(len(data['engines'])==4,'actual zgui --cli reaches the GUI dispatcher')
+   for i in range(5):
+    match=c.command(f'run_tournament engine1_id=1 engine2_id=2 name="Real {i}" time=120 allow_shared_executable=true')
+    q=c.command('query_tournament id='+str(match['tournament']))
+    check(q['games_total']==2,'real binary creates and queries five tournaments')
    c.command('query_tournament id=999','ERROR')
    c.p.stdin.close();time.sleep(.2);check(c.p.poll() is None,'actual executable keeps GUI alive at EOF')
    windows=[];end=time.monotonic()+3
    while not windows and time.monotonic()<end:
-    found=subprocess.run(['xdotool','search','--onlyvisible','--pid',str(c.p.pid),'--name','^ZGUI -'],capture_output=True,text=True)
+    found=subprocess.run(['xdotool','search','--all','--onlyvisible','--pid',str(c.p.pid),'--name','^ZGUI -'],capture_output=True,text=True)
     windows=found.stdout.split();time.sleep(.05)
    check(bool(windows),'actual GUI main window is visible on the isolated display')
    x=ctypes.CDLL('libX11.so.6');x.XOpenDisplay.argtypes=[ctypes.c_char_p];x.XOpenDisplay.restype=ctypes.c_void_p
@@ -115,17 +138,28 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
    finally:x.XCloseDisplay(d)
    # Preserve the ordinary standalone Save/No/Cancel flow, if fresh boards
    # carry initial header data. This is UI automation on the hidden display.
-   end=time.monotonic()+5
+   end=time.monotonic()+12
    while c.p.poll() is None and time.monotonic()<end:
-    found=subprocess.run(['xdotool','search','--onlyvisible','--pid',str(c.p.pid),'--name','^Close ZGUI$'],capture_output=True,text=True)
+    found=subprocess.run(['xdotool','search','--all','--onlyvisible','--pid',str(c.p.pid),'--name','^Close '],capture_output=True,text=True)
     if found.stdout.split():
      dialog=found.stdout.split()[0]
      geometry=subprocess.run(['xdotool','getwindowgeometry','--shell',dialog],capture_output=True,text=True)
      if geometry.returncode==0:
       values=dict(line.split('=',1) for line in geometry.stdout.splitlines() if '=' in line)
       # A dialog can disappear between discovery and clicking.
-      subprocess.run(['xdotool','mousemove','--window',dialog,str(int(values['WIDTH'])-150),str(int(values['HEIGHT'])-32),'click','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+      title=subprocess.run(['xdotool','getwindowname',dialog],capture_output=True,text=True).stdout.strip()
+      if title=='Close tournament':
+       # These dialogs default to Cancel; the preceding tab stop is Discard.
+       subprocess.run(['xdotool','windowfocus','--sync',dialog,'key','--clearmodifiers','shift+Tab','Return'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+      else:
+       subprocess.run(['xdotool','mousemove','--window',dialog,str(int(values['WIDTH'])-150),str(int(values['HEIGHT'])-32),'click','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     time.sleep(.1)
+   if c.p.poll() is None:
+    remaining=subprocess.run(['xdotool','search','--all','--onlyvisible','--pid',str(c.p.pid)],capture_output=True,text=True)
+    for window in remaining.stdout.split():
+     title=subprocess.run(['xdotool','getwindowname',window],capture_output=True,text=True)
+     print('Still visible during close:',window,title.stdout.strip(),flush=True)
    c.p.wait(timeout=1);check(c.p.returncode==0,'actual GUI close cancels terminal session normally')
+   c.check_tail()
   finally:c.cleanup()
 print(f'Integrated CLI application checks passed: {checks}')

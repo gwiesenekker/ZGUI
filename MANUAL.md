@@ -122,6 +122,7 @@ clock settings use the selected game's existing GUI defaults. Use a decimal poin
 in commands even if GUI edits use a decimal comma. Relative paths use the launch
 directory. To explicitly accept the existing UCI shared-executable warning, add
 `allow_shared_executable=true`; no other warning is automatically accepted.
+This check runs before pairing: a refusal leaves no tournament tab or files.
 
 This interactive `run_tournament` form creates a match. The separate one-shot
 startup form `zgui run_tournament file="saved.json"` opens a saved event. Do not
@@ -141,12 +142,17 @@ or `stopped`, with that precedence. The response includes total/completed/active
 pending/unresolved games, complete pairs, wins/draws/losses, referee-result count and
 a reason. `attention` means an unresolved stopped/failed row needs referee action.
 GUI Stop and normal referee controls remain available. A GUI modal dialog causes
-commands to return `BUSY`; retry after it closes. Background games never switch
+commands to return `BUSY`; retry after it closes. In `--cli` sessions, engine-failure
+notices appear in the existing analysis log without a blocking popup. Ordinary
+GUI sessions keep their engine-problem dialogs. Background games never switch
 the selected board automatically.
 
 Each nonblank command receives one physical UTF-8 line: `OK ` or `ERROR ` followed
 by JSON. Lists are JSON arrays in that one response. Prompts go to stderr only
-when input and output are terminals; GUI/engine logs are not protocol stdout.
+when input and output are terminals. Ordinary RTL/Lazarus stdout is redirected
+to stderr before GUI initialization; only protocol responses use the original
+stdout. Keep stderr separate from stdout in scripts (do not merge them with
+`2>&1`). Engine processes retain their own protocol pipes.
 For automation, keep stdin/stdout pipes open, send commands, read one response per
 command and poll `query_tournament`. Input EOF detaches command input and leaves
 ZGUI and its tournaments open; do not wait for application exit as a completion

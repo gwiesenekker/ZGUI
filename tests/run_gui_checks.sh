@@ -27,7 +27,8 @@ run_check() {
 run_check "interactive_cli_gui_check (GTK2, shared match setup, queries and modal BUSY)" interactive_cli_gui_check "/interactive-cli" 90s
 
 echo "==> cli_application_check (pipes through GUI dispatcher and responsive shutdown)"
-if python3 "$ROOT_DIR/tests/cli_application_check.py" "$OUT_DIR/interactive-cli/interactive_cli_gui_check"; then
+if python3 "$ROOT_DIR/tests/build_lazarus_check.py" gtk2 "$OUT_DIR/cli-application" "$ROOT_DIR/zgui.lpi" > "$OUT_DIR/cli-application-build.log" 2>&1 &&
+   python3 "$ROOT_DIR/tests/cli_application_check.py" "$OUT_DIR/interactive-cli/interactive_cli_gui_check" "$OUT_DIR/cli-application/zgui"; then
   PASSED=$((PASSED + 1))
 else
   FAILED+=("cli_application_check (run)")

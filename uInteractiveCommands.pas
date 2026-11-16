@@ -89,6 +89,7 @@ var Tokens:TStringList;Spec:TCommandDefinition;Binder:TCommandBinder;Cmd:TCliCom
      for K:=0 to Engines.Count-1 do if SameText(Engines[K].IdText,Selector) then begin
        if Result<>nil then Fail('AMBIGUOUS_ENGINE','Engine name is ambiguous; use an ID or key');Result:=Engines[K];
      end;
+     if Result=nil then Fail('UNKNOWN_ENGINE','No engine named "'+Selector+'" (see list_engines)');
    end;
    if Result=nil then Fail('UNKNOWN_ENGINE','Engine registration no longer exists');
  end;
@@ -160,7 +161,10 @@ begin
      Phase:='CONFIGURE';
      try
        D:=FHost.NewTournament(V);if D=nil then Fail('BUSY','Tournament host is busy');
-       D.ConfigureNewTournament(Settings);Phase:='PAIRING';
+       D.ConfigureNewTournament(Settings);
+       if not D.ConfirmSharedExecutables(True,AllowShared) then
+         Fail('CONFIRMATION_REQUIRED','Shared executable requires allow_shared_executable=true');
+       Phase:='PAIRING';
        if not D.CreatePairing(Msg,True) then begin
          if D.StorageError<>'' then Phase:='STORAGE';Fail(Phase,Msg);
        end;

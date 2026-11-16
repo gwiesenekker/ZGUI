@@ -544,6 +544,8 @@ type
     {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
     procedure TestRegisterGame(AGame: TRunningGame);
     procedure TestDrainGuiEvents(ADrainAll: Boolean);
+    procedure TestReportEngineProblem(const CaptionText,MessageText:string);
+    property TestAnalyzerLog:TMemo read FAnalyzerMemo;
     property TestGuiEventQueue: TThreadMessageQueue read FGuiEventQueue;
     property TestAnalysis: TAnalysisCoordinator read FAnalysis;
     property TestAutoPlay: TAutoPlayCoordinator read FAutoPlay;
@@ -2474,7 +2476,7 @@ procedure TMainForm.ReportEngineProblem(const ACaption, AText: string);
 begin
   {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
   // Headless checks must not block on a modal dialog they did not expect.
-  if GuiTestConfirmationResult = 0 then
+  if (GuiTestConfirmationResult = 0) and (FCliTerminal=nil) then
   begin
     if FTestEngineProblems = nil then
       FTestEngineProblems := TStringList.Create;
@@ -2503,7 +2505,12 @@ begin
     LItem := FPendingEngineProblems[0];
     FPendingEngineProblems.Delete(0);
     P := Pos(#1, LItem);
-    ShowGuiOkDialog(Self, Copy(LItem, 1, P - 1), Copy(LItem, P + 1, MaxInt));
+    if FCliTerminal<>nil then
+      // CLI sessions must remain queryable after unrelated engine failures.
+      // Keep notices visible in the existing analysis log, without a modal loop.
+      HandleAnalyzerLog(Copy(LItem,1,P-1)+': '+Copy(LItem,P+1,MaxInt))
+    else
+      ShowGuiOkDialog(Self, Copy(LItem, 1, P - 1), Copy(LItem, P + 1, MaxInt));
   end;
 end;
 
@@ -6687,6 +6694,8 @@ begin
 end;
 
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+procedure TMainForm.TestReportEngineProblem(const CaptionText,MessageText:string);
+begin ReportEngineProblem(CaptionText,MessageText);end;
 procedure TMainForm.TestRegisterGame(AGame: TRunningGame);
 begin
   FGames.Add(AGame);

@@ -32,3 +32,9 @@ PowerShell, create/query a match and watch it in the GUI. Check `BUSY` during an
 open modal dialog, EOF leaving the GUI open, and GUI close with idle stdin or a
 client that stops reading stdout. The helper checks transport behavior but cannot
 replace this final application test.
+
+C13 regression: in one actual `zgui.exe --cli` pipe session, create and query
+at least five tournaments. Keep stderr separate. Every stdout line must be one
+complete `OK ` / `ERROR ` JSON response, including after closing the GUI; no
+Lazarus messages, partial lines or heap reports may appear there. Repeat with
+stdout redirected to a regular file (preserving its write/append position).

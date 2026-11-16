@@ -4,6 +4,35 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Address Claude's interactive CLI implementation review — 2026-11-16
+
+Commit: pending.
+
+- Authorized by: “Could you review Claude's latest review of the CLI
+  implementation and address the findings you agree with? Please update the
+  comment column, CHANGELOG.md, compile, test, and commit.” Scope: reviewed C13,
+  U28, T16 and T17. The earlier native-Windows prerequisite waiver remains in
+  effect; Windows execution is still outstanding.
+- C13: reserve original stdout privately before Lazarus initializes. Send ordinary
+  OS/RTL diagnostics to stderr through shutdown; responses use only the private,
+  noninheritable handle. Normal GUI startup keeps its existing output behavior.
+- T16: reuse the existing shared-UCI-executable check before pairing publishes
+  files. A refused fresh command leaves no tab or files; Play still rechecks the
+  authoritative pairings. T17: unknown names identify the missing name and point
+  to list_engines; removed IDs/keys retain their existing explanation.
+- U28: in CLI sessions, both chess and draughts engine-failure notices use the
+  existing analysis log instead of modal popups, keeping queries available.
+  Ordinary GUI sessions retain modal notices; other modal dialogs still return
+  BUSY to CLI commands. Shared tournament execution and the GUI layout are unchanged.
+- Extend integrated checks to five tournaments in the harness and actual ZGUI,
+  buffered diagnostics, shutdown bytes, queued engine-failure notices, exact name
+  errors and refusal without tabs/files. Correct the test's window lookup to
+  require both process and title. Update the built-in manual and Windows checklist.
+- Validation: GTK2 build, full regression (20 terminal transport checks),
+  all 24 GUI suites including the actual executable with five tournaments, both
+  tournament suites, lifecycle and DXP passed. Windows remains unverified.
+  Details: chatgpt/CLI_REVIEW_AC38270_NOTES.md.
+
 ### Connect interactive --cli to the existing executable — 2026-11-16
 
 Commit: `92751e1`.
