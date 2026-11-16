@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Document Windows interactive CLI testing — 2026-11-16
 
-Commit: pending.
+Commit: `f52cb29`.
 
 - Add a Windows walkthrough to the built-in manual: launch --cli, list engines,
   start/query a short tournament, use an opening ballot, and check GUI Stop,
