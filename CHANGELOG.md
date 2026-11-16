@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Connect interactive --cli to the existing executable — 2026-11-16
 
-Commit: pending.
+Commit: `92751e1`.
 
 - User waiver: “Waive prerequisite; finish integration with Windows QA
   outstanding”. Scope: complete the reviewed terminal/startup connection; native

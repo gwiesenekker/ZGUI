@@ -1,6 +1,6 @@
 # Interactive CLI implementation — reviewed stages
 
-Date: 2026-11-16. Baseline: cd4b00c. Implementation: `0d80b72`. Review:
+Date: 2026-11-16. Baseline: cd4b00c. Shared foundations: `0d80b72`; completed integration: `92751e1`. Review:
 `claude/review-cd4b00c-interactive-cli.md`.
 
 User authorisation: “Could you review Claude's review of the interactive --cli
