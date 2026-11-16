@@ -3,7 +3,7 @@ unit uStartupCommand;
 interface
 uses Classes;
 type
-  TStartupCommandKind=(sckNone,sckHelp,sckRunTournament);
+  TStartupCommandKind=(sckNone,sckHelp,sckRunTournament,sckInteractive);
   TStartupCommand=record
     Kind:TStartupCommandKind;
     FileName:string;
@@ -18,11 +18,14 @@ begin
     'zgui run_tournament file="tournament.json"'+LineEnding+
     'zgui run_tournament --file "tournament.json"'+LineEnding+
     'zgui run_tournament "tournament.json"'+LineEnding+
+    'zgui --cli'+LineEnding+
     'zgui --help'+LineEnding+'zgui help run_tournament'+LineEnding+LineEnding+
     'Open a saved chess or draughts tournament in a visible tab and press Play.'+LineEnding+
     'Existing results are preserved. Use Reschedule in the GUI to replay a game.'+LineEnding+
     'Relative paths use the launch directory. The GUI stays open after completion.'+LineEnding+
-    'Only one startup command is accepted; there is no headless mode.';
+    'Interactive --cli opens the GUI and accepts list_engines, run_tournament and query_tournament.'+LineEnding+
+    'In --cli, run_tournament creates a two-engine match; file= is the separate startup form.'+LineEnding+
+    'Only one startup mode is accepted; there is no headless mode.';
 end;
 function ToolkitOption(const Token:string;out NeedsValue:Boolean):Boolean;
 var Key:string;P:Integer;
@@ -60,8 +63,12 @@ begin
     end;
     if Tokens.Count=0 then Exit;
     Token:=LowerCase(Tokens[0]);
+    if Token='--cli' then begin
+      if Tokens.Count<>1 then raise ECliError.Create('Use --cli alone, without a startup command or extra arguments');
+      Result.Kind:=sckInteractive;Exit;
+    end;
     if (Copy(Token,1,1)='-') and (Token<>'--help') and
-      (Tokens.IndexOf('run_tournament')<0) and (Tokens.IndexOf('help')<0) then Exit;
+      (Tokens.IndexOf('run_tournament')<0) and (Tokens.IndexOf('help')<0) and (Tokens.IndexOf('--cli')<0) then Exit;
     if (Token='--help') or (Token='help') then begin
       if (Tokens.Count>2) or ((Token='--help') and (Tokens.Count<>1)) or
         ((Tokens.Count=2) and not SameText(Tokens[1],'run_tournament')) then

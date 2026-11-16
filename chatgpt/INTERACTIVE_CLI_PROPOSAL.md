@@ -3,7 +3,8 @@
 Date: 2026-11-16. Baseline: `66654d7` (startup CLI implementation `8a06c4d`).
 Status: approved with conditions in `claude/review-cd4b00c-interactive-cli.md`.
 See `INTERACTIVE_CLI_IMPLEMENTATION_NOTES.md` for the reviewed decisions, completed
-GUI seams, transport tests and the pending native-Windows integration gate.
+GUI seams, transport tests and the explicit waiver of the native-Windows
+prerequisite. Native Windows QA remains outstanding.
 The original design below is retained as review context; its Windows console and
 backslash rules are superseded by C11/C12 in those notes.
 

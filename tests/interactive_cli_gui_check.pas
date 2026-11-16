@@ -3,7 +3,8 @@ program interactive_cli_gui_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
  ExtCtrls,Grids,Dialogs,FPJSON,JSONParser,uMainForm,uTournamentDialog,uTournamentHostForm,
  uTournamentStorage,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
- uEngineRegistry,uEngineParamsJson,uGameSetupTypes,uDraughtsHubEngine,uChessUciEngine,uGuiDialogs;
+ uEngineRegistry,uEngineParamsJson,uGameSetupTypes,uDraughtsHubEngine,uChessUciEngine,uGuiDialogs,
+ uStartupCommand,uRunningGame,uGameTree,uAtomicFile;
 var Chess,Draughts:TGameVariant;Checks:Integer=0;Directory:string;Main:TMainForm;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
@@ -106,6 +107,22 @@ begin
   Engines.Free;
  end;
 end;
+procedure RelativeBallot;
+var Launch,FileName:string;L:TStringList;J:TJSONObject;D:TTournamentDialog;OriginalMain:TMainForm;
+begin
+ OriginalMain:=Main;
+ Launch:=GetCurrentDir;FileName:='cli-relative-'+IntToStr(GetProcessID)+'.fen';L:=TStringList.Create;
+ try
+  L.Add(Chess.DefaultStartingFEN);L.SaveToFile(FileName);Main:=TMainForm.Create(nil);SetCurrentDir(Directory);
+  J:=Response('run_tournament engine1="CLI Chess 0" engine2="CLI Chess 1" ballot='+FileName,'ERROR','CONFIRMATION_REQUIRED');
+  try Check(J.Get('tournament',0)>0,'Relative ballot resolves from launch directory after GUI cwd changes');finally J.Free;end;
+  D:=Main.TournamentHost.Dialogs[Main.TournamentHost.Count-1];GuiTestConfirmationResult:=mrNo;
+  try Check(Main.TournamentHost.CloseTournament(D),'Close unstarted relative-ballot fixture');finally GuiTestConfirmationResult:=0;end;
+ finally
+  SetCurrentDir(Launch);if Main<>OriginalMain then Main.Free;Main:=OriginalMain;
+  DeleteFile(FileName);L.Free;
+ end;
+end;
 procedure RegistryChecks;
 var Engines:TExternalEngineList;Clone:TExternalEngineDefinition;SavedArgs,Key:string;J:TJSONObject;
 begin
@@ -195,12 +212,88 @@ begin
 end;
 procedure TModalProbe.Close(Data:PtrInt);
 begin TForm(Data).ModalResult:=mrCancel;end;
+type TSessionProbe=class
+  Timer:TTimer;
+  ReportName:string;
+  Closing,Stopped,ChessViewed,DraughtsViewed,ModalSeen,ModalShowing:Boolean;
+  ModalDialog:TForm;
+  ModalTimer:TTimer;
+  Ticks:Integer;
+  procedure ModalShown(Sender:TObject);
+  procedure PollModalClose(Sender:TObject);
+  procedure Tick(Sender:TObject);
+end;
+procedure TSessionProbe.ModalShown(Sender:TObject);
+begin
+ ModalDialog:=TForm(Sender);ModalTimer:=TTimer.Create(nil);ModalTimer.Interval:=25;ModalTimer.OnTimer:=@PollModalClose;
+ WriteTextFileAtomically(ReportName+'.modal.ready','ready');
+end;
+procedure TSessionProbe.PollModalClose(Sender:TObject);
+begin if FileExists(ReportName+'.modal.done') then ModalDialog.ModalResult:=mrOk;end;
+procedure TSessionProbe.Tick(Sender:TObject);
+var I,ChessPlies,DraughtsPlies:Integer;D:TTournamentDialog;G:TRunningGame;Grid:TStringGrid;Bounds:TRect;
+ J:TJSONObject;
+begin
+ if Closing then Exit;
+ if ModalShowing then begin
+  if FileExists(ReportName+'.modal.done') and (ModalDialog<>nil) then ModalDialog.ModalResult:=mrOk;
+  Exit;
+ end;
+ if FileExists(ReportName+'.modal') and not ModalSeen then begin
+  ModalSeen:=True;ModalShowing:=True;GuiTestConfirmationOnShow:=@ModalShown;
+  try ShowGuiOkDialog(Main,'CLI modal test','Pipe commands must return BUSY');
+  finally GuiTestConfirmationOnShow:=nil;FreeAndNil(ModalTimer);ModalDialog:=nil;ModalShowing:=False;
+    WriteTextFileAtomically(ReportName+'.modal.closed','closed');end;
+ end;
+ Inc(Ticks);ChessPlies:=0;DraughtsPlies:=0;
+ if FileExists(ReportName+'.stop') and not Stopped then begin
+  Stopped:=True;
+  if Main.TournamentHost<>nil then for I:=0 to Main.TournamentHost.Count-1 do
+    TButton(Main.TournamentHost.Dialogs[I].FindComponent('TournamentStop')).Click;
+ end;
+ for I:=1 to Main.TestGameCount do begin
+  G:=Main.FindGameById(I);if G=nil then Continue;
+  if G.GameTree.Variant=Chess then ChessPlies:=ChessPlies+G.MainlineCount else DraughtsPlies:=DraughtsPlies+G.MainlineCount;
+ end;
+ if Main.TournamentHost<>nil then for I:=0 to Main.TournamentHost.Count-1 do begin
+  D:=Main.TournamentHost.Dialogs[I];
+  if ((D.Variant=Chess) and (ChessPlies>0) and not ChessViewed) or
+     ((D.Variant=Draughts) and (DraughtsPlies>0) and not DraughtsViewed) then begin
+   Grid:=TStringGrid(D.FindComponent('TournamentPairings'));Bounds:=Grid.CellRect(0,1);
+   Grid.OnMouseDown(Grid,mbLeft,[],Bounds.Left+2,Bounds.Top+2);
+   if D.Variant=Chess then ChessViewed:=Main.ActiveGameTree.Variant=Chess
+   else DraughtsViewed:=Main.ActiveGameTree.Variant=Draughts;
+  end;
+ end;
+ J:=TJSONObject.Create;
+ try
+  J.Add('ticks',Ticks);J.Add('games',Main.TestGameCount);J.Add('chess_plies',ChessPlies);J.Add('draughts_plies',DraughtsPlies);
+  J.Add('chess_viewed',ChessViewed);J.Add('draughts_viewed',DraughtsViewed);J.Add('main_visible',Main.Visible);
+  J.Add('host_visible',(Main.TournamentHost<>nil) and Main.TournamentHost.Visible);
+  WriteTextFileAtomically(ReportName,J.AsJSON);
+ finally J.Free;end;
+ if FileExists(ReportName+'.close') or (Ticks>1200) then begin
+  Closing:=True;Timer.Enabled:=False;Main.Close;
+ end;
+end;
+procedure Session;
+var Probe:TSessionProbe;Request:TStartupCommand;
+begin
+ Directory:=ExtractFilePath(ParamStr(2));RegisterPeers;
+ Application.CreateForm(TMainForm,Main);Probe:=TSessionProbe.Create;
+ try
+  Probe.ReportName:=ParamStr(2);Probe.Timer:=TTimer.Create(nil);Probe.Timer.Interval:=25;Probe.Timer.OnTimer:=@Probe.Tick;
+  GuiTestConfirmationResult:=mrNo;Request:=Default(TStartupCommand);Request.Kind:=sckInteractive;
+  Main.QueueStartupCommand(Request,'');Application.Run;
+ finally Probe.Timer.Free;Probe.Free;Main.Free;end;
+end;
 var J:TJSONObject;Probe:TModalProbe;I:Integer;NewButton:TButton;
 begin
  Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
  RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
  if ParamStr(1)='--peer' then begin try Peer;finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;end;Halt(0);end;
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
+ if ParamStr(1)='--session' then begin Session;RegisterDefaultGameVariant(nil);ClearRegisteredGames;Halt(0);end;
  Directory:=GetTempDir+'zgui-interactive-'+IntToStr(GetProcessID);ForceDirectories(Directory);RegisterPeers;
  Main:=TMainForm.Create(nil);Probe:=TModalProbe.Create;
  try
@@ -210,11 +303,12 @@ begin
    Error('run_tournament engine1_id=1 engine2_id=3','GAME_MISMATCH');
    Error('run_tournament engine1_id=1 engine2_id=1','BAD_ARGUMENT');
    Error('run_tournament engine1_id=1 engine2_id=2 time=nan','BAD_ARGUMENT');
+   Error('run_tournament engine1_id=1 engine2_id=2 ballot=','BAD_ARGUMENT');
    Error('run_tournament engine1_id=1 engine2_id=2 time=0','CONFIGURE');
    Error('run_tournament engine1_id=1 engine2_id=2 concurrent=0','CONFIGURE');
    Error('query_tournament id=999','UNKNOWN_TOURNAMENT');
    Check(Main.TournamentHost.Count=0,'Invalid fresh setups leave no tabs');
-   LocaleSettings;RegistryChecks;Check(Main.TournamentHost.Count=0,'Registry errors create no tabs');
+   LocaleSettings;RelativeBallot;RegistryChecks;Check(Main.TournamentHost.Count=0,'Registry errors create no tabs');
    Match(Chess,'CLI Chess 0','CLI Chess 1');Match(Draughts,'CLI Draughts 2','CLI Draughts 3');
    GuiTestConfirmationOnShow:=@Probe.Show;
    try ShowGuiOkDialog(Main,'Modal test','Commands must return BUSY');finally GuiTestConfirmationOnShow:=nil;end;

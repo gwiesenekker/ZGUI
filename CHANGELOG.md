@@ -4,6 +4,35 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Connect interactive --cli to the existing executable — 2026-11-16
+
+Commit: pending.
+
+- User waiver: “Waive prerequisite; finish integration with Windows QA
+  outstanding”. Scope: complete the reviewed terminal/startup connection; native
+  Windows execution remains unverified. The approved shared actions/transport
+  are in `0d80b72`.
+- Enable `zgui --cli` after normal GUI initialization. The existing GUI event
+  timer dispatches owned requests to list_engines, run_tournament and
+  query_tournament; no second tournament execution path. Both chess and draughts
+  appear in normal live tabs and retain GUI board selection, Stop and save/close
+  handling. Normal startup and saved-file startup commands remain available.
+- Reject combined startup modes, preserve toolkit options and update help. Stop
+  terminal I/O during GUI destruction; EOF detaches input without closing ZGUI.
+  Modal requests return BUSY rather than entering partially completed GUI actions.
+  Relative ballot paths stay anchored to the launch directory even after GUI
+  dialogs change the working directory; an explicit empty ballot is rejected.
+- Extend the built-in manual with commands, selectors, defaults/units, JSON
+  responses/errors, score/pair perspective, path quoting, platform behavior and
+  outstanding Windows QA. Record the waiver in the implementation notes.
+- Add pipe-to-GUI integration checks for both games, real modal dialogs, live
+  boards, GUI Stop, EOF and blocked/idle shutdown, plus an actual-binary smoke
+  check on isolated displays. Build, full regression suite, both tournament suites
+  and all 24 GUI checks pass. Startup parser: 64 assertions; shared CLI GUI: 91;
+  integrated sessions including the actual executable: 39. Native Windows QA
+  remains outstanding.
+
+
 ### Shared interactive-CLI actions and transport validation — 2026-11-16
 
 Commit: `0d80b72`.

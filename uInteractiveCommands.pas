@@ -10,13 +10,14 @@ type
     TBinding=record TabId:PtrInt;Uuid,Engine1,Engine2:string;end;
   private
     FHost:TTournamentHostForm;
+    FBaseDirectory:string;
     FEngineKeys:TStringList;
     FBindings:array of TBinding;
     FExecuting:Boolean;
     FOnTournament:TCliTournamentEvent;
     function EngineId(const Key:string):Integer;
   public
-    constructor Create(Host:TTournamentHostForm);
+    constructor Create(Host:TTournamentHostForm;const BaseDirectory:string='');
     destructor Destroy;override;
     function Execute(const Line:string):string;
     property OnTournament:TCliTournamentEvent read FOnTournament write FOnTournament;
@@ -24,7 +25,7 @@ type
 function CliError(const Code,MessageText:string;const Command:string=''):string;
 implementation
 uses Forms,Math,uCliCommand,uCliDefinitions,uCliBinder,uCliTokenizer,uEngineRegistry,
- uGamePosition,uGameGuiProfile;
+ uGamePosition,uGameGuiProfile,LazFileUtils;
 type ECliRequest=class(Exception)
   Code:string;
   constructor Create(const ACode,AMessage:string);
@@ -40,8 +41,11 @@ begin
  try J.Add('code',Code);J.Add('message',MessageText);J.Add('command',Command);Result:='ERROR '+J.AsJSON;
  finally J.Free;end;
 end;
-constructor TInteractiveCommands.Create(Host:TTournamentHostForm);
-begin inherited Create;FHost:=Host;FEngineKeys:=TStringList.Create;end;
+constructor TInteractiveCommands.Create(Host:TTournamentHostForm;const BaseDirectory:string);
+begin
+ inherited Create;FHost:=Host;FEngineKeys:=TStringList.Create;
+ if BaseDirectory='' then FBaseDirectory:=GetCurrentDir else FBaseDirectory:=ExpandFileName(BaseDirectory);
+end;
 destructor TInteractiveCommands.Destroy;
 begin FEngineKeys.Free;inherited Destroy;end;
 function TInteractiveCommands.EngineId(const Key:string):Integer;
@@ -141,6 +145,10 @@ begin
      if A.Kind=eekUci then V:=GameVariantById('chess') else V:=GameVariantById('draughts');
      Settings:=Default(TTournamentMatchSettings);Settings.Engine1Key:=EngineIdentityKey(A);Settings.Engine2Key:=EngineIdentityKey(B);
      Settings.Name:=Cmd.Argument('name');Settings.Ballot:=Cmd.Argument('ballot');
+     if Cmd.HasArgument('ballot') and (Trim(Settings.Ballot)='') then
+       Fail('BAD_ARGUMENT','ballot requires a nonempty filename');
+     if (Settings.Ballot<>'') and not FilenameIsAbsolute(Settings.Ballot) then
+       Settings.Ballot:=ExpandFileName(IncludeTrailingPathDelimiter(FBaseDirectory)+Settings.Ballot);
      Settings.HasTime:=Cmd.HasArgument('time');if Settings.HasTime then Settings.Seconds:=Number('time');
      Settings.HasMoves:=Cmd.HasArgument('moves');if Settings.HasMoves then Settings.Moves:=IntegerValue('moves');
      Settings.HasIncrement:=Cmd.HasArgument('increment');if Settings.HasIncrement then Settings.Increment:=Number('increment');

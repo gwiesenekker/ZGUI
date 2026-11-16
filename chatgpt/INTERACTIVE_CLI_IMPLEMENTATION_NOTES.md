@@ -7,11 +7,13 @@ User authorisation: “Could you review Claude's review of the interactive --cli
 proposal and proceed with the approved changes? Please update CHANGELOG.md,
 compile, test, and commit.”
 
-The approved GUI seams are implemented. The cancellable transport and its native
-Windows test helper are prepared, but the `--cli` startup connection is gated on
-Claude's required native Windows transport check or an explicit user waiver.
-An asynchronous question has presented those two routes. No approval is inferred
-from elapsed time. Ordinary startup and the one-shot saved-file CLI remain intact.
+The approved GUI seams and terminal startup connection are implemented. On
+2026-11-16 the user explicitly waived the native-Windows prerequisite:
+“Waive prerequisite; finish integration with Windows QA outstanding”. Scope:
+connect the prepared transport to the existing executable and shared GUI actions;
+leave native Windows execution unverified. The waiver does not cover unrelated
+shared functionality. Ordinary startup and the one-shot saved-file CLI remain
+intact.
 
 ## Scope and review decisions
 
@@ -64,8 +66,11 @@ from elapsed time. Ordinary startup and the one-shot saved-file CLI remain intac
 
 Every accepted nonblank command has one `OK ` or `ERROR ` JSON response line. There
 is no pipe prompt or unsolicited progress output. Terminal prompts go to stderr.
-The planned command syntax is in INTERACTIVE_CLI_PROPOSAL.md; the current normal
-executable does not yet expose the terminal session while the gate is pending.
+The normal executable now accepts `--cli`, queued after GUI initialization. Its
+existing GUI event timer consumes one owned request, dispatches it on the GUI
+thread and replies. Destruction cancels I/O before retiring command/session state.
+EOF leaves the GUI alive; help and invalid combinations use existing GUI dialogs.
+The command syntax and limitations are documented in the built-in manual.
 
 Codes: BAD_ARGUMENT (syntax/binding/numbers), UNKNOWN_ENGINE and AMBIGUOUS_ENGINE
 (selector resolution), GAME_MISMATCH (protocol membership), BUSY (modal/host/
@@ -73,7 +78,8 @@ reentrancy), CONFIGURE (shared setup validation/ballot load), PAIRING (shared pa
 creation), STORAGE (automatic-save failure), CONFIRMATION_REQUIRED (the shared
 executable warning), START (shared start rejection), UNKNOWN_TOURNAMENT (closed/
 unknown handle), TOURNAMENT_REPLACED (UUID changed), MATCH_CHANGED (participants or
-pairing shape changed), TRANSPORT (unexpected transport failure). Retained-event
+pairing shape changed), TRANSPORT (unexpected transport failure), SHUTDOWN and
+INTERNAL (application shutdown/unexpected dispatcher failure). Retained-event
 errors include tournament ID and file path; unpublished invalid setups are discarded
 without the destructor accidentally creating a recovery event.
 
@@ -91,3 +97,19 @@ Native Windows helper: `tests/cli_terminal_check.lpi` (same GUI subsystem as ZGU
 `tests/CLI_WINDOWS_TRANSPORT_CHECK.md`, and `tests/cli_terminal_transport_check.py`.
 The Linux host lacks a Win64 RTL; Linux tests do not verify Windows console or
 cancellation behavior. Local engine directories and user files are untouched.
+
+## Integrated startup completion
+
+The native-Windows prerequisite was explicitly waived as quoted above. No native
+Windows test is claimed. Additional tests drive both games through real pipes,
+verify live board selection and normal GUI Stop, request commands while a modal
+dialog is open, check EOF keeps the GUI alive, and close the GUI with idle input
+or blocked stdout. A separate smoke test runs the actual application binary from
+a private temporary directory and uses its normal close/save confirmations.
+
+Final integrated validation: application build, full regression suite and both
+tournament suites pass; the complete GUI script passes all 24 checks on isolated
+displays. Startup argument checks: 64; shared command GUI check: 91; actual-binary
+and live pipe sessions: 39. Relative ballot resolution is anchored to MainForm's
+launch directory, including a cwd change before the first command. Explicit empty
+ballot values are rejected. No native Windows test is claimed.

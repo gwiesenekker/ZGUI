@@ -42,7 +42,9 @@ Finish or stop a database import before replacing its window or closing ZGUI.
 Board colours, notation fonts/styles, evaluation ranges and score-history colours
 are independent for chess and draughts. ZGUI restores the last selected game on startup.
 
-## Starting a tournament from the command line
+## Command-line interface
+
+### Starting a saved tournament
 
 Use the normal ZGUI executable; the tournament opens live in the Tournaments
 window, using the same Play action, clocks, engine reservations and scheduler as
@@ -82,6 +84,94 @@ opens for viewing with “read-only” in its tab and caption; Play, Save, pairi
 settings edits and referee changes are disabled. Closing that view does not save
 or prompt to save. A file locked by another ZGUI is still refused. Older ZGUI
 versions do not participate in this protection.
+
+### Interactive terminal and pipe commands
+
+Run `zgui --cli` to open the normal GUI with a `zgui>` terminal prompt. On Windows,
+interactive input gets its own console window so it does not compete with cmd or
+PowerShell. When input is redirected, ZGUI preserves the pipe/file handles and
+prints no prompt. Close ZGUI through its GUI; the dedicated console's close menu
+is disabled to preserve the normal save and stop handling.
+
+The initial commands are:
+
+```text
+list_engines
+run_tournament engine1="GWD multi-cut" engine2="GWD 8.1279" ballot="ballot2.fen" time=600 moves=75
+query_tournament id=1
+```
+
+`list_engines` reports registered names, session-local numeric IDs, identity keys,
+game/protocol and executable availability. It does not launch engines. Names must
+be unambiguous. Instead of `engine1`/`engine2`, you can use `engine1_id`/`engine2_id`
+or `engine1_key`/`engine2_key`; supply exactly one selector per participant. IDs are
+not reused for changed registrations; refresh the list after changing an engine's
+configuration. Identity keys can be stored in scripts, but configuration changes
+can invalidate them too.
+
+`run_tournament` creates a two-engine match in a normal visible tournament tab and
+returns its tournament ID when the existing start action accepts it. It does not
+wait for games to finish or engines to become free. Both engines must belong to
+the same game: UCI is chess; Hub and DXP are draughts. Without a ballot it creates
+an ordinary double round-robin; a ballot creates two colour-reversed game rows per
+position, preserving the position's side to move and duplicate entries.
+
+Optional settings: `name`, `ballot`, `time` (seconds per period), `moves` (zero for
+sudden death), `increment` (fractional seconds allowed) and `concurrent`. Omitted
+clock settings use the selected game's existing GUI defaults. Use a decimal point
+in commands even if GUI edits use a decimal comma. Relative paths use the launch
+directory. To explicitly accept the existing UCI shared-executable warning, add
+`allow_shared_executable=true`; no other warning is automatically accepted.
+
+This interactive `run_tournament` form creates a match. The separate one-shot
+startup form `zgui run_tournament file="saved.json"` opens a saved event. Do not
+combine that startup command with `--cli`.
+
+`query_tournament` reads the current event without changing its board or saved
+files. Wins, draws and losses are from **engine1's perspective**, regardless of its
+colour. `games_completed` counts known effective results; `*` is unresolved or
+pending, never a draw. `pairs_completed` counts openings with both colour-reversed
+results known. Thus 25 completed games can mean only 12 complete opening pairs.
+Referee overrides count; archived replay attempts do not. Rescheduling or correcting
+results can reduce these counts. IDs are valid for the current session; closed,
+replaced or structurally changed events are reported explicitly.
+
+Query states are `error`, `stopping`, `completed`, `running`, `waiting`, `attention`
+or `stopped`, with that precedence. The response includes total/completed/active/
+pending/unresolved games, complete pairs, wins/draws/losses, referee-result count and
+a reason. `attention` means an unresolved stopped/failed row needs referee action.
+GUI Stop and normal referee controls remain available. A GUI modal dialog causes
+commands to return `BUSY`; retry after it closes. Background games never switch
+the selected board automatically.
+
+Each nonblank command receives one physical UTF-8 line: `OK ` or `ERROR ` followed
+by JSON. Lists are JSON arrays in that one response. Prompts go to stderr only
+when input and output are terminals; GUI/engine logs are not protocol stdout.
+For automation, keep stdin/stdout pipes open, send commands, read one response per
+command and poll `query_tournament`. Input EOF detaches command input and leaves
+ZGUI and its tournaments open; do not wait for application exit as a completion
+signal. On Unix, Ctrl+C at the prompt cancels the input line while engines continue;
+background terminal input waits until the job is foreground. Ctrl+D ends Unix
+input; on Windows use Ctrl+Z then Enter. Closing the GUI cancels blocked terminal
+I/O and follows the existing save/stop dialogs.
+
+Command text accepts single and double quotes. Unquoted backslashes are literal,
+so `ballot=C:\Matches\ballot2.fen` works. Inside double quotes only `\"` and `\\`
+are escapes; other backslashes remain literal. Single quotes preserve all
+backslashes, useful for UNC paths: `ballot='\\server\share\my ballot.fen'`.
+Commands are single-line, at most 64 KiB, with LF or CRLF endings. Invalid UTF-8,
+NUL bytes, malformed quoting and oversized lines are rejected; processing resumes
+at the next line. There is no shell execution, completion/history, CLI quit/stop
+command or SPRT in this version.
+
+Stable error codes: `BAD_ARGUMENT`, `UNKNOWN_ENGINE`, `AMBIGUOUS_ENGINE`,
+`GAME_MISMATCH`, `BUSY`, `CONFIGURE`, `PAIRING`, `STORAGE`,
+`CONFIRMATION_REQUIRED`, `START`, `UNKNOWN_TOURNAMENT`, `TOURNAMENT_REPLACED`,
+`MATCH_CHANGED`, `TRANSPORT`, `SHUTDOWN` and `INTERNAL`. Messages give details.
+If a failure leaves an already-published event, its error response identifies the
+retained tournament and file. Invalid unpublished setups are discarded.
+
+Native Windows console/pipe validation remains outstanding for this release.
 
 ## 1. Getting started
 

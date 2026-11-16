@@ -1,7 +1,10 @@
 # Native Windows CLI transport check
 
-Claude's review `claude/review-cd4b00c-interactive-cli.md` requires a native Windows
-transport check before connecting the interactive terminal to tournament actions.
+Claude's review requested a native Windows transport check before integration.
+On 2026-11-16 the user explicitly waived that prerequisite: “Waive prerequisite;
+finish integration with Windows QA outstanding”. Integration proceeds; these
+checks remain required Windows QA and are not claimed completed.
+
 This is a test helper using the same GUI subsystem as ZGUI, not a second ZGUI
 application executable.
 
@@ -23,3 +26,9 @@ interactive dedicated console handles Ctrl+C without closing the helper. The
 console close menu is disabled deliberately; use the helper timeout for shutdown
 testing (and the normal GUI for eventual ZGUI shutdown). Linux
 results do not validate Windows console allocation, Unicode or cancellation.
+
+After rebuilding ZGUI, also launch the actual `zgui.exe --cli` from cmd and
+PowerShell, create/query a match and watch it in the GUI. Check `BUSY` during an
+open modal dialog, EOF leaving the GUI open, and GUI close with idle stdin or a
+client that stops reading stdout. The helper checks transport behavior but cannot
+replace this final application test.

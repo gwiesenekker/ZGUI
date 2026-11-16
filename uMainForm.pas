@@ -5,7 +5,7 @@ unit uMainForm;
 interface
 
 uses
-  uStartupCommand, uInteractiveCommands,
+  uStartupCommand, uInteractiveCommands, uCliTerminal,
   uGuiLayout, uTournamentEngineQueue, uTournamentHostForm, Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uGameGuiProfile, uGameFileReader,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
@@ -207,7 +207,11 @@ type
     FStandaloneEventName: string;
     FStandaloneWhitePlayerName: string;
     FTournamentHost:TTournamentHostForm;
+    FCliTerminal:TCliTerminal;
+    procedure DrainCliRequest;
+  private
     FInteractiveCommands:TInteractiveCommands;
+    FCliBaseDirectory:string;
     procedure CliTournamentOpened(Dialog:TTournamentDialog);
   private
     FStartupCommand:TStartupCommand;
@@ -565,6 +569,7 @@ type
     procedure CollectBusyEngineKeys(AKeys: TStrings);
     function EngineReservationDescription(const Key:string):string;
     procedure DrainTournamentClose;
+    function StartInteractiveTerminal(out MessageText:string):Boolean;
     function InteractiveCommand(const Line:string):string;
     procedure QueueStartupCommand(const Request:TStartupCommand;const ErrorText:string);
     function ExecuteStartupCommand(const Request:TStartupCommand;out MessageText:string):Boolean;
@@ -648,6 +653,7 @@ var
   end;
 begin
   inherited Create(AOwner);
+  FCliBaseDirectory:=GetCurrentDir;
 
   Caption := 'ZGUI - '+DefaultGameVariant.Name;
   Application.HintColor := RGBToColor(255, 255, 225);
@@ -1502,6 +1508,7 @@ destructor TMainForm.Destroy;
 var I:Integer;C:TGameUiContext;View:TDocumentView;
 begin
   FClosing := True;
+  if FCliTerminal<>nil then FCliTerminal.Stop;
   CaptureGameContext;
   FreeAndNil(FInteractiveCommands);
   if FTournamentHost<>nil then FTournamentHost.BeginShutdown;
@@ -1509,6 +1516,7 @@ begin
   if FGuiEventTimer <> nil then
     FGuiEventTimer.Enabled := False;
   StopAllGames;
+  FreeAndNil(FCliTerminal);
   FreeAndNil(FMctsRunner);
   FreeAndNil(FAnalyzerRunner);
   if FGameContexts<>nil then for I:=0 to FGameContexts.Count-1 do begin
@@ -5967,6 +5975,7 @@ var
     PendingSnapshots[I].Message := AMessage;
   end;
 begin
+  if not FClosing then DrainCliRequest;
   if FGuiEventQueue = nil then
     Exit;
 
@@ -6134,6 +6143,27 @@ begin
   ShowFormCenteredOnOwner(FTournamentHost,Self);
 end;
 
+function TMainForm.StartInteractiveTerminal(out MessageText:string):Boolean;
+begin
+  MessageText:='';Result:=False;
+  if FClosing then begin MessageText:='ZGUI is closing';Exit;end;
+  if FCliTerminal<>nil then Exit(True);
+  try
+    FCliTerminal:=TCliTerminal.Create;FCliTerminal.Start;Result:=True;
+  except on E:Exception do begin FreeAndNil(FCliTerminal);MessageText:=E.Message;end;end;
+end;
+
+procedure TMainForm.DrainCliRequest;
+var Request:TCliLineRequest;Response:string;
+begin
+  if (FCliTerminal=nil) or not FCliTerminal.TryPop(Request) then Exit;
+  try
+    try Response:=InteractiveCommand(Request.Line);
+    except on E:Exception do Response:=CliError('INTERNAL',E.Message);end;
+    Request.Reply(Response);
+  finally Request.Release;end;
+end;
+
 procedure TMainForm.CliTournamentOpened(Dialog:TTournamentDialog);
 begin SelectGameVariant(Dialog.Variant);ShowFormCenteredOnOwner(FTournamentHost,Self);end;
 function TMainForm.InteractiveCommand(const Line:string):string;
@@ -6142,7 +6172,7 @@ begin
   if Application.ModalLevel>0 then Exit(CliError('BUSY','Close the modal dialog first'));
   EnsureTournamentHost;
   if FInteractiveCommands=nil then begin
-    FInteractiveCommands:=TInteractiveCommands.Create(FTournamentHost);
+    FInteractiveCommands:=TInteractiveCommands.Create(FTournamentHost,FCliBaseDirectory);
     FInteractiveCommands.OnTournament:=@CliTournamentOpened;
   end;
   Result:=FInteractiveCommands.Execute(Line);
@@ -6162,6 +6192,7 @@ begin
   if FClosing then begin MessageText:='ZGUI is closing';Exit;end;
   if Request.Kind=sckNone then Exit(True);
   if Request.Kind=sckHelp then begin MessageText:=StartupCommandHelp;Exit(True);end;
+  if Request.Kind=sckInteractive then Exit(StartInteractiveTerminal(MessageText));
   try
     EnsureTournamentHost;
     D:=FTournamentHost.OpenFile(Request.FileName,CurrentVariant);
