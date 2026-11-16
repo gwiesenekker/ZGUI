@@ -1,6 +1,6 @@
 # CLI review follow-up — 66654d7
 
-Date: 2026-11-16. Review: `claude/review-66654d7.md`.
+Date: 2026-11-16. Implementation: `2770b5a`. Review: `claude/review-66654d7.md`.
 
 User authorisation: “Before we continue could you comment on Claude's review of
 the latest commit, update the 'comment' column as discussed and address all
@@ -33,8 +33,7 @@ proposal; it is not implemented here.
   changes. The existing hidden-display suites are still required for these fixes.
 
 Only open-issue Coder comments cells in the latest review are updated. Reviewer
-Status/Evidence and closed rows are preserved. The final comments and changelog
-will identify the implementation commit and validation results.
+Status/Evidence and closed rows are preserved. The comments and changelog identify implementation `2770b5a` and validation results.
 
 Validation: application build, full regression suite, both tournament suites and
 all 22 GUI suites passed. The focused CLI check passed 103 assertions (both games

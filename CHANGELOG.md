@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### CLI review fixes and read-only tournament viewing — 2026-11-16
 
-Commit: pending.
+Commit: `2770b5a`.
 
 - Address Claude's T13, T14, U27 and C10 from the review of `66654d7`, as
   requested: “address all issues you agree with”. Update the latest review's
