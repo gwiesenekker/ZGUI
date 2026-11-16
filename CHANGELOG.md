@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Address Claude's interactive CLI implementation review — 2026-11-16
 
-Commit: pending.
+Commit: `3627fda`.
 
 - Authorized by: “Could you review Claude's latest review of the CLI
   implementation and address the findings you agree with? Please update the

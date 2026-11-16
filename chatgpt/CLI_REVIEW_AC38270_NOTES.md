@@ -25,4 +25,4 @@ The existing waiver remains: “Waive prerequisite; finish integration with Wind
 - Full regression suite passed, including all 20 terminal transport checks, chess/draughts rules, notation, game trees and process checks.
 - Both tournament suites, lifecycle and local TCP DXP suites passed. Hidden nested displays only; no desktop tests.
 - Native Windows remains untested, as waived. The local Win64 compiler probe fails because target RTL units are absent; the optional Wine build.bat check also cannot run under the local syscall restrictions. No Windows build/runtime pass is claimed.
-- Implementation commit: pending. A clean application rebuild will follow the commit.
+- Implementation commit: `3627fda`. A clean post-commit rebuild passed and installed the executable at `/tmp2/gwies/ZGUI/zgui`.
