@@ -4,6 +4,38 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Start live tournaments from the existing executable — 2026-11-16
+
+Commit: pending.
+
+- User authorisation: “Please proceed with the approved CLI changes and your
+  refinements, reusing the existing tournament execution. Please update
+  CHANGELOG.md, compile, test, and commit.” Implement Claude's conditional
+  approval (T12, S1, C8, C9), with the agreed file-lock and parsing refinements.
+- Add `zgui run_tournament file="tournament.json"` (also positional and `--file`),
+  `--help` and `help run_tournament`. Bind Unicode process arguments with the SCU
+  44eba85 parser subset, preserve toolkit options and show help/errors in the GUI.
+- Reuse the existing tournament host, tab loading, timer, scheduler, engine queue,
+  clocks and game runners through one public StartTournament action shared with
+  GUI Play. No controller rewrite, second executable or GUI command/audit pipeline.
+  Queue startup once, show the live tab, select its game once and leave ZGUI open.
+- Both chess and draughts retain completed/referee results and require explicit
+  Reschedule for stopped/failed rows. Already-running tabs are not duplicated.
+  Failed/ineligible starts return explanations; disabled GUI Play remains silent.
+- Protect JSON and publication files against other cooperating ZGUI processes,
+  including manual opens, automatic saves and Save As. Use OS-held sidecar leases;
+  preserve source ownership on failure and release on close/reset/crash. Sidecars
+  remain on disk to avoid unlink races and are ignored by Git. Existing snapshot
+  formats and engine installations are unchanged.
+- Extend the built-in manual. Source/design notes:
+  `chatgpt/CLI_IMPLEMENTATION_NOTES.md` and `chatgpt/CLI_INTEGRATION_PROPOSAL.md`.
+- Validation: application compilation, full regression suite, both tournament
+  suites and all 22 GUI suites pass (hidden displays). Parser: 54 assertions;
+  expanded live CLI/file-lock check: 52 assertions; layout: 10,618 checks; tabbed
+  tournaments: 392 checks. Native Windows execution remains outstanding; the
+  installed compiler has no Win64 RTL, so cross-compilation is unavailable.
+
+
 ### Reserve space for the ballot position count — 2026-11-15
 
 Commit: `e233ed9`.

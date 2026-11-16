@@ -24,6 +24,8 @@ run_check() {
   fi
 }
 
+run_check "startup_cli_gui_check (GTK2, live CLI tournaments and cross-process file leases)" startup_cli_gui_check "/startup-cli" 60s
+
 run_check "standalone_preservation_check (GTK2, hidden main form)" standalone_preservation_check "" 60s
 run_check "main_form_boundaries_check (GTK2, interaction and analysis lifecycle)" main_form_boundaries_check "" 60s
 run_check "gui_delivery_check (GTK2, queue consumption and shutdown)" gui_delivery_check "" 60s

@@ -42,6 +42,44 @@ Finish or stop a database import before replacing its window or closing ZGUI.
 Board colours, notation fonts/styles, evaluation ranges and score-history colours
 are independent for chess and draughts. ZGUI restores the last selected game on startup.
 
+## Starting a tournament from the command line
+
+Use the normal ZGUI executable; the tournament opens live in the Tournaments
+window, using the same Play action, clocks, engine reservations and scheduler as
+manual play. Both chess and draughts saved tournament JSON files are supported.
+
+```text
+zgui run_tournament file="GWD-Kingsrow.json"
+zgui.exe run_tournament --file "C:\Tournaments\GWD versus Kingsrow.json"
+zgui run_tournament "tournament.json"
+zgui --help
+zgui help run_tournament
+```
+
+Relative filenames use the directory from which you launch ZGUI. The saved file
+supplies the engines, time control, concurrency, pairing and any embedded opening
+ballot; the original ballot file is not needed. Configure these in the GUI and
+save the tournament before launching it this way.
+
+This continues eligible unplayed games. Completed results and referee decisions
+are preserved; stopped or failed games require the existing Reschedule action.
+An already-running tournament in the same window is selected without starting it
+twice. The main board selects the tournament's game once; later background games
+never switch the selected board. This selection follows the ordinary last-game
+preference behavior. Select a game row to watch its board and moves.
+
+Help and startup errors are shown in the GUI, including on Windows. The GUI stays
+open after completion, and its Stop and Save/Discard/Cancel controls keep their
+normal behavior. Launching another command starts another ZGUI process; engine
+reservations coordinate tournaments and annotators within one process.
+
+A tournament snapshot and its publication file are protected against simultaneous
+writing by another ZGUI process. A second process reports that exclusive access
+failed. Small `.lock` sidecar files remain after closing; their presence alone does
+not block opening, and operating-system locks release automatically after a crash.
+The containing directory must be writable. Older ZGUI versions do not participate
+in this protection.
+
 ## 1. Getting started
 
 When ZGUI starts, the main window shows:

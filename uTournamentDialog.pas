@@ -5,6 +5,7 @@ unit uTournamentDialog;
 interface
 
 uses
+  uTournamentFileLocks,
   CheckLst, uGuiLayout, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
   Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord,
   uGameGuiProfile,uGamePosition,uGameOrchestrator;
@@ -21,6 +22,8 @@ type
 
   TTournamentContextEvent=procedure(Sender:TObject;Variant:TGameVariant;const FileName:string) of object;
   TTournamentTargetsEvent=procedure(Sender:TObject;const JsonFile,Publication,Identity:string) of object;
+  TTournamentStartResult = (tsrStarted, tsrAlreadyRunning, tsrNothingEligible, tsrCancelled, tsrFailed);
+
   TTournamentStartGameEvent = procedure(Sender: TObject; const ASetup: TGameSetup;
     const ATitlePrefix: string; out AGame: TObject) of object;
   TTournamentSelectGameEvent = procedure(Sender: TObject; AGame: TObject) of object;
@@ -61,6 +64,7 @@ type
     FIncrementModeCombo: TComboBox;
     FInvalidationPanel: TPanel;
     FLoadingTournament: Boolean;
+    FFileLocks: TTournamentFileLocks;
     FLastGameStartTick: QWord;
     FMinutesEdit: TEdit; // Quantity in the selected display unit.
     FTimeUnitCombo: TComboBox;
@@ -150,6 +154,7 @@ type
   protected
     function CaptureGamePdn(AGame: TObject): string; virtual;
   public
+    function StartTournament(out AMessage:string):TTournamentStartResult;
     procedure RefreshLayout; override;
     procedure LoadBallotFromFile(const FileName:string);
     procedure ClearOpeningBallot;
@@ -809,6 +814,7 @@ begin
     FTimer.Enabled:=False;FRunning:=False;FClosing:=False;
     FCloseStopped:=False;FRefereeStopPending:=False;FLastGameStartTick:=0;
     ClearTournamentGameRefs;FWhiteEngines.Clear;FBlackEngines.Clear;
+    FreeAndNil(FFileLocks);
     FFileName:='';FPdnFileName:='';FPdnFileOwned:=False;
     FPdnPublishedHash:='';FVerifiedPdnFingerprint:='';FLegacyPdnFileName:='';
     FStorageNotice:='';FStorageError:='';FTournamentId:=GUIDToString(Id);
@@ -955,6 +961,7 @@ begin
   FEngines.Free;
   FBlackEngines.Free;
   FWhiteEngines.Free;
+  FFileLocks.Free;
   inherited Destroy;
 end;
 
@@ -1161,6 +1168,8 @@ begin
   if not FPdnFileOwned then
     FPdnFileName := UnusedTournamentPdnPath(FPdnFileName,FProfile.FileFormat);
   if Assigned(FOnTargets) then FOnTargets(Self,FFileName,FPdnFileName,FTournamentId);
+  if FFileLocks=nil then FFileLocks:=TTournamentFileLocks.Create;
+  FFileLocks.Acquire(FFileName);FFileLocks.Acquire(FPdnFileName);
 end;
 
 function TTournamentDialog.PdnFileName: string;
@@ -1182,6 +1191,7 @@ begin
       // JSON remains authoritative even when publication of its PDN fails.
       SaveTournamentSnapshot(FFileName);
     end;
+    FFileLocks.KeepOnly(FFileName,FPdnFileName);
   except
     on E: Exception do
     begin
@@ -1294,6 +1304,7 @@ begin
         FPdnFileName := UnusedTournamentPdnPath(FPdnFileName,FProfile.FileFormat);
       end;
     end;
+    FFileLocks.Acquire(FPdnFileName);
     WriteTextFileAtomically(FPdnFileName, PublishedText, FPdnFileOwned);
     FPdnPublishedHash := SHA1Print(SHA1String(PublishedText));
     FPdnFileOwned := True;
@@ -1882,6 +1893,7 @@ begin
     if FileExists(OldJson) and not DeleteFile(OldJson) then
       raise EInOutError.Create('Tournament saved, but could not remove recovery JSON');
   end;
+  FFileLocks.KeepOnly(FFileName,FPdnFileName);
   FStorageError := '';
   UpdateButtons;
 end;
@@ -1903,6 +1915,8 @@ begin
     NextPdnFileName := ChangeFileExt(ExpandFileName(AFileName), GameFileExtension);
   if not FPdnFileOwned then
     NextPdnFileName := UnusedTournamentPdnPath(NextPdnFileName,FProfile.FileFormat);
+  if FFileLocks=nil then FFileLocks:=TTournamentFileLocks.Create;
+  FFileLocks.Acquire(AFileName);FFileLocks.Acquire(NextPdnFileName);
   Data := TJSONObject.Create;
   try
     if FBallotPositions.Count>0 then begin
@@ -1993,10 +2007,15 @@ var
   Id: TGUID;
   Setup:TGameSetup;
   Ballot:TJSONObject;Positions:TJSONArray;RecordData:TJSONObject;
+  LoadLocks,OldLocks:TTournamentFileLocks;Publication:string;
 begin
   if IsRunning then
     Exit;
-  Data := ReadTournamentDocument(AFileName,FProfile.FileFormat);
+  LoadLocks:=TTournamentFileLocks.Create;
+  try
+    LoadLocks.Acquire(AFileName);
+    Data := ReadTournamentDocument(AFileName,FProfile.FileFormat);
+  except LoadLocks.Free;raise;end;
   try
     Setup:=Default(TGameSetup);Setup.Variant:=FVariant;Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
     Setup.StartingFEN:=Data.Get('starting_fen',FVariant.DefaultStartingFEN);
@@ -2018,7 +2037,14 @@ begin
       if (RecordData<>nil) and (RecordData.Get('starting_fen','')<>'') then
         NormalizeBallotFEN(FVariant,RecordData.Get('starting_fen',''));
     end;
-  except Data.Free;raise;end;
+    Publication:=Data.Get('pdn_file_name','');
+    if Publication<>'' then begin
+      if not FilenameIsAbsolute(Publication) then
+        Publication:=ExpandFileName(ExtractFilePath(ExpandFileName(AFileName))+Publication);
+      if DirectoryExists(ExtractFilePath(Publication)) then LoadLocks.Acquire(Publication);
+    end;
+  except Data.Free;LoadLocks.Free;raise;end;
+  OldLocks:=FFileLocks;FFileLocks:=LoadLocks;
   FLoadingTournament := True;
   try
     FBallotPositions.Clear;FBallotFileName:='';
@@ -2142,7 +2168,7 @@ begin
     UpdateCrossTable;
   finally
     FLoadingTournament := False;
-    Data.Free;
+    Data.Free;OldLocks.Free;
   end;
   AutoSaveTournament;
   if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);
@@ -2289,26 +2315,45 @@ begin
   end;
 end;
 
-procedure TTournamentDialog.StartStopClick(Sender: TObject);
+function TTournamentDialog.StartTournament(out AMessage:string):TTournamentStartResult;
+var Row:Integer;Eligible:Boolean;
 begin
-  if FRunning or FRefereeStopPending or TournamentPairingGridIsEmpty(FGrid) then Exit;
+  AMessage:='';
+  if FRunning then begin AMessage:='Tournament is already running';Exit(tsrAlreadyRunning);end;
+  if FRefereeStopPending then begin AMessage:='Tournament is still stopping';Exit(tsrFailed);end;
+  if TournamentPairingGridIsEmpty(FGrid) then begin
+    AMessage:='Create a pairing before playing';Exit(tsrNothingEligible);end;
+  if PendingInvalidatingChange then begin
+    AMessage:='Apply or discard the pending tournament changes first';Exit(tsrCancelled);end;
+  try
+    ReadSettings;MaxConcurrentGames;
+    Eligible:=False;
+    for Row:=1 to FGrid.RowCount-1 do
+      if IsRowStartable(Row,nil) then Eligible:=True;
+    if not Eligible then begin
+      AMessage:='No eligible games. Finished results are preserved; use Reschedule for stopped or failed games.';
+      UpdateButtons;Exit(tsrNothingEligible);
+    end;
+    if not ConfirmSharedExecutables then begin AMessage:='Tournament start cancelled';Exit(tsrCancelled);end;
+    AutoSaveTournament;
+    if FStorageError<>'' then begin AMessage:=FStorageError;Exit(tsrFailed);end;
+    FCloseStopped:=False;FRunning:=True;FLastGameStartTick:=0;
+    StartPendingGames;
+    FTimer.Enabled:=FRunning or (ActiveRunningGameCount>0);UpdateButtons;
+    if FStorageError<>'' then begin AMessage:=FStorageError;Exit(tsrFailed);end;
+    if (not FRunning) and (ActiveRunningGameCount=0) then begin
+      AMessage:='No game could be started. See the tournament Reason column.';Exit(tsrFailed);
+    end;
+    Result:=tsrStarted;
+  except on E:Exception do begin AMessage:=E.Message;Result:=tsrFailed;end;end;
+end;
 
-  if PendingInvalidatingChange then
-    Exit;
-
-  try ReadSettings;MaxConcurrentGames;
-  except on E:Exception do begin ShowGuiOkDialog(Self,'Tournament',E.Message);Exit;end;end;
-  if not ConfirmSharedExecutables then Exit;
-  AutoSaveTournament;
-  if FStorageError <> '' then
-    Exit;
-  ClearStaleRunningReasons;
-  FCloseStopped:=False;
-  FRunning := True;
-  FLastGameStartTick := 0;
-  StartPendingGames;
-  FTimer.Enabled := FRunning or (ActiveRunningGameCount>0);
-  UpdateButtons;
+procedure TTournamentDialog.StartStopClick(Sender:TObject);
+var MessageText:string;
+begin
+  if (Sender=FStartStopButton) and not FStartStopButton.Enabled then Exit;
+  if StartTournament(MessageText)<>tsrStarted then
+    if MessageText<>'' then ShowGuiOkDialog(Self,'Tournament',MessageText);
 end;
 
 procedure TTournamentDialog.RefereeStopClick(Sender:TObject);

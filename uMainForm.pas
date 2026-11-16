@@ -5,6 +5,7 @@ unit uMainForm;
 interface
 
 uses
+  uStartupCommand,
   uGuiLayout, uTournamentEngineQueue, uTournamentHostForm, Classes, Clipbrd, ComCtrls, Controls, Dialogs, ExtCtrls, Forms, Graphics,
   LCLType, Grids, Menus, StdCtrls, SysUtils, Types, uGameBoardControl, uGameBoardFactory, uGameGuiProfile, uGameFileReader,
   uDraughtsBoard, uGamePosition, uDraughtsPosition, uMoveInteraction, uEnginesDialog,
@@ -206,6 +207,12 @@ type
     FStandaloneEventName: string;
     FStandaloneWhitePlayerName: string;
     FTournamentHost:TTournamentHostForm;
+    FStartupCommand:TStartupCommand;
+    FStartupError:string;
+    FStartupQueued:Boolean;
+    procedure AsyncStartupCommand(Data:PtrInt);
+    procedure EnsureTournamentHost;
+  private
     FViewedGameId: Integer;
 
     FDisplayBoardFailed: Boolean;
@@ -555,6 +562,8 @@ type
     procedure CollectBusyEngineKeys(AKeys: TStrings);
     function EngineReservationDescription(const Key:string):string;
     procedure DrainTournamentClose;
+    procedure QueueStartupCommand(const Request:TStartupCommand;const ErrorText:string);
+    function ExecuteStartupCommand(const Request:TStartupCommand;out MessageText:string):Boolean;
     property TournamentHost:TTournamentHostForm read FTournamentHost;
     function FindGameById(AGameId: Integer): TRunningGame;
     procedure MarkGameStopped(AGame: TRunningGame; const AReason: string);
@@ -6103,16 +6112,57 @@ begin
     TGameRunnerThread(Sender).GameId, ASnapshot));
 end;
 
-procedure TMainForm.TournamentClick(Sender:TObject);
+procedure TMainForm.EnsureTournamentHost;
 begin
-  if not GameSupports(gfTournament) then Exit;
   if FTournamentHost=nil then begin
     FTournamentHost:=TTournamentHostForm.Create(Self);
     FTournamentHost.OnStartGame:=@TournamentStartGame;
     FTournamentHost.OnSelectGame:=@TournamentSelectGame;
   end;
+end;
+
+procedure TMainForm.TournamentClick(Sender:TObject);
+begin
+  if not GameSupports(gfTournament) then Exit;
+  EnsureTournamentHost;
   FTournamentHost.ShowForVariant(CurrentVariant);
   ShowFormCenteredOnOwner(FTournamentHost,Self);
+end;
+
+procedure TMainForm.QueueStartupCommand(const Request:TStartupCommand;const ErrorText:string);
+begin
+  if FStartupQueued or ((Request.Kind=sckNone) and (ErrorText='')) then Exit;
+  FStartupQueued:=True;FStartupCommand:=Request;FStartupError:=ErrorText;
+  Application.QueueAsyncCall(@AsyncStartupCommand,0);
+end;
+
+function TMainForm.ExecuteStartupCommand(const Request:TStartupCommand;out MessageText:string):Boolean;
+var D:TTournamentDialog;StartResult:TTournamentStartResult;
+begin
+  Result:=False;MessageText:='';
+  if FClosing then begin MessageText:='ZGUI is closing';Exit;end;
+  if Request.Kind=sckNone then Exit(True);
+  if Request.Kind=sckHelp then begin MessageText:=StartupCommandHelp;Exit(True);end;
+  try
+    EnsureTournamentHost;
+    D:=FTournamentHost.OpenFile(Request.FileName,CurrentVariant);
+    if D=nil then begin MessageText:='Tournament window is busy';Exit;end;
+    { One foreground selection; background scheduling never changes the board. }
+    SelectGameVariant(D.Variant);
+    ShowFormCenteredOnOwner(FTournamentHost,Self);
+    StartResult:=D.StartTournament(MessageText);
+    Result:=StartResult in [tsrStarted,tsrAlreadyRunning];
+  except on E:Exception do MessageText:=E.Message;end;
+end;
+
+procedure TMainForm.AsyncStartupCommand(Data:PtrInt);
+var Request:TStartupCommand;MessageText:string;
+begin
+  if FClosing then Exit;
+  Request:=FStartupCommand;FStartupCommand:=Default(TStartupCommand);
+  MessageText:=FStartupError;FStartupError:='';
+  if MessageText='' then ExecuteStartupCommand(Request,MessageText);
+  if MessageText<>'' then ShowGuiOkDialog(Self,'ZGUI command line',MessageText);
 end;
 
 procedure TMainForm.DrainTournamentClose;

@@ -77,3 +77,8 @@ Thumbs.db
 /*.bin
 /*.dat
 /*.nn
+
+# Tournament ownership sidecars (OS-held locks, not source files)
+*.json.lock
+*.pgn.lock
+*.pdn.lock
