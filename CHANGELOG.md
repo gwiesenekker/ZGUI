@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Start live tournaments from the existing executable — 2026-11-16
 
-Commit: pending.
+Commit: `8a06c4d`.
 
 - User authorisation: “Please proceed with the approved CLI changes and your
   refinements, reusing the existing tournament execution. Please update

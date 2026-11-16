@@ -1,6 +1,6 @@
 # Existing-executable CLI — implementation notes
 
-Date: 2026-11-16. Baseline: 0074a62.
+Date: 2026-11-16. Baseline: 0074a62. Implementation: `8a06c4d`.
 
 Authorisation: “Please proceed with the approved CLI changes and your refinements,
 reusing the existing tournament execution. Please update CHANGELOG.md, compile,
