@@ -179,6 +179,77 @@ retained tournament and file. Invalid unpublished setups are discarded.
 
 Native Windows console/pipe validation remains outstanding for this release.
 
+#### Interactive CLI command and parameter reference
+
+Start the normal GUI and its interactive command input with `zgui.exe --cli`
+on Windows or `./zgui --cli` on Linux. The same commands work through pipes.
+
+| Command | Parameters | Purpose |
+| --- | --- | --- |
+| `list_engines` | None | List registered engines, their session IDs, keys, names, protocols, game and executable availability. Does not launch engines. |
+| `run_tournament` | Two engine selectors; optional settings below | Create and start a two-engine match in a normal tournament tab. Returns immediately with a tournament ID. |
+| `query_tournament` | Required `id=N` | Read the current state of the CLI-created tournament with that returned ID. Repeat to monitor progress. |
+
+Parameters for `run_tournament` use `name=value` syntax. Quote values containing
+spaces. Supply exactly one selector for each engine:
+
+| Parameter | Value and meaning |
+| --- | --- |
+| `engine1="Name"` | First engine's unambiguous registered name. |
+| `engine1_id=1` | Alternatively, first engine's session ID from list_engines. |
+| `engine1_key="..."` | Alternatively, first engine's identity key from list_engines. |
+| `engine2="Name"` | Second engine's unambiguous registered name. |
+| `engine2_id=2` | Alternatively, second engine's session ID. |
+| `engine2_key="..."` | Alternatively, second engine's identity key. |
+| `name="Test match"` | Optional tournament name; generated automatically when omitted. |
+| `ballot="C:\Matches\ballot2.fen"` | Optional opening-position file. Omit for a double round-robin from the game's default starting position. Relative paths use the launch directory; an explicitly empty filename is rejected. |
+| `time=300` | Positive finite number of seconds per time-control period, not minutes. Omitted: selected game's GUI default. |
+| `moves=75` | Nonnegative integer moves per period; 0 means sudden death. Omitted: selected game's GUI default. |
+| `increment=3` | Nonnegative finite increment in seconds; decimal values such as 0.5 are accepted. Omitted: selected game's GUI default. |
+| `concurrent=1` | Positive integer maximum simultaneous games. Default: 1. Engine reservations can limit actual concurrency. |
+| `allow_shared_executable=true` | Explicitly accept two UCI registrations sharing an executable and its saved options. Accepts true or false; default: false. |
+
+Both registrations must be distinct and belong to the same game: UCI means chess;
+Hub and DXP mean draughts. A ballot creates two colour-reversed games per position.
+Without a ballot, the match has two colour-reversed games. Use decimal points in
+commands, regardless of the GUI's local decimal separator.
+
+```text
+list_engines
+run_tournament engine1_id=1 engine2_id=2 name="Test match" time=300 moves=0 increment=3 concurrent=1
+query_tournament id=1
+```
+
+Replace the engine IDs and use the tournament ID returned by run_tournament.
+Query response fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `command`, `tournament` | Command name and tournament's session ID. |
+| `state`, `reason` | Current state and its explanation. |
+| `games_total`, `games_completed`, `games_active`, `games_pending`, `unresolved_games` | Counts of all games, known effective results, active games, pending games and unresolved stopped/failed games. |
+| `pairs_total`, `pairs_completed` | Total opening pairs and pairs with both results known. |
+| `wins`, `draws`, `losses` | Results from engine1's perspective, regardless of colour. |
+| `referee_results` | Number of games with an effective referee result override. |
+
+Each response is one `OK ` or `ERROR ` line followed by JSON. Engine and tournament
+IDs belong to the current ZGUI session; a new process starts a new session.
+
+Separate startup forms, entered at the operating-system shell rather than at
+the interactive prompt, are:
+
+| Startup command | Purpose |
+| --- | --- |
+| `zgui.exe --cli` | Open the GUI and interactive terminal/pipe input. |
+| `zgui.exe run_tournament file="C:\Matches\tournament.json"` | Open and start a saved tournament. Also accepts `--file "path"` or a positional filename. |
+| `zgui.exe --help` | Show command-line help in the GUI. |
+| `zgui.exe help run_tournament` | Show help for saved-tournament startup. |
+
+Use `./zgui` instead of `zgui.exe` on Linux. Do not combine startup modes. The
+interactive run_tournament command creates a match; its startup namesake takes
+only a saved file. There are no interactive stop, quit, engine-registration or
+SPRT commands; use the GUI to stop tournaments and close ZGUI.
+
 #### Testing the interactive CLI on Windows
 
 These steps are a native Windows QA checklist; they do not imply that Windows

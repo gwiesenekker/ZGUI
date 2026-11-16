@@ -4,6 +4,16 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Add interactive CLI command and parameter reference — 2026-11-16
+
+Commit: pending.
+
+- Add tables for all three interactive commands, every tournament parameter,
+  defaults and units, engine selectors, query response fields and separate
+  startup forms. Include a start/query example for chess and draughts users.
+- Documentation only; application behavior and layout are unchanged. Manual
+  document and built-in Help checks pass.
+
 ### Document Windows interactive CLI testing — 2026-11-16
 
 Commit: `f52cb29`.
