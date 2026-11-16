@@ -6162,7 +6162,10 @@ begin
   Request:=FStartupCommand;FStartupCommand:=Default(TStartupCommand);
   MessageText:=FStartupError;FStartupError:='';
   if MessageText='' then ExecuteStartupCommand(Request,MessageText);
-  if MessageText<>'' then ShowGuiOkDialog(Self,'ZGUI command line',MessageText);
+  if MessageText<>'' then
+    if (Request.Kind=sckHelp) and (MessageText=StartupCommandHelp) then
+      ShowGuiTextDialog(Self,'ZGUI command-line help',MessageText)
+    else ShowGuiOkDialog(Self,'ZGUI command line',MessageText);
 end;
 
 procedure TMainForm.DrainTournamentClose;

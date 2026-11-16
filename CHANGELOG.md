@@ -4,6 +4,34 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### CLI review fixes and read-only tournament viewing — 2026-11-16
+
+Commit: pending.
+
+- Address Claude's T13, T14, U27 and C10 from the review of `66654d7`, as
+  requested: “address all issues you agree with”. Update the latest review's
+  open-issue Coder comments; preserve reviewer statuses, evidence and closed rows.
+- Both chess and draughts archives can open read-only when directory permissions
+  prevent writing. Label the tab/caption; disable editing, Play, saving, pairing
+  and referee/replay mutations. Skip automatic saves and close without a save
+  prompt. Held or uninspectable locks still refuse opening. Test missing sidecars,
+  writable/non-writable existing sidecars, mode-555 folders, permission restoration
+  and preservation of snapshot/publication bytes. Writable tournaments retain the
+  same game and tournament execution.
+- Report missing tournament files with the expanded path. Reuse the existing
+  scrollable text dialog for CLI help, preserving blank lines and one OK button.
+  A missing option value now says “Expected a value for --file.”
+- Acquire Linux lock descriptors atomically with O_CLOEXEC; retain checked fcntl
+  fallback on other Unix systems. No change to engine process management.
+- Update the built-in manual and `chatgpt/CLI_REVIEW_66654D7_NOTES.md`.
+  Interactive `--cli` remains a proposal. Older findings explicitly deferred by
+  Claude's review, including U26's Inter-font layout behavior, are not claimed fixed.
+- Validation: build, full regression suite, both tournament suites and all 22
+  GUI suites pass on hidden displays; focused CLI checks: 103 assertions; parser:
+  56; layout: 10,618; tournament tabs: 392. Native Windows execution remains
+  outstanding; the local compiler has no Win64 RTL.
+
+
 ### Start live tournaments from the existing executable — 2026-11-16
 
 Commit: `8a06c4d`.

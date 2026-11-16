@@ -64,6 +64,7 @@ type
     FIncrementModeCombo: TComboBox;
     FInvalidationPanel: TPanel;
     FLoadingTournament: Boolean;
+    FReadOnly:Boolean;
     FFileLocks: TTournamentFileLocks;
     FLastGameStartTick: QWord;
     FMinutesEdit: TEdit; // Quantity in the selected display unit.
@@ -167,6 +168,7 @@ type
     function PdnFileName: string;
     property SaveFileName: string read FFileName;
     property StorageError: string read FStorageError;
+    property ReadOnly:Boolean read FReadOnly;
     procedure BeginShutdown;
     constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
@@ -698,18 +700,19 @@ procedure TTournamentDialog.UpdateBallotControls;
 var Editable:Boolean;
 begin
   if FBallotPathEdit=nil then Exit;
-  Editable:=not IsRunning and TournamentPairingGridIsEmpty(FGrid) and (FStorageError='');
+  Editable:=not FReadOnly and not IsRunning and TournamentPairingGridIsEmpty(FGrid) and (FStorageError='');
   FBallotBrowseButton.Enabled:=Editable;
   FBallotClearButton.Enabled:=Editable and (FBallotPositions.Count>0);
   FBallotPathEdit.Text:=FBallotFileName;FBallotPathEdit.Hint:=FBallotFileName;
   if FBallotPositions.Count=0 then FBallotCountLabel.Caption:=''
   else FBallotCountLabel.Caption:=IntToStr(FBallotPositions.Count)+' positions';
   FStartingFENEdit.Enabled:=FBallotPositions.Count=0;
-  FRoundRobinGroup.Enabled:=FBallotPositions.Count=0;
+  FRoundRobinGroup.Enabled:=(not FReadOnly) and (FBallotPositions.Count=0);
 end;
 
 procedure TTournamentDialog.LoadBallotFromFile(const FileName:string);
 begin
+  if FReadOnly then raise EInvalidOperation.Create('Tournament is read-only');
   if IsRunning or not TournamentPairingGridIsEmpty(FGrid) then
     raise EInvalidOperation.Create('Clear pairing before changing the opening ballot');
   LoadOpeningBallot(FileName,FVariant,FBallotPositions);
@@ -722,6 +725,7 @@ end;
 
 procedure TTournamentDialog.ClearOpeningBallot;
 begin
+  if FReadOnly then raise EInvalidOperation.Create('Tournament is read-only');
   if IsRunning or not TournamentPairingGridIsEmpty(FGrid) then
     raise EInvalidOperation.Create('Clear pairing before changing the opening ballot');
   FBallotPositions.Clear;FBallotFileName:='';
@@ -814,7 +818,7 @@ begin
     FTimer.Enabled:=False;FRunning:=False;FClosing:=False;
     FCloseStopped:=False;FRefereeStopPending:=False;FLastGameStartTick:=0;
     ClearTournamentGameRefs;FWhiteEngines.Clear;FBlackEngines.Clear;
-    FreeAndNil(FFileLocks);
+    FreeAndNil(FFileLocks);FReadOnly:=False;
     FFileName:='';FPdnFileName:='';FPdnFileOwned:=False;
     FPdnPublishedHash:='';FVerifiedPdnFingerprint:='';FLegacyPdnFileName:='';
     FStorageNotice:='';FStorageError:='';FTournamentId:=GUIDToString(Id);
@@ -847,7 +851,10 @@ end;
 function TTournamentDialog.GetTournamentName:string;
 begin Result:=FTournamentNameEdit.Text;end;
 procedure TTournamentDialog.SetTournamentName(const Value:string);
-begin FTournamentNameEdit.Text:=Value;end;
+begin
+  if FReadOnly then raise EInvalidOperation.Create('Tournament is read-only');
+  FTournamentNameEdit.Text:=Value;
+end;
 procedure TTournamentDialog.NameChanged(Sender:TObject);
 begin if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);end;
 
@@ -926,6 +933,7 @@ var
   Dialog: TSaveDialog;
 begin
   Result := False;
+  if FReadOnly then Exit;
   Dialog := TSaveDialog.Create(Self);
   try
     Dialog.Title := 'Save tournament';
@@ -1174,13 +1182,13 @@ end;
 
 function TTournamentDialog.PdnFileName: string;
 begin
-  EnsureStoragePaths;
+  if not FReadOnly then EnsureStoragePaths;
   Result := FPdnFileName;
 end;
 
 procedure TTournamentDialog.AutoSaveTournament;
 begin
-  if FLoadingTournament then Exit;
+  if FLoadingTournament or FReadOnly then Exit;
   FStorageError := '';
   try
     ReadSettings;MaxConcurrentGames;
@@ -1427,7 +1435,7 @@ var
   WhiteEngines: TStringList;
   I:Integer;
 begin
-  if IsRunning or (FStorageError <> '') then
+  if FReadOnly or IsRunning or (FStorageError <> '') then
     Exit;
   if PendingInvalidatingChange then
     Exit;
@@ -1494,6 +1502,7 @@ end;
 
 procedure TTournamentDialog.ClearPairingsClick(Sender: TObject);
 begin
+  if FReadOnly then Exit;
   if IsRunning or (FStorageError <> '') then
     Exit;
   if FRunning then
@@ -1734,6 +1743,7 @@ end;
 
 procedure TTournamentDialog.SetSelectedResult(const AResultText: string);
 begin
+  if FReadOnly then Exit;
   if (FGrid = nil) or (FGrid.Row <= 0) or
     (FGrid.Row >= FGrid.RowCount) or IsRowRunning(FGrid.Row) or
     (not TournamentGridHasPairingAtRow(FGrid, FGrid.Row)) then
@@ -1767,7 +1777,7 @@ var
   Row, I: Integer;
   Running: TTournamentRunningGame;
 begin
-  if FStorageError <> '' then Exit;
+  if FReadOnly or (FStorageError <> '') then Exit;
   Row := FGrid.Row;
   if (Row <= 0) or (Row >= FGrid.RowCount) then
     Exit;
@@ -1840,6 +1850,7 @@ var
   Running: TTournamentRunningGame;
   Game: TRunningGame;
 begin
+  if FReadOnly then raise EInvalidOperation.Create('Tournament is read-only');
   ReadSettings;MaxConcurrentGames;
   if Assigned(FOnTargets) then FOnTargets(Self,AFileName,FPdnFileName,FTournamentId);
   for I := 0 to FRunningGames.Count - 1 do
@@ -2007,13 +2018,14 @@ var
   Id: TGUID;
   Setup:TGameSetup;
   Ballot:TJSONObject;Positions:TJSONArray;RecordData:TJSONObject;
-  LoadLocks,OldLocks:TTournamentFileLocks;Publication:string;
+  LoadLocks,OldLocks:TTournamentFileLocks;Publication:string;LoadReadOnly:Boolean;
 begin
   if IsRunning then
     Exit;
-  LoadLocks:=TTournamentFileLocks.Create;
+  LoadLocks:=TTournamentFileLocks.Create;LoadReadOnly:=False;
   try
-    LoadLocks.Acquire(AFileName);
+    try LoadLocks.Acquire(AFileName);
+    except on E:ETournamentReadOnly do LoadReadOnly:=True;end;
     Data := ReadTournamentDocument(AFileName,FProfile.FileFormat);
   except LoadLocks.Free;raise;end;
   try
@@ -2038,13 +2050,16 @@ begin
         NormalizeBallotFEN(FVariant,RecordData.Get('starting_fen',''));
     end;
     Publication:=Data.Get('pdn_file_name','');
-    if Publication<>'' then begin
+    if (Publication<>'') and not LoadReadOnly then begin
       if not FilenameIsAbsolute(Publication) then
         Publication:=ExpandFileName(ExtractFilePath(ExpandFileName(AFileName))+Publication);
-      if DirectoryExists(ExtractFilePath(Publication)) then LoadLocks.Acquire(Publication);
+      if DirectoryExists(ExtractFilePath(Publication)) then
+        try LoadLocks.Acquire(Publication);
+        except on E:ETournamentReadOnly do LoadReadOnly:=True;end;
     end;
   except Data.Free;LoadLocks.Free;raise;end;
-  OldLocks:=FFileLocks;FFileLocks:=LoadLocks;
+  if LoadReadOnly then begin LoadLocks.Free;LoadLocks:=TTournamentFileLocks.Create;end;
+  OldLocks:=FFileLocks;FFileLocks:=LoadLocks;FReadOnly:=LoadReadOnly;
   FLoadingTournament := True;
   try
     FBallotPositions.Clear;FBallotFileName:='';
@@ -2170,7 +2185,7 @@ begin
     FLoadingTournament := False;
     Data.Free;OldLocks.Free;
   end;
-  AutoSaveTournament;
+  AutoSaveTournament;UpdateButtons;
   if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);
 end;
 
@@ -2212,6 +2227,7 @@ end;
 
 procedure TTournamentDialog.ApplyInvalidatingChange(Sender: TObject);
 begin
+  if FReadOnly then Exit;
   try ReadSettings;MaxConcurrentGames;
   except on E:Exception do begin ShowGuiOkDialog(Self,'Tournament',E.Message);Exit;end;end;
   if not StartNewTournamentStorage then Exit;
@@ -2319,6 +2335,7 @@ function TTournamentDialog.StartTournament(out AMessage:string):TTournamentStart
 var Row:Integer;Eligible:Boolean;
 begin
   AMessage:='';
+  if FReadOnly then begin AMessage:='Tournament is read-only';Exit(tsrFailed);end;
   if FRunning then begin AMessage:='Tournament is already running';Exit(tsrAlreadyRunning);end;
   if FRefereeStopPending then begin AMessage:='Tournament is still stopping';Exit(tsrFailed);end;
   if TournamentPairingGridIsEmpty(FGrid) then begin
@@ -2705,9 +2722,18 @@ begin
     Button := FindComponent(PairingActions[I]);
     if Button is TButton then
       TButton(Button).Enabled := (not IsRunning) and
+        ((not FReadOnly) or (PairingActions[I]='LoadTournament')) and
         ((PairingActions[I]='LoadTournament') or (PairingActions[I]='SaveTournament') or (FStorageError=''));
   end;
+  FTournamentNameEdit.ReadOnly:=FReadOnly;FStartingFENEdit.ReadOnly:=FReadOnly;
+  FMovesEdit.ReadOnly:=FReadOnly;FMinutesEdit.ReadOnly:=FReadOnly;
+  FIncrementEdit.ReadOnly:=FReadOnly;FConcurrentGamesEdit.ReadOnly:=FReadOnly;
+  FEngineCheckList.Enabled:=not FReadOnly;FTimeUnitCombo.Enabled:=not FReadOnly;
+  FIncrementModeCombo.Enabled:=not FReadOnly;
+  if FGameCombo<>nil then FGameCombo.Enabled:=not FReadOnly;
+  FGrid.PopupMenu.AutoPopup:=not FReadOnly;
   Caption := 'Tournament';
+  if FReadOnly then Caption:=Caption+' (read-only)';
   if RegisteredGameCount>1 then Caption:=Caption+' - '+FVariant.Name;
   FailedCaptures := 0;
   for I := 0 to FGameRecords.Count - 1 do
@@ -2723,7 +2749,7 @@ begin
   if FStartStopButton <> nil then
   begin
     if ActiveRunningGameCount=0 then FRefereeStopPending:=False;
-    FStartStopButton.Enabled := (not FRunning) and (not FRefereeStopPending) and
+    FStartStopButton.Enabled := (not FReadOnly) and (not FRunning) and (not FRefereeStopPending) and
       (not PendingInvalidatingChange) and (not TournamentPairingGridIsEmpty(FGrid));
     FStopButton.Enabled := (FRunning or (ActiveRunningGameCount>0)) and
       (not FRefereeStopPending);

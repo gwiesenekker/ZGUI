@@ -243,6 +243,7 @@ begin
     end;
     if Duplicate then LabelText+=' ['+IntToStr(Tab.Id)+']';
     Tab.Page.Caption:=LabelText+' ('+Tab.Dialog.Variant.Name+')';
+    if Tab.Dialog.ReadOnly then Tab.Page.Caption:=Tab.Page.Caption+' (read-only)';
   end;
   PageChanged(Self);
 end;
@@ -353,6 +354,7 @@ var Response,I:Integer;LabelText,Names:string;
 begin
   Plan.Tab:=Tab;Plan.SaveName:='';Result:=True;
   if (Tab=nil) or (Tab.Dialog=nil) then Exit;
+  if Tab.Dialog.ReadOnly then Exit;
   if not Tab.Dialog.HasTournamentData and not Tab.Dialog.IsRunning then Exit;
   LabelText:='Close "'+Tab.Dialog.TournamentName+'"?';
   if FPreparingAll then begin

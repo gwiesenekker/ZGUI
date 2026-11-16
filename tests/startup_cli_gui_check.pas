@@ -4,12 +4,36 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
  StdCtrls,ExtCtrls,Dialogs,Grids,CheckLst,Process,uMainForm,uTournamentHostForm,uTournamentDialog,
  uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,
  uDraughtsHubEngine,uChessUciEngine,uDraughtsEngine,uGuiDialogs,uStartupCommand,
- uTournamentFileLocks,uRunningGame,uEngineParamsJson,uGameTree,Types;
+ uTournamentFileLocks,uRunningGame,uEngineParamsJson,uGameTree,Types{$IFDEF UNIX},BaseUnix,Unix{$ENDIF};
 type TErrors=class
  procedure Report(Sender:TObject;E:Exception);
 end;
 procedure TErrors.Report(Sender:TObject;E:Exception);
 begin WriteLn('FAIL: ',E.Message);DumpExceptionBackTrace(Output);Flush(Output);Halt(1);end;
+type THelpProbe=class
+  Seen:Integer;
+  procedure Show(Sender:TObject);
+  procedure Close(Data:PtrInt);
+end;
+procedure THelpProbe.Show(Sender:TObject);
+var D:TForm;Memo:TMemo;I,Buttons:Integer;
+begin
+ D:=TForm(Sender);Memo:=nil;Buttons:=0;
+ for I:=0 to D.ComponentCount-1 do begin
+  if D.Components[I] is TMemo then Memo:=TMemo(D.Components[I]);
+  if D.Components[I] is TButton then begin
+   Inc(Buttons);if TButton(D.Components[I]).Caption<>'OK' then raise Exception.Create('Help has only OK');
+  end;
+ end;
+ if (Memo=nil) or (Buttons<>1) then raise Exception.Create('Help uses one memo and one button');
+ if TrimRight(Memo.Lines.Text)<>StartupCommandHelp then raise Exception.Create('Help preserves exact lines and blank lines');
+ if not Memo.ReadOnly or (Memo.ScrollBars<>ssBoth) then raise Exception.Create('Help remains scrollable and read-only');
+ if (Memo.Left<0) or (Memo.Top<0) or (Memo.Left+Memo.Width>D.ClientWidth) or
+  (Memo.Top+Memo.Height>D.ClientHeight) then raise Exception.Create('Help memo fits dialog');
+ Inc(Seen);Application.QueueAsyncCall(@Close,PtrInt(D));
+end;
+procedure THelpProbe.Close(Data:PtrInt);
+begin TForm(Data).ModalResult:=mrOk;end;
 var Chess,Draughts:TGameVariant;Checks:Integer=0;Directory:string;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
@@ -170,9 +194,97 @@ begin
   L:=TStringList.Create;
   try L.LoadFromFile(Name);Check(L.Text=Before,'Non-start preserves saved results');finally L.Free;end;
   Req.FileName:=Directory+'/missing.json';Raised:=not M.ExecuteStartupCommand(Req,MessageText);
-  Check(Raised and (MessageText<>''),'Missing file reports actionable error');
+  Check(Raised and (MessageText='Tournament file not found: '+Req.FileName),'Missing file reports expanded path explicitly');
   Check(M.TournamentHost.Count=1,'Failed load adds no tab');
  finally M.Free;end;
+end;
+procedure HelpDialog;
+var M:TMainForm;Req:TStartupCommand;Probe:THelpProbe;Tick:QWord;
+begin
+ M:=TMainForm.Create(nil);Probe:=THelpProbe.Create;
+ try
+  GuiTestTextOnShow:=@Probe.Show;Req:=Default(TStartupCommand);Req.Kind:=sckHelp;
+  M.QueueStartupCommand(Req,'');Tick:=GetTickCount64;
+  while (Probe.Seen=0) and (GetTickCount64-Tick<5000) do begin Application.ProcessMessages;Sleep(10);end;
+  Check(Probe.Seen=1,'Queued CLI help shows existing text dialog with complete text');
+ finally GuiTestTextOnShow:=nil;Probe.Free;M.Free;end;
+end;
+procedure ReadOnlyTournament(V:TGameVariant);
+var D:TTournamentDialog;M:TMainForm;Name,Folder,Before,MessageText,PubBefore:string;
+ L:TStringList;Req:TStartupCommand;Raised:Boolean;P:TProcess;Grid:TStringGrid;
+begin
+ {$IFDEF UNIX}
+ Folder:=Directory+'/readonly-'+GameVariantId(V);ForceDirectories(Folder);Name:=Folder+'/archive.json';
+ D:=TTournamentDialog.Create(nil,V);
+ try
+  TButton(D.FindComponent('CreatePairing')).Click;
+  D.SetSelectedResult(V.ResultText(goDraw));D.SaveTournamentToFile(Name);
+ finally D.Free;end;
+ L:=TStringList.Create;
+ try
+  L.LoadFromFile(Name);Before:=L.Text;
+  L.LoadFromFile(ChangeFileExt(Name,'.'+GameGuiProfileFor(V).FileExtension));PubBefore:=L.Text;
+  { Exercise permission fallback with no pre-existing sidecar. }
+  DeleteFile(Name+'.lock');DeleteFile(ChangeFileExt(Name,'.'+GameGuiProfileFor(V).FileExtension)+'.lock');
+  Check(fpChmod(PChar(Folder),&555)=0,'Make archive directory non-writable');
+  try
+   Check(fpAccess(PChar(Folder),W_OK)<>0,'Permission test runs without root bypass');
+   M:=TMainForm.Create(nil);
+   try
+    Req:=Default(TStartupCommand);Req.Kind:=sckRunTournament;Req.FileName:=Name;
+    Check(not M.ExecuteStartupCommand(Req,MessageText) and (Pos('read-only',MessageText)>0),'CLI opens archive but refuses play');
+    Check((M.TournamentHost.Count=1) and M.TournamentHost.Visible,'Read-only archive remains visible');
+    D:=M.TournamentHost.Dialogs[0];Check(D.ReadOnly and (D.StorageError=''),'Read-only load is not a storage error');
+    Check(D.PdnFileName=ChangeFileExt(Name,'.'+GameGuiProfileFor(V).FileExtension),'Archive publication lookup is read-only');
+    Raised:=False;try D.TournamentName:='Changed';except on E:EInvalidOperation do Raised:=True;end;
+    Check(Raised,'Direct archive rename refused');
+    Check(Pos('read-only',D.Caption)>0,'Read-only caption is explicit');
+    Check(Pos('read-only',M.TournamentHost.Pages.Pages[0].Caption)>0,'Read-only tab is explicit');
+    Check(not TButton(D.FindComponent('TournamentPlay')).Enabled,'Read-only Play disabled');
+    Check(not TButton(D.FindComponent('SaveTournament')).Enabled,'Read-only Save disabled');
+    Check(not TButton(D.FindComponent('CreatePairing')).Enabled,'Read-only pairing disabled');
+    Grid:=TStringGrid(D.FindComponent('TournamentPairings'));Grid.Row:=1;
+    D.SetSelectedResult('*');D.RescheduleSelectedGame(nil);
+    Check(Grid.Cells[4,1]=V.ResultText(goDraw),'Direct result/replay operations cannot change archive');
+    Raised:=False;try D.SaveTournamentToFile(Directory+'/forbidden.json');except on E:EInvalidOperation do Raised:=True;end;
+    Check(Raised and not FileExists(Directory+'/forbidden.json'),'Direct Save As refused');
+    GuiTestConfirmationResult:=0;
+    try Check(M.TournamentHost.CloseTournament(D),'Read-only close needs no save/discard prompt');
+    finally GuiTestConfirmationResult:=mrYes;end;
+   finally M.Free;end;
+   L.LoadFromFile(Name);Check(L.Text=Before,'View and close preserve JSON bytes');
+   L.LoadFromFile(ChangeFileExt(Name,'.'+GameGuiProfileFor(V).FileExtension));Check(L.Text=PubBefore,'View and close preserve publication');
+   Check(not FileExists(Name+'.lock'),'Viewing archive does not require a sidecar');
+  finally fpChmod(PChar(Folder),&755);end;
+  { Existing sidecar is writable, but the directory is not. A held lease must
+    still refuse rather than silently creating a read-only tab. }
+  P:=HoldFile(Name);
+  try
+   fpChmod(PChar(Folder),&555);M:=TMainForm.Create(nil);
+   try
+    Req:=Default(TStartupCommand);Req.Kind:=sckRunTournament;Req.FileName:=Name;
+    Check(not M.ExecuteStartupCommand(Req,MessageText) and (Pos('exclusively',MessageText)>0),'Held lock still refuses in read-only directory');
+    Check(M.TournamentHost.Count=0,'Held lock adds no archive tab');
+   finally M.Free;fpChmod(PChar(Folder),&755);end;
+  finally P.Terminate(9);P.WaitOnExit;P.Free;end;
+  fpChmod(PChar(Name+'.lock'),&444);fpChmod(PChar(Folder),&555);
+  try
+   D:=TTournamentDialog.Create(nil,V);
+   try D.LoadTournamentFromFile(Name);Check(D.ReadOnly,'Unlocked non-writable sidecar permits archive view');finally D.Free;end;
+  finally fpChmod(PChar(Folder),&755);fpChmod(PChar(Name+'.lock'),&600);end;
+  fpChmod(PChar(Folder),&555);
+  try
+   D:=TTournamentDialog.Create(nil,V);
+   try
+    D.LoadTournamentFromFile(Name);Check(D.ReadOnly,'Writable sidecar does not make read-only directory editable');
+    fpChmod(PChar(Folder),&755);D.LoadTournamentFromFile(Name);
+    Check(not D.ReadOnly and not TEdit(D.FindComponent('TournamentName')).ReadOnly,'Reloading writable tournament restores editing');
+   finally D.Free;end;
+  finally fpChmod(PChar(Folder),&755);end;
+  D:=TTournamentDialog.Create(nil,V);
+  try D.LoadTournamentFromFile(Name);Check(not D.ReadOnly,'Writable archive opens normally after permissions restored');finally D.Free;end;
+ finally L.Free;end;
+ {$ENDIF}
 end;
 var Lease:TTournamentFileLocks;Line:string;Code:Integer;Errors:TErrors;Child:TMainForm;ChildRequest:TStartupCommand;ChildMessage:string;
 begin
@@ -202,7 +314,12 @@ begin
  GuiTestConfirmationResult:=mrYes;
  Directory:=GetTempDir(False)+'zgui-startup-check-'+IntToStr(GetProcessID);ForceDirectories(Directory);
  try
-  Locks;RegisterPeers;ForVariant(Chess);ForVariant(Draughts);
+  try
+   Locks;RegisterPeers;ForVariant(Chess);ForVariant(Draughts);
+   WriteLn('Checking queued help dialog');Flush(Output);HelpDialog;
+   WriteLn('Checking read-only chess archive');Flush(Output);ReadOnlyTournament(Chess);
+   WriteLn('Checking read-only draughts archive');Flush(Output);ReadOnlyTournament(Draughts);
+  except on E:Exception do Errors.Report(nil,E);end;
   WriteLn('Startup CLI GUI checks passed: ',Checks);
  finally Application.OnException:=nil;Errors.Free;RegisterDefaultGameVariant(nil);ClearRegisteredGames;end;
 end.

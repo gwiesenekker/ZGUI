@@ -77,8 +77,11 @@ A tournament snapshot and its publication file are protected against simultaneou
 writing by another ZGUI process. A second process reports that exclusive access
 failed. Small `.lock` sidecar files remain after closing; their presence alone does
 not block opening, and operating-system locks release automatically after a crash.
-The containing directory must be writable. Older ZGUI versions do not participate
-in this protection.
+Playing and saving require writable directories. An archive in a read-only folder
+opens for viewing with “read-only” in its tab and caption; Play, Save, pairing,
+settings edits and referee changes are disabled. Closing that view does not save
+or prompt to save. A file locked by another ZGUI is still refused. Older ZGUI
+versions do not participate in this protection.
 
 ## 1. Getting started
 

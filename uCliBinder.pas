@@ -261,9 +261,8 @@ begin
     Exit;
   if FMode = bmExecution then
   begin
-    if not ParameterAt(FPendingSlot).Required then
-      raise ECliError.CreateFmt('Expected a value for %s.', [FPendingSpelling]);
     CheckDuplicate(FPendingSlot);
+    raise ECliError.CreateFmt('Expected a value for %s.', [FPendingSpelling]);
   end;
   FPendingSlot := -1;
 end;

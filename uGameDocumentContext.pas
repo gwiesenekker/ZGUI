@@ -50,6 +50,8 @@ end;
 function TournamentFileVariant(const Name:string;Fallback:TGameVariant):TGameVariant;
 var Format:TGameFileFormat;Probe:TJSONObject;
 begin
+  if not FileExists(Name) then
+    raise EInOutError.Create('Tournament file not found: '+ExpandFileName(Name));
   for Format:=Low(Format) to High(Format) do begin
     Probe:=nil;
     try

@@ -10,6 +10,7 @@ uses
 {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
 var GuiTestConfirmationResult: Integer = 0;
     GuiTestChoiceOnShow: TNotifyEvent = nil;
+    GuiTestTextOnShow: TNotifyEvent = nil;
     GuiTestConfirmationOnShow: TNotifyEvent = nil;
     GuiTestLastConfirmationText: string = '';
     GuiTestFileDialogResult: Integer = -1;
@@ -466,7 +467,8 @@ var
   Memo: TMemo;
 begin
   {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
-  raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
+  if not Assigned(GuiTestTextOnShow) then
+    raise EInvalidOperation.Create('Unexpected dialog (' + ACaption + '): ' + AText);
   {$ENDIF}
   Dialog := TForm.Create(AOwner);
   try
@@ -504,6 +506,9 @@ begin
     Memo.WordWrap := False;
     Memo.Lines.Text := AText;
     Memo.SelStart := 0;
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
+    Dialog.OnShow:=GuiTestTextOnShow;
+    {$ENDIF}
 
     CenterFormOnOwner(Dialog, AOwner);
     Result := Dialog.ShowModal;

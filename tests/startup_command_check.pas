@@ -18,6 +18,18 @@ begin
   end;
  finally L.Free;end;
 end;
+procedure MissingValue;
+var L:TStringList;I:Integer;R:TStartupCommand;
+begin
+ L:=TStringList.Create;
+ try
+  for I:=0 to 1 do begin
+   L.Clear;L.Add('run_tournament');L.Add('--file');if I=1 then L.Add('--debug-log');
+   try R:=ParseStartupCommand(L);Check(False,'Missing value refused');
+   except on E:ECliError do Check(E.Message='Expected a value for --file.','Missing option value names its option');end;
+  end;
+ finally L.Free;end;
+end;
 begin
  CaseOf([],sckNone);CaseOf(['--debug-log=x'],sckNone);
  CaseOf(['--disableaccurateframe'],sckNone);CaseOf(['--some-widget-option'],sckNone);
@@ -44,5 +56,6 @@ begin
  CaseOf(['run_tournment','a'],sckNone,'',True);
  CaseOf(['help','bogus'],sckNone,'',True);
  CaseOf(['--help','a'],sckNone,'',True);
+ MissingValue;
  WriteLn('Startup parser checks passed: ',Checks);
 end.
