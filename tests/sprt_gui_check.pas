@@ -1,8 +1,13 @@
 program sprt_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,ExtCtrls,Grids,Graphics,CheckLst,FPJSON,JSONParser,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,ExtCtrls,Grids,Graphics,CheckLst,Controls,FPJSON,JSONParser,
  uTournamentDialog,uTournamentGridModel,uTournamentStorage,uSprt,uSprtPanel,uGamePosition,uChessPosition,uDraughtsPosition,
  uGameGuiProfile,uEngineRegistry,uGameSetupTypes,uGuiDialogs,Dialogs;
+type TGraphAccess=class(TSprtGraph)
+ public procedure Hover(X,Y:Integer);
+ end;
+procedure TGraphAccess.Hover(X,Y:Integer);
+begin MouseMove([],X,Y);end;
 var Checks:Integer=0;Chess,Draughts:TGameVariant;Directory:string;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
@@ -22,7 +27,7 @@ end;
 procedure VariantCheck(V:TGameVariant);
 var D:TTournamentDialog;P:TSprtPanel;C,Old:TSprtConfig;Defs:TExternalEngineList;G:TStringGrid;
  S:TGameSetup;MessageText,Name,Before,GamesText,Identity:string;
- Lines,Ballot:TStringList;J,Doc:TJSONObject;I,AIndex,BIndex,FontSize:Integer;Failed:Boolean;Image:TBitmap;Png:TPortableNetworkGraphic;
+ Lines,Ballot:TStringList;J,Doc:TJSONObject;I,AIndex,BIndex,FontSize:Integer;Failed:Boolean;Graph:TSprtGraph;Preview:TSprtReport;Y,PointIndex:Integer;Image:TBitmap;Png:TPortableNetworkGraphic;
  procedure WinRow(Row:Integer);
  begin
   G.Row:=Row;Check(D.GameSetupForRow(Row,S),'Existing row setup');
@@ -75,6 +80,16 @@ begin
   Lines.LoadFromFile(D.SaveFileName);Doc:=TJSONObject(GetJSON(Lines.Text));
   try Check(Doc.Find('games').AsJSON=GamesText,'Role/settings changes leave game records unchanged');finally Doc.Free;end;
   TButton(P.FindComponent('SprtToggle')).Click;Check(P.Expanded,'Pane expands');
+  Application.ProcessMessages;Graph:=TSprtGraph(P.FindComponent('SprtGraph'));Graph.Repaint;PointIndex:=-1;
+  for Y:=0 to Graph.Height-1 do begin
+   PointIndex:=Graph.PointAt(Graph.Width-12,Y);
+   if PointIndex>=0 then begin TGraphAccess(Graph).Hover(Graph.Width-12,Y);Break;end;
+  end;
+  Check((PointIndex>=0) and (Pos('Opening pair 2',Graph.Hint)>0) and (Pos('LLR:',Graph.Hint)>0) and
+    (Pos('First H0 crossing',Graph.Hint)>0) and (Pos('Estimated Elo: -infinity',Graph.Hint)>0),'Graph points expose pair, value and first crossing');
+  Preview:=Default(TSprtReport);SetLength(Preview.Trace,1);Preview.Trace[0].Opening:=1;Preview.Trace[0].MeanScore:=0.75;Preview.Included:=1;
+  Graph.SetReport(Preview);Check(Pos('Estimated Elo: +190.8',Graph.PointHint(0))>0,'Finite prefix score converts to logistic Elo');Graph.SetReport(P.Report);
+
   for FontSize:=10 to 16 do if FontSize in [10,16] then begin
    D.Font.Size:=FontSize;D.SetBounds(0,0,1250,900);D.RefreshLayout;Application.ProcessMessages;
    Check(TStringGrid(P.FindComponent('SprtCounts')).Height>=6*TStringGrid(P.FindComponent('SprtCounts')).DefaultRowHeight,'All count rows measured');

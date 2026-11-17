@@ -29,6 +29,8 @@ type
     IncrementMode: TClockIncrementMode;
   end;
 
+  TTimeForfeitEvent=procedure(Sender:TObject;Expired:TGameSide;var Outcome:TGameOutcome;var Reason:string) of object;
+
   TOrchestratorLogEvent = procedure(Sender: TObject; const AMessage: string) of object;
 
   { Runs one game: clocks, engines, move flow. The game itself is reached only
@@ -36,6 +38,7 @@ type
     the result texts. }
   TGameOrchestrator = class
   private
+    FOnTimeForfeit:TTimeForfeitEvent;
     FVariant: TGameVariant;
     FPosition: TGamePosition;
     FPreviousPosition: TGamePosition; // reused for TGameRules.MovePlayed
@@ -99,6 +102,7 @@ type
     procedure StopEngines;
 
     // The current position; owned by the orchestrator, read only for callers.
+    property OnTimeForfeit:TTimeForfeitEvent read FOnTimeForfeit write FOnTimeForfeit;
     property Position: TGamePosition read FPosition;
     property Variant: TGameVariant read FVariant;
     property CurrentSide: TGameSide read GetCurrentSide;
@@ -435,10 +439,15 @@ end;
 procedure TGameOrchestrator.FinishOnTimeout(AExpired: TGameSide;
   const AReason: string);
 var
-  LReason: string;
+  LReason: string;Outcome:TGameOutcome;
 begin
   LReason := AReason;
-  FinishWithOutcome(FRules.TimeoutOutcome(FPosition, AExpired, LReason), LReason);
+  if Assigned(FOnTimeForfeit) then begin
+    // Pause clock projection while the runner performs optional adjudication.
+    ChangeState(gosWaiting,'Time forfeit adjudication');Outcome:=goOngoing;
+    FOnTimeForfeit(Self,AExpired,Outcome,LReason);
+  end else Outcome:=FRules.TimeoutOutcome(FPosition,AExpired,LReason);
+  FinishWithOutcome(Outcome,LReason);
 end;
 
 procedure TGameOrchestrator.FinishWithOutcome(AOutcome: TGameOutcome;

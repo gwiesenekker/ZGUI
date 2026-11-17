@@ -4,6 +4,37 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Add optional Time forfeit adjudication — 2026-11-17
+
+Commit: pending.
+
+- User waiver: “Implement now; waive prior review” for optional clock-expiry
+  adjudication through an existing Hub/UCI engine, rules-based default, saved/CLI
+  policy and explicit reasons. User named the controls/arguments Time forfeit,
+  time_forfeit, adjudication_time and adjudication_threshold. Full scope and
+  design notes: chatgpt/TIME_FORFEIT_NOTES.md.
+- Add a measured tournament row for chess and draughts. Orchestrator preserves
+  normal timeout rules; an engine enables the 1.0-second/200-cp defaults. Reuse
+  existing setup, runner, protocol search, cancellation and engine reservations.
+  The adjudicator is reserved with the game, which can limit concurrency.
+- Stop both players before analyzing the unchanged final board. White-perspective
+  scores at/above +T or at/below -T declare White/Black wins; inside the band is a
+  draw. Reasons name the engine, comparison and original timeout. Missing/failed
+  analysis stays * for referee attention; adjudicator moves are not played.
+- Persist nondefault policies in guarded version-5 tournament documents; older
+  files keep existing behavior and older binaries refuse new policies. CLI uses
+  the same controls and execution, with optional ID/key engine disambiguation.
+- Clarify the live GSPRT pane button as “SPRT settings...” following user QA;
+  replace its log-like status with a heading and readable pair/provenance text,
+  and show LLR beside the graph. Add point markers and hover hints for opening
+  number, LLR, prefix estimated logistic Elo and the first crossing, using the score-history hint behavior.
+- Validation: GTK2 application/test builds, full regression and both tournament
+  suites pass. All 26 GUI suites pass, including focused reruns after locale,
+  native page-inset sizing and deterministic close-automation fixes (411 tab,
+  107 pipe/application, 86 initial graph assertions). Real protocol cancellation
+  checks pass 22 assertions and policy checks pass 68. Native Windows execution
+  remains outstanding.
+
 ### Add live paired GSPRT tournament comparison — 2026-11-17
 
 Commit: `720eddf`.

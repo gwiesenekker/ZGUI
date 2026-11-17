@@ -20,7 +20,7 @@ begin
  SetLength(P,79);for I:=0 to 78 do begin P[I].Opening:=I+1;P[I].Scores[0]:=1;P[I].Scores[1]:=1;end;
  R:=EvaluateSprt(C,P);Check((R.Decision='h1') and (R.DecisionPair=5),'First H1 crossing');
  Check((R.Complete=79) and (R.Included=5) and (R.Counts[4]=5) and (Length(R.Trace)=5),'Decision sample freezes while fixed match continues');
- R:=EvaluateSprt(C,P);Check(R.DecisionPair=5,'Replay produces identical first crossing');
+ R:=EvaluateSprt(C,P);Check((R.DecisionPair=5) and (R.Trace[4].MeanScore=1),'Replay produces identical first crossing and prefix Elo score');
  for I:=0 to 78 do begin P[I].Scores[0]:=0;P[I].Scores[1]:=0;end;
  R:=EvaluateSprt(C,P);Check((R.Decision='h0') and (R.DecisionPair=2),'First H0 crossing');
  P[0].Scores[0]:=-1;R:=EvaluateSprt(C,P);

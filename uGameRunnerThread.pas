@@ -6,7 +6,7 @@ interface
 
 uses
   Classes, SyncObjs, SysUtils, Math,
-  uCancellationToken,
+  uTimeForfeit,uCancellationToken,
   uEngineBase, uEngineRegistry,
   uGameOrchestrator, uGameMoveHistory, uGamePosition, uGameSetupTypes, uPvSnapshot,
   uThreadMessageQueue;
@@ -110,6 +110,9 @@ type
     FHasFullSnapshot: Boolean;
     FActiveSearchEngine: TGameEngine;
     FStopLogged: Boolean;
+    FTimeForfeitEngine:TExternalEngineDefinition;
+    procedure AdjudicateTimeForfeit(Sender:TObject;Expired:TGameSide;var Outcome:TGameOutcome;var Reason:string);
+  private
     FWhiteEngine: TExternalEngineDefinition;
     FBlackEngine: TExternalEngineDefinition;
     FLogLock: TCriticalSection;
@@ -324,6 +327,10 @@ begin
   FSetup.Variant:=FVariant;
   FSetup.WhiteEngine := nil;
   FSetup.BlackEngine := nil;
+  FSetup.TimeForfeitEngine:=nil;
+  if ASetup.TimeForfeitEngine<>nil then begin
+    FTimeForfeitEngine:=TExternalEngineDefinition.Create;FTimeForfeitEngine.Assign(ASetup.TimeForfeitEngine);
+  end;
   if ASetup.WhiteEngine <> nil then
   begin
     FWhiteEngine := TExternalEngineDefinition.Create;
@@ -348,6 +355,7 @@ begin
   FreeAndNil(FOrchestrator);
   FPvBasePosition.Free;
   FCommandQueue.Free;
+  FTimeForfeitEngine.Free;
   FBlackEngine.Free;
   FWhiteEngine.Free;
   FStopToken.Free;
@@ -823,6 +831,18 @@ begin
   else if Sender is TGameEngine then PublishLiveUpdate(TGameEngine(Sender));
 end;
 
+procedure TGameRunnerThread.AdjudicateTimeForfeit(Sender:TObject;Expired:TGameSide;var Outcome:TGameOutcome;var Reason:string);
+var TimeoutReason,EvaluationReason:string;
+begin
+ TimeoutReason:=Reason;AddGameLog('Time forfeit: analyzing final position with '+FSetup.TimeForfeit.EngineName);
+ PublishSnapshot;
+ // Reuse the registered engine adapter after both players have shut down. This
+ // also permits choosing one of the players without concurrent folder access.
+ FOrchestrator.StopEngines;
+ Outcome:=AnalyzeTimeForfeit(FSetup.TimeForfeit,FTimeForfeitEngine,FOrchestrator.Position,FStopToken,@RuntimeLog,EvaluationReason);
+ Reason:=EvaluationReason+'; '+TimeoutReason;
+end;
+
 procedure TGameRunnerThread.Execute;
 begin
     try
@@ -831,6 +851,7 @@ begin
       FOrchestrator.OnLog := @RuntimeLog;
       AddGameLogLines(FOrchestrator.Log);
       FOrchestrator.TimeControl := FSetup.TimeControl;
+      if FSetup.TimeForfeit.EngineKey<>'' then FOrchestrator.OnTimeForfeit:=@AdjudicateTimeForfeit;
       CreateEngines;
       if FStopToken.IsCancelled then
       begin

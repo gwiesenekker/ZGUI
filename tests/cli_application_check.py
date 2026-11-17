@@ -186,11 +186,10 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
       values=dict(line.split('=',1) for line in geometry.stdout.splitlines() if '=' in line)
       # A dialog can disappear between discovery and clicking.
       title=subprocess.run(['xdotool','getwindowname',dialog],capture_output=True,text=True).stdout.strip()
-      if title=='Close tournament':
-       # These dialogs default to Cancel; the preceding tab stop is Discard.
-       subprocess.run(['xdotool','windowfocus','--sync',dialog,'key','--clearmodifiers','shift+Tab','Return'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-      else:
-       subprocess.run(['xdotool','mousemove','--window',dialog,str(int(values['WIDTH'])-150),str(int(values['HEIGHT'])-32),'click','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+      # Click the measured dialog's middle (Discard/No) button directly.
+      # A toplevel focus change can restore the previous GTK control after
+      # keyboard focus traversal, making Shift+Tab/Return nondeterministic.
+      subprocess.run(['xdotool','mousemove','--window',dialog,str(int(values['WIDTH'])-150),str(int(values['HEIGHT'])-32),'click','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     time.sleep(.1)
    if c.p.poll() is None:
     remaining=subprocess.run(['xdotool','search','--all','--onlyvisible','--pid',str(c.p.pid)],capture_output=True,text=True)

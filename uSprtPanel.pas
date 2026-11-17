@@ -4,9 +4,15 @@ interface
 uses Classes,SysUtils,Controls,ExtCtrls,StdCtrls,Grids,Graphics,Forms,uSprt,uGuiLayout;
 type
  TSprtGraph=class(TGraphicControl)
- private FReport:TSprtReport;
- protected procedure Paint;override;
- public procedure SetReport(const R:TSprtReport);
+ private FReport:TSprtReport;FPoints:array of TPoint;
+ protected
+  procedure Paint;override;
+  procedure MouseMove(Shift:TShiftState;X,Y:Integer);override;
+  procedure MouseLeave;override;
+ public
+  function PointAt(X,Y:Integer):Integer;
+  function PointHint(Index:Integer):string;
+  procedure SetReport(const R:TSprtReport);
  end;
  TSprtPanel=class(TGuiCompositePanel)
  private
@@ -14,7 +20,7 @@ type
   FUserHeight,FMeasuredHeight:Integer;
   FHeading:TButton;FBody:TScrollBox;FSelectors,FInfo,FData:TPanel;
   FReport:TSprtReport;
-  FCandidate,FBaseline:TComboBox;FCandidateLabel,FBaselineLabel,FInfoText,FStatus:TLabel;
+  FCandidate,FBaseline:TComboBox;FCandidateLabel,FBaselineLabel,FInfoText,FStatus,FHeadline:TLabel;
   FSwap,FSettings:TButton;FCounts:TStringGrid;FGraph:TSprtGraph;
   FOnChanged:TNotifyEvent;
   procedure Toggle(Sender:TObject);procedure SelectionChanged(Sender:TObject);
@@ -35,7 +41,43 @@ type
 implementation
 uses Math,Dialogs,uGuiDialogs,LCLIntf,LCLType;
 procedure TSprtGraph.SetReport(const R:TSprtReport);
-begin FReport:=R;Invalidate;end;
+var I:Integer;Same:Boolean;
+begin
+ Same:=(R.Included=FReport.Included) and (R.Lower=FReport.Lower) and (R.Upper=FReport.Upper) and
+  (R.DecisionPair=FReport.DecisionPair) and (Length(R.Trace)=Length(FReport.Trace));
+ if Same then for I:=0 to High(R.Trace) do
+  if (R.Trace[I].Opening<>FReport.Trace[I].Opening) or (R.Trace[I].LLR<>FReport.Trace[I].LLR) or (R.Trace[I].MeanScore<>FReport.Trace[I].MeanScore) then begin Same:=False;Break;end;
+ if Same then Exit;
+ Hint:='';Application.CancelHint;FPoints:=nil;FReport:=R;Invalidate;
+end;
+function TSprtGraph.PointHint(Index:Integer):string;
+begin
+ Result:='';if (Index<0) or (Index>=Length(FReport.Trace)) then Exit;
+ Result:='Opening pair '+IntToStr(FReport.Trace[Index].Opening)+LineEnding+
+  'LLR: '+FormatFloat('0.0000',FReport.Trace[Index].LLR);
+ if FReport.Trace[Index].MeanScore<=0 then Result+=LineEnding+'Estimated Elo: -infinity (all losses)'
+ else if FReport.Trace[Index].MeanScore>=1 then Result+=LineEnding+'Estimated Elo: +infinity (all wins)'
+ else Result+=LineEnding+'Estimated Elo: '+FormatFloat('+0.0;-0.0;0.0',400*Log10(FReport.Trace[Index].MeanScore/(1-FReport.Trace[Index].MeanScore)));
+ if FReport.Trace[Index].Opening=FReport.DecisionPair then Result+=LineEnding+'First '+UpperCase(FReport.Decision)+' crossing';
+end;
+function TSprtGraph.PointAt(X,Y:Integer):Integer;
+var I,Distance,Best,Radius:Integer;
+begin
+ Result:=-1;Radius:=Max(8,MeasureGuiText('Ag',Font).cy div 2);Best:=Radius*Radius+1;
+ for I:=0 to High(FPoints) do begin
+  Distance:=Sqr(X-FPoints[I].X)+Sqr(Y-FPoints[I].Y);
+  if Distance<Best then begin Result:=I;Best:=Distance;end;
+ end;
+end;
+procedure TSprtGraph.MouseMove(Shift:TShiftState;X,Y:Integer);
+var HintText:string;
+begin
+ inherited MouseMove(Shift,X,Y);HintText:=PointHint(PointAt(X,Y));
+ if Hint=HintText then Exit;Hint:=HintText;Application.CancelHint;
+ if HintText<>'' then Application.ActivateHint(ClientToScreen(Point(X,Y)),True);
+end;
+procedure TSprtGraph.MouseLeave;
+begin inherited MouseLeave;Hint:='';Application.CancelHint;end;
 procedure TSprtGraph.Paint;
 var R:TRect;I,X,Y,PrevX,PrevY,BottomPad,LeftPad:Integer;Low,High:Double;
  function PosY(V:Double):Integer;
@@ -45,26 +87,28 @@ begin
  BottomPad:=Canvas.TextHeight('Ag')+8;
  LeftPad:=Max(Canvas.TextWidth('H0 '+FormatFloat('0.00',FReport.Lower)),
   Canvas.TextWidth('H1 '+FormatFloat('0.00',FReport.Upper)))+8;
- R:=Rect(LeftPad,12,Max(LeftPad+1,Width-12),Max(13,Height-BottomPad));
+ R:=Rect(LeftPad,Canvas.TextHeight('Ag')+10,Max(LeftPad+1,Width-12),Max(Canvas.TextHeight('Ag')+11,Height-BottomPad));
  Low:=Min(-1,FReport.Lower);High:=Max(1,FReport.Upper);
  for I:=0 to System.High(FReport.Trace) do begin Low:=Min(Low,FReport.Trace[I].LLR);High:=Max(High,FReport.Trace[I].LLR);end;
  Low:=Low-0.15;High:=High+0.15;
+ Canvas.TextOut(R.Left,0,'Evidence (LLR): '+FormatFloat('0.0000',FReport.LLR));
  Canvas.Pen.Color:=clGray;Canvas.MoveTo(R.Left,PosY(0));Canvas.LineTo(R.Right,PosY(0));
  Canvas.Pen.Style:=psDot;Canvas.Pen.Color:=clMaroon;
  Y:=PosY(FReport.Lower);Canvas.MoveTo(R.Left,Y);Canvas.LineTo(R.Right,Y);Canvas.TextOut(2,Y-Canvas.TextHeight('Ag') div 2,'H0 '+FormatFloat('0.00',FReport.Lower));
  Y:=PosY(FReport.Upper);Canvas.MoveTo(R.Left,Y);Canvas.LineTo(R.Right,Y);Canvas.TextOut(2,Y-Canvas.TextHeight('Ag') div 2,'H1 '+FormatFloat('0.00',FReport.Upper));
  Canvas.Pen.Style:=psSolid;Canvas.Pen.Color:=clNavy;Canvas.Pen.Width:=2;
- PrevX:=R.Left;PrevY:=PosY(0);
+ PrevX:=R.Left;PrevY:=PosY(0);SetLength(FPoints,Length(FReport.Trace));
  for I:=0 to System.High(FReport.Trace) do begin
   X:=R.Left+Round((I+1)/Max(1,Length(FReport.Trace))*(R.Right-R.Left));Y:=PosY(FReport.Trace[I].LLR);
-  Canvas.MoveTo(PrevX,PrevY);Canvas.LineTo(X,Y);PrevX:=X;PrevY:=Y;
+  Canvas.MoveTo(PrevX,PrevY);Canvas.LineTo(X,Y);FPoints[I]:=Point(X,Y);PrevX:=X;PrevY:=Y;
  end;
- Canvas.Pen.Width:=1;
+ Canvas.Pen.Width:=1;Canvas.Brush.Color:=clNavy;
+ for I:=0 to System.High(FPoints) do Canvas.Ellipse(FPoints[I].X-2,FPoints[I].Y-2,FPoints[I].X+3,FPoints[I].Y+3);
  if (FReport.DecisionPair>0) and (Length(FReport.Trace)>0) then begin
   Canvas.Brush.Color:=clNavy;Canvas.Ellipse(PrevX-4,PrevY-4,PrevX+4,PrevY+4);
  end;
  Canvas.Brush.Color:=clWindow;
- Canvas.TextOut(R.Left,Height-BottomPad+4,'Included pairs: '+IntToStr(FReport.Included));
+ Canvas.TextOut(R.Left,Height-BottomPad+4,'Opening pairs: '+IntToStr(FReport.Included));
 end;
 function Panel(AOwner:TComponent;Parent:TWinControl):TPanel;
 begin Result:=TPanel.Create(AOwner);Result.Parent:=Parent;Result.BevelOuter:=bvNone;end;
@@ -80,15 +124,16 @@ begin
  FCandidate:=TComboBox.Create(Self);FCandidate.Parent:=FSelectors;FCandidate.Name:='SprtCandidate';FCandidate.Style:=csDropDownList;FCandidate.OnChange:=@SelectionChanged;
  FBaseline:=TComboBox.Create(Self);FBaseline.Parent:=FSelectors;FBaseline.Name:='SprtBaseline';FBaseline.Style:=csDropDownList;FBaseline.OnChange:=@SelectionChanged;
  FSwap:=TButton.Create(Self);FSwap.Parent:=FSelectors;FSwap.Name:='SprtSwap';FSwap.Caption:='Swap';FSwap.OnClick:=@Swap;
- FSettings:=TButton.Create(Self);FSettings.Parent:=FInfo;FSettings.Caption:='Test settings...';FSettings.Name:='SprtSettings';FSettings.OnClick:=@Settings;
+ FSettings:=TButton.Create(Self);FSettings.Parent:=FInfo;FSettings.Caption:='SPRT settings...';FSettings.Name:='SprtSettings';FSettings.OnClick:=@Settings;
  FInfoText:=TLabel.Create(Self);FInfoText.Parent:=FInfo;FInfoText.AutoSize:=False;FInfoText.ShowHint:=True;
+ FHeadline:=TLabel.Create(Self);FHeadline.Parent:=FBody;FHeadline.AutoSize:=False;
  FStatus:=TLabel.Create(Self);FStatus.Parent:=FBody;FStatus.AutoSize:=False;FStatus.WordWrap:=True;FStatus.ShowHint:=True;
  FCounts:=TStringGrid.Create(Self);FCounts.Parent:=FData;FCounts.Name:='SprtCounts';FCounts.ColCount:=2;FCounts.RowCount:=6;
  FCounts.FixedCols:=0;FCounts.FixedRows:=1;FCounts.ScrollBars:=ssNone;FCounts.Options:=FCounts.Options-[goEditing,goRowSelect];
  FCounts.Cells[0,0]:='Pair score';FCounts.Cells[1,0]:='Count';
  FCounts.Cells[0,1]:='0 (LL)';FCounts.Cells[0,2]:='0.5 (LD/DL)';FCounts.Cells[0,3]:='1 (DD/WL/LW)';
  FCounts.Cells[0,4]:='1.5 (WD/DW)';FCounts.Cells[0,5]:='2 (WW)';
- FGraph:=TSprtGraph.Create(Self);FGraph.Parent:=FData;FGraph.Name:='SprtGraph';
+ FGraph:=TSprtGraph.Create(Self);FGraph.Parent:=FData;FGraph.Name:='SprtGraph';FGraph.ShowHint:=True;FGraph.ParentShowHint:=False;
  RefreshMeasurements;
 end;
 destructor TSprtPanel.Destroy;
@@ -124,9 +169,11 @@ begin
   end;
   FSwap.SetBounds(W-SwapW-Gap,0,SwapW,ToggleH);
   FInfo.SetBounds(0,FSelectors.Height,W,ToggleH+Gap);
-  SettingsW:=MeasureGuiText('Test settings...',Font).cx+24;FSettings.SetBounds(Gap,0,SettingsW,ToggleH);
+  SettingsW:=MeasureGuiText('SPRT settings...',Font).cx+24;FSettings.SetBounds(Gap,0,SettingsW,ToggleH);
   FInfoText.SetBounds(SettingsW+2*Gap,Gap,Max(1,W-SettingsW-3*Gap),H+4);
-  FStatus.SetBounds(Gap,FInfo.Top+FInfo.Height,Max(1,W-2*Gap),FStatus.Height);
+  FHeadline.Font.Name:=Font.Name;FHeadline.Font.Size:=Font.Size;FHeadline.Font.Color:=Font.Color;FHeadline.Font.Style:=Font.Style+[fsBold];
+  FHeadline.SetBounds(Gap,FInfo.Top+FInfo.Height,Max(1,W-2*Gap),H+4);
+  FStatus.SetBounds(Gap,FHeadline.Top+FHeadline.Height,Max(1,W-2*Gap),FStatus.Height);
   FStatus.GetPreferredSize(PrefW,StatusH);StatusH:=Max(2*H,StatusH)+Gap;FStatus.Height:=StatusH;
   FCounts.Canvas.Font.Assign(Font);FCounts.DefaultRowHeight:=H+8;
   LabelW:=MeasureGuiText('1 (DD/WL/LW)',Font).cx+20;CountW:=MeasureGuiText('999999',Font).cx+20;
@@ -226,14 +273,18 @@ var I:Integer;Mode,StatusText:string;
 begin
  FReport:=R;FGraph.Visible:=ErrorText='';
  Mode:='Exploratory';if FConfig.BeforePlay then Mode:='Configured before play';if Amended then Mode:='Amended results';
- FInfoText.Caption:='GSPRT | Logistic Elo ['+FloatToStr(FConfig.Elo0)+', '+FloatToStr(FConfig.Elo1)+
-  '], alpha '+FloatToStr(FConfig.Alpha)+', beta '+FloatToStr(FConfig.Beta);
- FInfoText.Hint:=FInfoText.Caption;
- if ErrorText<>'' then StatusText:=Mode+': '+ErrorText else begin
-  StatusText:='Continue';if R.Decision<>'continue' then StatusText:=UpperCase(R.Decision)+' reached at pair '+IntToStr(R.DecisionPair);
-  StatusText:=Mode+' | '+StatusText+' | Auto-stop off'+LineEnding+
-    Format('LLR %.4f [%.4f, %.4f]',[R.LLR,R.Lower,R.Upper])+LineEnding+Format('Included %d/%d; complete %d; pending %d; waiting at %d; later complete %d',
-    [R.Included,R.Total,R.Complete,R.Total-R.Complete,R.WaitingAt,R.Complete-R.Included]);
+ FInfoText.Caption:='H0: '+FloatToStr(FConfig.Elo0)+' Elo    H1: '+FloatToStr(FConfig.Elo1)+
+  ' Elo    Alpha: '+FloatToStr(FConfig.Alpha*100)+'%    Beta: '+FloatToStr(FConfig.Beta*100)+'%';
+ FInfoText.Hint:=FInfoText.Caption+LineEnding+'Paired logistic-Elo GSPRT. Alpha and beta are nominal error targets.';
+ if ErrorText<>'' then begin
+  FHeadline.Caption:='Comparison unavailable';StatusText:=Mode+'. '+ErrorText;
+ end else begin
+  FHeadline.Caption:='Continue collecting evidence';
+  if R.Decision<>'continue' then FHeadline.Caption:=UpperCase(R.Decision)+' reached at opening '+IntToStr(R.DecisionPair);
+  StatusText:=Mode+'. Display only; games continue.'+LineEnding+
+    Format('%d of %d pairs included; %d complete.',[R.Included,R.Total,R.Complete]);
+  if (R.Decision='continue') and (R.WaitingAt>0) then StatusText+=' Waiting for opening '+IntToStr(R.WaitingAt)+'.'
+  else if R.Complete>R.Included then StatusText+=' '+IntToStr(R.Complete-R.Included)+' complete pairs outside the decision sample.';
  end;
  FStatus.Caption:=StatusText;FStatus.Hint:=StatusText;
  FCandidate.ShowHint:=True;FCandidate.Hint:=FCandidate.Text;FBaseline.ShowHint:=True;FBaseline.Hint:=FBaseline.Text;

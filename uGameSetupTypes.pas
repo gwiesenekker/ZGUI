@@ -4,7 +4,7 @@ unit uGameSetupTypes;
 
 interface
 
-uses uEngineRegistry, uGameOrchestrator, uGamePosition;
+uses uTimeForfeit, uEngineRegistry, uGameOrchestrator, uGamePosition;
 
 type
   TPlayerKind = (pkHuman, pkRegistered);
@@ -18,6 +18,8 @@ type
     WhiteEngine: TExternalEngineDefinition;
     BlackEngine: TExternalEngineDefinition;
     TimeControl: TTimeControl;
+    TimeForfeit:TTimeForfeitSettings;
+    TimeForfeitEngine:TExternalEngineDefinition; // Borrowed, like player definitions.
   end;
 
   TGameSetupAcceptedEvent = procedure(Sender: TObject; const ASetup: TGameSetup) of object;
@@ -46,6 +48,12 @@ begin
     (Setup.TimeControl.MinutesPerPeriod>MaxDouble/60) or IsNan(Setup.TimeControl.IncrementSeconds) or
     IsInfinite(Setup.TimeControl.IncrementSeconds) or (Setup.TimeControl.IncrementSeconds<0) then
     raise EConvertError.Create('Time control requires nonnegative moves/increment and positive finite minutes');
+  if Setup.TimeForfeit.EngineKey<>'' then begin
+    ValidateTimeForfeit(Setup.TimeForfeit);
+    Player(pkRegistered,Setup.TimeForfeitEngine);
+    if (Setup.TimeForfeitEngine.Kind=eekDxp) or (EngineIdentityKey(Setup.TimeForfeitEngine)<>Setup.TimeForfeit.EngineKey) then
+      raise EConvertError.Create('Select a matching Hub/UCI time-forfeit adjudicator');
+  end;
   Player(Setup.WhitePlayer,Setup.WhiteEngine); Player(Setup.BlackPlayer,Setup.BlackEngine);
   if (Setup.WhitePlayer=pkRegistered) and (Setup.BlackPlayer=pkRegistered) and
     (EngineIdentityKey(Setup.WhiteEngine)=EngineIdentityKey(Setup.BlackEngine)) then

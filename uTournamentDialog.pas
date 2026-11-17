@@ -5,7 +5,7 @@ unit uTournamentDialog;
 interface
 
 uses
-  FPJSON, uTournamentFileLocks,uSprt,uSprtPanel,uTournamentPairResults,
+  FPJSON,uTimeForfeit, uTournamentFileLocks,uSprt,uSprtPanel,uTournamentPairResults,
   CheckLst, uGuiLayout, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
   Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord,
   uGameGuiProfile,uGamePosition,uGameOrchestrator;
@@ -27,6 +27,8 @@ type
     HasTime,HasMoves,HasIncrement,HasConcurrency:Boolean;
     Seconds,Increment:Double;
     Moves,Concurrency:Integer;
+    TimeForfeit:TTimeForfeitSettings;
+    HasTimeForfeit:Boolean;
   end;
   TTournamentStartResult = (tsrStarted, tsrAlreadyRunning, tsrNothingEligible, tsrCancelled, tsrFailed);
 
@@ -51,6 +53,12 @@ type
     FOnTitleChanged:TNotifyEvent;
     FCloseStopped:Boolean;
     FGameCombo:TComboBox;
+    FTimeForfeitCombo:TComboBox;
+    FAdjudicationTime,FAdjudicationThreshold:TEdit;
+    function ReadForfeit:TTimeForfeitSettings;
+    procedure SetForfeit(const S:TTimeForfeitSettings);
+    function ForfeitEngine:TExternalEngineDefinition;
+    procedure ForfeitChanged(Sender:TObject);
     procedure NameChanged(Sender:TObject);
     function GetTournamentName:string;
     procedure SetTournamentName(const Value:string);
@@ -271,7 +279,9 @@ function TournamentRuleEndText(const AReason:string):string;
 var Reason:string;
 begin
   Reason:=Trim(AReason);
-  if Copy(LowerCase(Reason),1,8)='draw by ' then
+  if (Pos('Annotator ',Reason)=1) or (Pos('Time forfeit adjudication failed',Reason)=1) then
+    Result:=Reason
+  else if Copy(LowerCase(Reason),1,8)='draw by ' then
     Result:='Orchestrator declared '+LowerCase(Copy(Reason,1,1))+Copy(Reason,2,MaxInt)
   else if SameText(Reason,'stalemate') then Result:='Orchestrator declared draw by stalemate'
   else if SameText(Reason,'checkmate') then Result:='Orchestrator declared checkmate'
@@ -346,6 +356,9 @@ begin
     if Result[I] in ['/', '\', ':', '*', '?', '"', '<', '>', '|'] then
       Result[I] := '_';
 end;
+
+function TournamentLabel(AOwner:TComponent;const Text:string):TLabel;
+begin Result:=TLabel.Create(AOwner);Result.Caption:=Text;end;
 
 constructor TTournamentDialog.Create(AOwner:TComponent;AVariant:TGameVariant);
 var
@@ -674,6 +687,15 @@ begin
   ConfigurePairingGridColumns;
   AdjustPairingGridColumnWidths;
 
+  FTimeForfeitCombo:=TComboBox.Create(Self);FTimeForfeitCombo.Parent:=ButtonPanel;
+  FTimeForfeitCombo.Name:='TournamentTimeForfeit';FTimeForfeitCombo.Style:=csDropDownList;
+  FTimeForfeitCombo.OnChange:=@ForfeitChanged;FTimeForfeitCombo.Width:=260;
+  FAdjudicationTime:=TGuiNumberEdit.Create(Self);FAdjudicationTime.Parent:=ButtonPanel;
+  FAdjudicationTime.Name:='TournamentAdjudicationTime';TGuiNumberEdit(FAdjudicationTime).WidthSample:='999.999';
+  FAdjudicationTime.Text:=FormatFloat('0.0',1.0);FAdjudicationTime.OnChange:=@ForfeitChanged;
+  FAdjudicationThreshold:=TGuiNumberEdit.Create(Self);FAdjudicationThreshold.Parent:=ButtonPanel;
+  FAdjudicationThreshold.Name:='TournamentAdjudicationThreshold';TGuiNumberEdit(FAdjudicationThreshold).WidthSample:='99999';
+  FAdjudicationThreshold.Text:='200';FAdjudicationThreshold.OnChange:=@ForfeitChanged;
   ClearTournamentPairingGrid(FGrid);
   PopulateEngines;
   AdjustPairingGridColumnWidths;
@@ -709,8 +731,11 @@ begin
   with LayoutFlow(ButtonPanel,[FRoundRobinGroup,PairingActions]) do Top:=1;
   with LayoutRow(ButtonPanel,[TimeLabel,FMovesEdit,MovesLabel,FMinutesEdit,FTimeUnitCombo,
     MinutesLabel,FIncrementEdit,IncrementLabel,FIncrementModeCombo]) do Top:=2;
+  with LayoutFlow(ButtonPanel,[TournamentLabel(Self,'Time forfeit:'),FTimeForfeitCombo,
+    TournamentLabel(Self,'Adjudication time:'),FAdjudicationTime,TournamentLabel(Self,'seconds; threshold:'),
+    FAdjudicationThreshold,TournamentLabel(Self,'cp')]) do Top:=3;
   with LayoutRow(ButtonPanel,[FStartStopButton,ConcurrentLabel,FConcurrentGamesEdit,
-    FStopButton,SaveButton,LoadButton]) do Top:=3;
+    FStopButton,SaveButton,LoadButton]) do Top:=4;
   ButtonPanel.AutoSize:=True;
   UpdateButtons;RefreshSprt;
   EnableAutoLayout;
@@ -862,7 +887,7 @@ begin
     else FIncrementModeCombo.ItemIndex:=0;
     FConcurrentGamesEdit.Text:='1';FRoundRobinGroup.ItemIndex:=0;
     if FGameCombo<>nil then FGameCombo.ItemIndex:=FGameCombo.Items.IndexOfObject(FVariant);
-    ClearTournamentPairingGrid(FGrid);PopulateEngines;
+    ClearTournamentPairingGrid(FGrid);PopulateEngines;SetForfeit(DefaultTimeForfeit);
     FGrid.PopupMenu.Items[1].Caption:=TournamentResultText(trWhiteWin,FProfile.FileFormat);
     FGrid.PopupMenu.Items[2].Caption:=TournamentResultText(trDraw,FProfile.FileFormat);
     FGrid.PopupMenu.Items[3].Caption:=TournamentResultText(trBlackWin,FProfile.FileFormat);
@@ -1017,6 +1042,49 @@ end;
 function TTournamentDialog.GameFileExtension:string;
 begin Result:='.'+FProfile.FileExtension;end;
 
+function TTournamentDialog.ForfeitEngine:TExternalEngineDefinition;
+begin
+ Result:=nil;
+ if FTimeForfeitCombo.ItemIndex>0 then Result:=TExternalEngineDefinition(FTimeForfeitCombo.Items.Objects[FTimeForfeitCombo.ItemIndex]);
+end;
+function TTournamentDialog.ReadForfeit:TTimeForfeitSettings;
+var E:TExternalEngineDefinition;
+begin
+ Result:=DefaultTimeForfeit;E:=ForfeitEngine;
+ if FTimeForfeitCombo.ItemIndex=0 then Exit;
+ if FTimeForfeitCombo.ItemIndex>0 then begin
+  if E=nil then raise EConvertError.Create('Missing time-forfeit adjudicator registration');
+  Result.EngineKey:=EngineIdentityKey(E);Result.EngineName:=E.IdText;
+ end;
+ if not TryStrToFloat(FAdjudicationTime.Text,Result.Seconds) or
+    not TryStrToFloat(FAdjudicationThreshold.Text,Result.ThresholdCp) then
+   raise EConvertError.Create('Enter valid adjudication time and threshold');
+ ValidateTimeForfeit(Result);
+end;
+procedure TTournamentDialog.SetForfeit(const S:TTimeForfeitSettings);
+var I:Integer;E:TExternalEngineDefinition;
+begin
+ for I:=FTimeForfeitCombo.Items.Count-1 downto 1 do
+  if FTimeForfeitCombo.Items.Objects[I]=nil then FTimeForfeitCombo.Items.Delete(I);
+ FTimeForfeitCombo.ItemIndex:=0;
+ if S.EngineKey<>'' then begin
+  for I:=1 to FTimeForfeitCombo.Items.Count-1 do begin
+   E:=TExternalEngineDefinition(FTimeForfeitCombo.Items.Objects[I]);
+   if (E<>nil) and (EngineIdentityKey(E)=S.EngineKey) then begin FTimeForfeitCombo.ItemIndex:=I;Break;end;
+  end;
+  if FTimeForfeitCombo.ItemIndex=0 then begin
+   FTimeForfeitCombo.Items.AddObject('Missing engine: '+S.EngineName,nil);
+   FTimeForfeitCombo.ItemIndex:=FTimeForfeitCombo.Items.Count-1;
+  end;
+ end;
+ FAdjudicationTime.Text:=FloatToStr(S.Seconds);FAdjudicationThreshold.Text:=FloatToStr(S.ThresholdCp);
+end;
+procedure TTournamentDialog.ForfeitChanged(Sender:TObject);
+begin
+ if FLoadingTournament then Exit;
+ InvalidateTournamentResults(Sender);UpdateButtons;
+end;
+
 function TTournamentDialog.ReadSettings:TTimeControl;
 var Setup:TGameSetup;
 begin
@@ -1035,7 +1103,7 @@ begin
   Setup:=Default(TGameSetup);Setup.Variant:=FVariant;Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
   Setup.TimeControl:=Result;Setup.StartingFEN:=Trim(FStartingFENEdit.Text);
   if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
-  ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
+  ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);ReadForfeit;
 end;
 
 function TTournamentDialog.ConfirmSharedExecutables(CommandMode:Boolean;AllowShared:Boolean):Boolean;
@@ -1228,7 +1296,7 @@ begin
   if FLoadingTournament or FReadOnly then Exit;
   FStorageError := '';
   try
-    ReadSettings;MaxConcurrentGames;
+    ReadSettings;ReadForfeit;MaxConcurrentGames;
     EnsureStoragePaths;
     try
       WritePdnProjection;
@@ -1365,7 +1433,7 @@ var
 begin
   FEngineCheckList.Items.BeginUpdate;
   try
-  FEngineCheckList.Clear;
+  FEngineCheckList.Clear;FTimeForfeitCombo.Clear;FTimeForfeitCombo.Items.Add('Orchestrator');FTimeForfeitCombo.ItemIndex:=0;
   LoadExternalEngines(EnginesJsonFileName, FEngines);
   for I := 0 to FEngines.Count - 1 do
   begin
@@ -1373,6 +1441,7 @@ begin
     FEngineCheckList.Items.AddObject(DisplayNameForEngine(FEngines[I]),
       FEngines[I]);
     FEngineCheckList.Checked[FEngineCheckList.Items.Count-1] := True;
+    if FEngines[I].Kind<>eekDxp then FTimeForfeitCombo.Items.AddObject(DisplayNameForEngine(FEngines[I]),FEngines[I]);
   end;
   finally FEngineCheckList.Items.EndUpdate;end;
 end;
@@ -1563,6 +1632,7 @@ begin
     if Settings.HasMoves then FMovesEdit.Text:=IntToStr(Settings.Moves);
     if Settings.HasIncrement then FIncrementEdit.Text:=FloatToStr(Settings.Increment);
     if Settings.HasConcurrency then FConcurrentGamesEdit.Text:=IntToStr(Settings.Concurrency);
+    if Settings.HasTimeForfeit then SetForfeit(Settings.TimeForfeit);
     ReadSettings;MaxConcurrentGames;
     if Settings.Ballot<>'' then LoadBallotFromFile(Settings.Ballot);
     FAcceptedTournamentSignature:=TournamentSignature;
@@ -1891,8 +1961,8 @@ begin
   begin
     CandidateKeys := TStringList.Create;
     try
-      for SideIndex:=0 to 1 do begin
-        if SideIndex=0 then Candidate:=WhiteEngine else Candidate:=BlackEngine;
+      for SideIndex:=0 to 2 do begin
+        if SideIndex=0 then Candidate:=WhiteEngine else if SideIndex=1 then Candidate:=BlackEngine else Candidate:=ForfeitEngine;
         CandidateKeys.Clear;AddEngineReservationKeys(Candidate,CandidateKeys);
         for I:=0 to CandidateKeys.Count-1 do
           if ABusyEngineKeys.IndexOf(CandidateKeys[I])>=0 then begin
@@ -1907,6 +1977,7 @@ begin
       CandidateKeys.Free;
     end;
   end;
+  try ReadForfeit;except on E:Exception do begin StartFailure(ARow,E.Message);Exit;end;end;
   Result := True;
 end;
 
@@ -2158,6 +2229,13 @@ begin
       Data.Add('notation_format','pgn');Data.Add('force_ponder_off',FProfile.TournamentForcePonderOff);
     end else Data.Add('storage_version', 2);
     if FSprt.Config.Stored then Data.Add('sprt_view',SprtConfigJson(FSprt.Config));
+    if FTimeForfeitCombo.ItemIndex>0 then begin
+      Data.Integers['storage_version']:=5;Data.Add('time_forfeit',TimeForfeitJson(ReadForfeit));
+      if Data.Find('game_variant')=nil then begin
+        Data.Add('game_variant',GameVariantId(FVariant));Data.Add('notation_format',FProfile.FileExtension);
+        Data.Add('force_ponder_off',FProfile.TournamentForcePonderOff);
+      end;
+    end;
     Data.Add('legacy_pdn_file_name', FLegacyPdnFileName);
     Data.Add('tournament_id', FTournamentId);
     Data.Add('pdn_file_name', ExtractRelativePath(ExpandFileName(AFileName),
@@ -2255,7 +2333,7 @@ begin
     Setup.TimeControl.IncrementSeconds:=Data.Get('increment_seconds',Setup.TimeControl.IncrementSeconds);
     if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
     ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
-    ReadSprtConfig(Data.Find('sprt_view'));
+    ReadSprtConfig(Data.Find('sprt_view'));ReadTimeForfeit(Data.Find('time_forfeit'));
     TimeUnit:=Data.Get('time_unit','minutes');
     Ballot:=TJSONObject(Data.Find('opening_ballot'));
     if Ballot<>nil then begin
@@ -2297,6 +2375,7 @@ begin
     end else begin
       FTimeUnitCombo.ItemIndex:=0;FMinutesEdit.Text:=FloatToStr(Setup.TimeControl.MinutesPerPeriod);
     end;
+    SetForfeit(ReadTimeForfeit(Data.Find('time_forfeit')));
     FIncrementEdit.Text := FloatToStr(TJSONObject(Data).Get('increment_seconds', FProfile.DefaultClock.IncrementSeconds));
     FConcurrentGamesEdit.Text := IntToStr(TJSONObject(Data).Get('concurrent_games', 1));
     if SameText(TJSONObject(Data).Get('increment_mode', 'from-start'),
@@ -2442,7 +2521,8 @@ begin
   Result := Trim(FStartingFENEdit.Text) + '|' + Trim(FMovesEdit.Text) + '|' +
     Trim(FMinutesEdit.Text) + '|' + Trim(FIncrementEdit.Text) + '|' +
     IntToStr(FIncrementModeCombo.ItemIndex) + '|' +
-    IntToStr(FRoundRobinGroup.ItemIndex)+'|'+IntToStr(FTimeUnitCombo.ItemIndex);
+    IntToStr(FRoundRobinGroup.ItemIndex)+'|'+IntToStr(FTimeUnitCombo.ItemIndex)+'|'+
+    IntToStr(FTimeForfeitCombo.ItemIndex)+'|'+FAdjudicationTime.Text+'|'+FAdjudicationThreshold.Text;
 end;
 
 procedure TTournamentDialog.ApplyInvalidatingChange(Sender: TObject);
@@ -2496,6 +2576,9 @@ begin
         FRoundRobinGroup.ItemIndex := StrToIntDef(Parts[5], 0);
         if Parts.Count>=7 then FTimeUnitCombo.ItemIndex:=StrToIntDef(Parts[6],0)
         else FTimeUnitCombo.ItemIndex:=0;
+        if Parts.Count>=10 then begin
+          FTimeForfeitCombo.ItemIndex:=StrToIntDef(Parts[7],0);FAdjudicationTime.Text:=Parts[8];FAdjudicationThreshold.Text:=Parts[9];
+        end;
       finally
         FLoadingTournament := False;
       end;
@@ -2519,6 +2602,7 @@ begin
   ASetup.StartingFEN:=StartingFENForRow(ARow);
   if ASetup.StartingFEN='' then ASetup.StartingFEN:=FVariant.DefaultStartingFEN;
   try
+    ASetup.TimeForfeit:=ReadForfeit;ASetup.TimeForfeitEngine:=ForfeitEngine;
     ASetup.TimeControl:=ReadSettings;
     ASetup.ForcePonderOff:=FProfile.TournamentForcePonderOff;
     ValidateGameSetup(ASetup,FVariant,FProfile.EngineKinds);
@@ -2825,6 +2909,7 @@ begin
           RequestKeys.Clear;
           AddEngineReservationKeys(Setup.WhiteEngine, RequestKeys);
           AddEngineReservationKeys(Setup.BlackEngine, RequestKeys);
+          AddEngineReservationKeys(Setup.TimeForfeitEngine,RequestKeys);
           Queue.Request(Self, Row, RequestKeys);
         end;
       finally Queue.EndUpdate(Self); end;
@@ -2958,6 +3043,9 @@ begin
   FIncrementEdit.ReadOnly:=FReadOnly;FConcurrentGamesEdit.ReadOnly:=FReadOnly;
   FEngineCheckList.Enabled:=not FReadOnly;FTimeUnitCombo.Enabled:=not FReadOnly;
   FIncrementModeCombo.Enabled:=not FReadOnly;
+  FTimeForfeitCombo.Enabled:=not FReadOnly and not IsRunning;
+  FAdjudicationTime.Enabled:=FTimeForfeitCombo.Enabled and (FTimeForfeitCombo.ItemIndex>0);
+  FAdjudicationThreshold.Enabled:=FAdjudicationTime.Enabled;
   if FGameCombo<>nil then FGameCombo.Enabled:=not FReadOnly;
   FGrid.PopupMenu.AutoPopup:=not FReadOnly;
   Caption := 'Tournament';

@@ -209,6 +209,7 @@ procedure TRunningGame.ClearSetup;
 begin
   FreeAndNil(FSetup.WhiteEngine);
   FreeAndNil(FSetup.BlackEngine);
+  FreeAndNil(FSetup.TimeForfeitEngine);
 end;
 
 procedure TRunningGame.CopySetupFrom(const ASetup: TGameSetup);
@@ -218,6 +219,10 @@ begin
   FSetup.Variant:=FGameTree.Variant;
   FSetup.WhiteEngine := nil;
   FSetup.BlackEngine := nil;
+  FSetup.TimeForfeitEngine:=nil;
+  if ASetup.TimeForfeitEngine<>nil then begin
+    FSetup.TimeForfeitEngine:=TExternalEngineDefinition.Create;FSetup.TimeForfeitEngine.Assign(ASetup.TimeForfeitEngine);
+  end;
   if ASetup.WhiteEngine <> nil then
   begin
     FSetup.WhiteEngine := TExternalEngineDefinition.Create;
@@ -235,6 +240,10 @@ begin
   ASetup := FSetup;
   ASetup.WhiteEngine := nil;
   ASetup.BlackEngine := nil;
+  ASetup.TimeForfeitEngine:=nil;
+  if FSetup.TimeForfeitEngine<>nil then begin
+    ASetup.TimeForfeitEngine:=TExternalEngineDefinition.Create;ASetup.TimeForfeitEngine.Assign(FSetup.TimeForfeitEngine);
+  end;
   if FSetup.WhiteEngine <> nil then
   begin
     ASetup.WhiteEngine := TExternalEngineDefinition.Create;

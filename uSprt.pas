@@ -21,7 +21,7 @@ type
   Scores:array[0..1] of Double; // negative = unresolved
  end;
  TSprtPairs=array of TSprtPair;
- TSprtPoint=record Opening:Integer;LLR:Double;end;
+ TSprtPoint=record Opening:Integer;LLR,MeanScore:Double;end;
  TSprtTrace=array of TSprtPoint;
  TSprtReport=record
   Counts:TSprtCounts;Trace:TSprtTrace;
@@ -86,13 +86,13 @@ begin
  if IsNan(Result) or IsInfinite(Result) then raise EConvertError.Create('SPRT numerical calculation failed');
 end;
 function EvaluateSprt(const C:TSprtConfig;const Pairs:TSprtPairs):TSprtReport;
-var I,Bin:Integer;PrefixOpen:Boolean;
+var I,Bin:Integer;PrefixOpen:Boolean;ScoreSum:Double;
 begin
  ValidateSprtConfig(C,True);Result:=Default(TSprtReport);
  Result.Total:=Length(Pairs);Result.Decision:='continue';
  // Subtract logs to avoid overflowing ratios for small but valid error rates.
  Result.Lower:=Ln(C.Beta)-Ln(1-C.Alpha);Result.Upper:=Ln(1-C.Beta)-Ln(C.Alpha);
- PrefixOpen:=True;
+ PrefixOpen:=True;ScoreSum:=0;
  for I:=0 to High(Pairs) do begin
   if (Pairs[I].Opening<1) or ((I>0) and (Pairs[I].Opening<=Pairs[I-1].Opening)) then
     raise EConvertError.Create('SPRT pairs must be in scheduled order');
@@ -111,10 +111,11 @@ begin
  for I:=0 to Result.PrefixComplete-1 do begin
   Bin:=Round(2*(Pairs[I].Scores[0]+Pairs[I].Scores[1]));
   if (Bin<0) or (Bin>4) then raise EConvertError.Create('Invalid paired score');
-  Inc(Result.Counts[Bin]);Inc(Result.Included);
+  Inc(Result.Counts[Bin]);Inc(Result.Included);ScoreSum+=Pairs[I].Scores[0]+Pairs[I].Scores[1];
   Result.LLR:=SprtLogLikelihood(Result.Counts,C.Elo0,C.Elo1);
   SetLength(Result.Trace,Result.Included);Result.Trace[Result.Included-1].Opening:=Pairs[I].Opening;
   Result.Trace[Result.Included-1].LLR:=Result.LLR;
+  Result.Trace[Result.Included-1].MeanScore:=ScoreSum/(2*Result.Included);
   if Result.LLR<=Result.Lower then Result.Decision:='h0'
   else if Result.LLR>=Result.Upper then Result.Decision:='h1';
   if Result.Decision<>'continue' then begin Result.DecisionPair:=Pairs[I].Opening;Break;end;

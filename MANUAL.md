@@ -343,6 +343,12 @@ interactive run_tournament command creates a match; its startup namesake takes
 only a saved file. There are no interactive quit, engine-registration or SPRT commands. Use
 stop_tournament or the GUI to stop tournaments; close ZGUI through its GUI.
 
+The tournament commands also accept `time_forfeit=loss` (default) or a unique
+Hub/UCI engine name, `adjudication_time=1.0` (seconds), and
+`adjudication_threshold=200` (cp). The last two require a selected adjudicator.
+Use `time_forfeit_id` or `time_forfeit_key` instead of its name if ambiguous.
+See **Time forfeit adjudication** in section 7 for the outcome and reason rules.
+
 #### Testing the interactive CLI on Windows
 
 These steps are a native Windows QA checklist; they do not imply that Windows
@@ -1306,6 +1312,7 @@ asserting an independently verified rule cause.
 | Chess rules | **Orchestrator declared checkmate**; **Orchestrator declared draw by stalemate**, **insufficient mating material**, **75-move rule**, or **fivefold repetition**. |
 | Accepted chess claims | **Orchestrator declared draw by 50-move rule (claim accepted)** or **threefold repetition (claim accepted)**, including the **intended** variants. |
 | Draughts rules | **Orchestrator: White has no legal move** or **Black has no legal move**; **Orchestrator declared draw by 5-move endgame rule**, **16-move endgame rule**, **repetition; repetitions=N**, or **25-move rule; reversible_plies=N**. |
+| Adjudication | **Annotator engine evaluation score comparison threshold cp (White perspective)** plus the flag-fall cause; failure leaves * for referee attention. |
 | Clocks | **Orchestrator: Flag fell for white/black**, optionally with **engine move deadline expired** or **idle move deadline expired**. A chess timeout draw adds **opponent has insufficient mating material**. |
 | Engine reports | **Name (White/Black) claimed draw**, **claimed win**, **resigned**, or **ended game**, with raw **DXP reason N** when provided. Unrecognized details are preserved. A fallback can say **Engine ended game** with side or no-move information. |
 | Referee actions | **Referee stopped tournament**; **Referee declared win for White/Black**; **Referee declared draw**. A declaration follows the original cause when present. |
@@ -1391,7 +1398,7 @@ the game's start date, actual moves, comments and variations. Externally changed
 PGNs are preserved. Loading restores records without starting processes; use
 **Play** to continue pending rows. A stopped or failed row remains unfinished
 with an explicit reason. Use a manual result or **Reschedule selected game**;
-errors are not silently retried or awarded as forfeits. A flag fall remains a
+errors are not silently retried or awarded as forfeits. A flag fall uses the selected **Time forfeit** policy; the default remains a
 normal rules-based result. Loading a draughts file opens/selects a draughts tab;
 loading a chess file opens/selects a chess tab.
 
@@ -1448,6 +1455,68 @@ for the linked records. Missing older moves cannot be recovered from standings.
 Preserve the older archive along with the tournament JSON. ZGUI prompts to save
 tournament state when closing if unsaved tournament data exists.
 
+### Time forfeit adjudication
+
+The tournament's **Time forfeit** selector defaults to **Orchestrator**. This keeps
+the normal rules-based timeout result: usually a loss for the side whose flag fell,
+with the chess insufficient-mating-material exception still able to give a draw.
+
+Alternatively, choose a registered **Hub** engine for draughts or **UCI** engine
+for chess. DXP engines cannot adjudicate arbitrary positions. The analysis-time
+and cp-threshold edits then become enabled. Defaults are **1.0 seconds** and
+**200 cp**. The time must be positive and at most 3600 seconds; the threshold
+must be positive and at most 1000000000 cp.
+
+When a flag falls, both players shut down and ZGUI analyzes the unchanged final
+position in a fresh instance of the selected engine. A playing engine may also
+be the adjudicator. Its suggested move is never added to the game. The budget
+applies to the search, excluding startup/shutdown; an engine may return early.
+All comparisons use the adapters' normalized **White-perspective** evaluation:
+
+| Evaluation | Result |
+| --- | --- |
+| Score >= +threshold | White wins. |
+| Score <= -threshold | Black wins. |
+| Score inside the band | Draw. |
+
+The **Reason** column names the adjudicator and records the comparison, for
+example `Annotator Scan evaluation 300 >= 200 cp (White perspective)` or
+`Annotator Scan evaluation -100 > -200 cp (White perspective)`, followed by the
+original flag-fall cause. Positive/negative mate scores adjudicate a White/Black
+win; absent or ambiguous scores do not become zero. Failed, unavailable or
+cancelled analysis leaves `*` and an explicit reason for referee attention.
+Engine crashes and other non-clock failures retain their existing handling.
+
+The existing reservations protect the adjudicator alongside the two players for
+the whole game, across tournaments and annotators. A shared adjudicator can
+therefore limit tournament concurrency. It starts only after both players stop;
+the GUI remains responsive during its search. Stopping the tournament also
+cancels adjudication. This policy is optional and should be fixed before play if
+you intend to treat a comparison as a preplanned SPRT experiment.
+
+Interactive CLI examples:
+
+```text
+run_tournament engine1="GWD" engine2="Kingsrow" time_forfeit=loss
+run_tournament engine1="GWD" engine2="Kingsrow" time_forfeit="Scan" adjudication_time=1.0 adjudication_threshold=200
+```
+
+`time_forfeit=loss` selects the normal orchestrator rules, including timeout-draw
+exceptions; it is the default. Otherwise `time_forfeit` is a unique engine name.
+The matching `time_forfeit_id` or `time_forfeit_key` selector can disambiguate
+registrations, using the IDs/keys from `list_engines`; supply only one selector.
+`adjudication_time` is seconds and `adjudication_threshold` is cp. Supplying either
+requires an engine policy. Decimal CLI values use a dot. The policy is configured
+through the same tournament controls and execution used by the GUI.
+
+An adjudicated tournament saves its engine identity, display name, time and
+threshold in version-5 tournament JSON. Older ZGUI versions refuse that format.
+Existing older files retain the orchestrator policy. Loading a file with a
+missing adjudicator displays **Missing engine** and prevents starting those games
+until that registration is restored or the policy is explicitly changed. Changing
+the policy on a paired event uses the existing Apply/Revert settings workflow;
+it does not silently reinterpret completed game records.
+
 ### 7.7 Live SPRT comparison
 
 Expand **SPRT comparison** below the tournament games table. Choose **Candidate**
@@ -1456,12 +1525,17 @@ existing engine checkboxes continue to filter standings. They do not change this
 comparison once pairings exist. Drag the splitter to resize the pane, or collapse
 it to give the space back to the games table.
 
-Use **Test settings...** to set H0/H1 in **logistic Elo** and alpha/beta as
+Use **SPRT settings...** to set H0/H1 in **logistic Elo** and alpha/beta as
 fractions. Defaults are 0 and 5 Elo with alpha=beta=0.05. H0 must be below H1;
 alpha and beta must each be positive and their sum below 1. This is a paired
 **generalized sequential probability ratio test (GSPRT)**, labelled SPRT in the
 interface. It estimates the five outcome probabilities under each Elo hypothesis;
 it does not assume a fixed draw rate. Normalized Elo is not supported in this model.
+
+Alpha is the target risk of supporting H1 when H0 is true; beta is the target
+risk of supporting H0 when H1 is true. For H0=0 and H1=+5 Elo, 0.05/0.05 targets
+5% errors at those hypotheses. Lower rates generally require more evidence.
+They do not mean a 95% probability that the candidate is better.
 
 The left table counts two-game scores from the candidate's perspective:
 
@@ -1481,7 +1555,10 @@ pair per selected opponent. Single legs and Swiss schedules are unavailable for
 this view; an explanation is shown instead of a misleading calculation.
 
 The graph shows the generalized log-likelihood ratio (LLR) and H0/H1 boundaries.
-Positive evidence favours H1; negative evidence favours H0. Pairs enter in
+Hover over a graph point to see its opening-pair number, LLR, estimated logistic Elo difference from the candidate's
+results through that point, and whether it is
+the first crossing. All-win/all-loss samples have an infinite Elo estimate; this
+is an empirical estimate, not an H0/H1 setting or a confidence bound. Positive evidence favours H1; negative evidence favours H0. Pairs enter in
 scheduled opening order. If pair 8 finishes before pair 7, it waits. The view
 replays this sequence and freezes its evidence sample at the **first crossing**.
 The status shows Continue, H0 reached or H1 reached and the deciding pair number.
@@ -1489,7 +1566,7 @@ Complete pairs outside that sample are reported separately; no game results are
 removed. A missing or corrected result causes the view to reconstruct the current
 sample and crossing from the saved effective results.
 
-**Auto-stop is off.** This display never stops a tournament. A fixed match can
+**Display only; games continue.** This display never stops a tournament. A fixed match can
 continue after crossing, and an external runner can query `sprt=true` and issue
 `stop_tournament` using the same calculation.
 

@@ -2535,6 +2535,8 @@ begin
     Result := CheckEngineCanStart(ASetup.WhiteEngine, ACaption);
   if Result and (ASetup.BlackPlayer = pkRegistered) and (ASetup.BlackEngine <> nil) then
     Result := CheckEngineCanStart(ASetup.BlackEngine, ACaption);
+  if Result and (ASetup.TimeForfeitEngine<>nil) then
+    Result:=CheckEngineCanStart(ASetup.TimeForfeitEngine,ACaption);
 end;
 
 procedure TMainForm.AnalyzerSnapshot(Sender: TObject; ASnapshot: TPvSnapshot);
@@ -5710,6 +5712,7 @@ begin
     LReservationKeys.Duplicates := dupIgnore;
     AddEngineReservationKeys(ASetup.WhiteEngine, LReservationKeys);
     AddEngineReservationKeys(ASetup.BlackEngine, LReservationKeys);
+    AddEngineReservationKeys(ASetup.TimeForfeitEngine,LReservationKeys);
     if LWhiteEngineKey <> '' then
       LReservationKeys.Add(LWhiteEngineKey);
     if LBlackEngineKey <> '' then
@@ -6317,6 +6320,7 @@ begin
     LGame.AssignSetupTo(LSetup);
     AddEngineReservationKeys(LSetup.WhiteEngine, LReplayKeys);
     AddEngineReservationKeys(LSetup.BlackEngine, LReplayKeys);
+    AddEngineReservationKeys(LSetup.TimeForfeitEngine,LReplayKeys);
     if EngineIdentityKey(LSetup.WhiteEngine) <> '' then
       LReplayKeys.Add(EngineIdentityKey(LSetup.WhiteEngine));
     if EngineIdentityKey(LSetup.BlackEngine) <> '' then
@@ -6337,6 +6341,7 @@ begin
   finally
     LSetup.WhiteEngine.Free;
     LSetup.BlackEngine.Free;
+    LSetup.TimeForfeitEngine.Free;
     LReplayKeys.Free;
     BusyKeys.Free;
   end;

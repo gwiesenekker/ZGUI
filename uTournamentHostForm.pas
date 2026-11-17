@@ -22,7 +22,7 @@ type
     FSerial:PtrInt;
     FSelectionCounter:Int64;
     FSelectedId:PtrInt;
-    FBusy,FDisposing,FLayoutQueued,FPreparingAll:Boolean;
+    FBusy,FDisposing,FLayoutQueued,FPreparingAll,FMeasuringLayout:Boolean;
     FDefaultVariant:TGameVariant;
     FTabUpdateDepth:Integer;
     FLayoutDirty:Boolean;
@@ -32,6 +32,7 @@ type
     procedure EndTabUpdate;
     procedure RefreshActiveLayout;
     procedure MeasureTab(Tab:TTournamentTab);
+    procedure ChildMinimumChanged(Sender:TObject);
   private
     FPlans:array of TTournamentClosePlan;
     FOnStartGame:TTournamentStartGameEvent;
@@ -154,6 +155,9 @@ begin
   Result.OnStartGame:=FOnStartGame;Result.OnSelectGame:=FOnSelectGame;
   Result.OnContextRequested:=@ContextRequested;Result.OnTargets:=@CheckTargets;
   Result.OnTitleChanged:=@TitleChanged;Result.OnCloseQuery:=@ChildCloseQuery;
+  // Wrapping can settle after embedding/font propagation. Reuse the queued
+  // host measurement when the child's measured minimum grows its bounds.
+  Result.OnLayoutMinimumChanged:=@ChildMinimumChanged;
   Result.FreeNotification(Self);
 end;
 procedure TTournamentHostForm.Embed(Tab:TTournamentTab;Dialog:TTournamentDialog);
@@ -298,9 +302,21 @@ begin
   Tab:=ActiveTab;if (Tab=nil) or (Tab.Dialog=nil) then Exit;
   MeasureTab(Tab);
 end;
-procedure TTournamentHostForm.MeasureTab(Tab:TTournamentTab);
-var ChromeWidth,ChromeHeight:Integer;
+procedure TTournamentHostForm.ChildMinimumChanged(Sender:TObject);
+var Tab:TTournamentTab;
 begin
+  if FDisposing then Exit;
+  Tab:=ActiveTab;
+  if Visible and not FMeasuringLayout and (FTabUpdateDepth=0) and
+    (Tab<>nil) and (Tab.Dialog=Sender) then RefreshActiveLayout
+  else PageChanged(Sender);
+end;
+procedure TTournamentHostForm.MeasureTab(Tab:TTournamentTab);
+var ChromeWidth,ChromeHeight,PageWidth,PageHeight,PageInsetWidth,PageInsetHeight:Integer;
+begin
+  if FMeasuringLayout then Exit;
+  FMeasuringLayout:=True;
+  try
   // Native page client bounds are not final until the host is shown.
   // Never grow a hidden top-level window from those provisional bounds.
   if not Visible then begin Tab.Dialog.RefreshLayout;Exit;end;
@@ -308,19 +324,29 @@ begin
   if (FPages.ClientWidth<=0) or (FPages.ClientHeight<=0) then Exit;
   // An inactive/hidden page can still have zero bounds. The notebook's client
   // area describes real page space; zero page bounds are not window chrome.
+  PageWidth:=FPages.ClientWidth;PageHeight:=FPages.ClientHeight;
+  // A realized active page measures the native tab strip/border as well as
+  // notebook chrome. A new hidden page can still have provisional zero bounds.
+  if FPages.ActivePage<>nil then begin
+    if FPages.ActivePage.ClientWidth>1 then PageWidth:=FPages.ActivePage.ClientWidth;
+    if FPages.ActivePage.ClientHeight>1 then PageHeight:=FPages.ActivePage.ClientHeight;
+  end;
+  PageInsetWidth:=Max(0,FPages.ClientWidth-PageWidth);
+  PageInsetHeight:=Max(0,FPages.ClientHeight-PageHeight);
   Tab.Page.BoundsRect:=FPages.ClientRect;
-  Tab.Dialog.SetBounds(0,0,FPages.ClientWidth,FPages.ClientHeight);
+  Tab.Dialog.SetBounds(0,0,PageWidth,PageHeight);
   Tab.Dialog.HandleNeeded;
   Tab.Dialog.RefreshLayout;
   DefaultControl:=nil;ActiveDefaultControl:=nil;CancelControl:=nil;
-  ChromeWidth:=Max(0,Width-FPages.ClientWidth);
-  ChromeHeight:=Max(0,Height-FPages.ClientHeight);
+  ChromeWidth:=Max(0,Width-PageWidth);
+  ChromeHeight:=Max(0,Height-PageHeight);
   Constraints.MinWidth:=Tab.Dialog.Constraints.MinWidth+ChromeWidth;
   Constraints.MinHeight:=Tab.Dialog.Constraints.MinHeight+ChromeHeight;
   Width:=Max(Width,Constraints.MinWidth);Height:=Max(Height,Constraints.MinHeight);
   Tab.Page.BoundsRect:=FPages.ClientRect;
-  Tab.Dialog.SetBounds(0,0,FPages.ClientWidth,FPages.ClientHeight);
+  Tab.Dialog.SetBounds(0,0,Max(1,FPages.ClientWidth-PageInsetWidth),Max(1,FPages.ClientHeight-PageInsetHeight));
   FLayoutDirty:=False;
+  finally FMeasuringLayout:=False;end;
 end;
 procedure TTournamentHostForm.FontChanged(Sender:TObject);
 var I:Integer;

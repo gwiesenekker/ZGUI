@@ -24,7 +24,7 @@ type
   end;
 function CliError(const Code,MessageText:string;const Command:string=''):string;
 implementation
-uses Forms,Math,uCliCommand,uCliDefinitions,uCliBinder,uCliTokenizer,uEngineRegistry,
+uses uTimeForfeit,Forms,Math,uCliCommand,uCliDefinitions,uCliBinder,uCliTokenizer,uEngineRegistry,
  uGamePosition,uGameGuiProfile,LazFileUtils;
 type ECliRequest=class(Exception)
   Code:string;
@@ -113,7 +113,8 @@ begin
    TokenizeCommand(Line,Tokens);if Tokens.Count=0 then Fail('BAD_ARGUMENT','Empty command');
    Name:=LowerCase(Tokens[0]);Spec:=TCommandDefinition.Create(Name);
    if Name='run_tournament' then AddParams(['engine1','engine2','engine1_id','engine2_id','engine1_key','engine2_key',
-      'name','ballot','time','moves','increment','concurrent','allow_shared_executable'])
+      'name','ballot','time','moves','increment','concurrent','allow_shared_executable',
+      'time_forfeit','time_forfeit_id','time_forfeit_key','adjudication_time','adjudication_threshold'])
    else if (Name='query_tournament') or (Name='stop_tournament') then begin
      Spec.Arguments.Add(TParameterDefinition.Create('id',True));
      if Name='query_tournament' then AddParams(['pairs','sprt']);
@@ -175,6 +176,23 @@ begin
      Settings.HasMoves:=Cmd.HasArgument('moves');if Settings.HasMoves then Settings.Moves:=IntegerValue('moves');
      Settings.HasIncrement:=Cmd.HasArgument('increment');if Settings.HasIncrement then Settings.Increment:=Number('increment');
      Settings.HasConcurrency:=Cmd.HasArgument('concurrent');if Settings.HasConcurrency then Settings.Concurrency:=IntegerValue('concurrent');
+     Settings.TimeForfeit:=DefaultTimeForfeit;
+     Settings.HasTimeForfeit:=Cmd.HasArgument('time_forfeit') or Cmd.HasArgument('time_forfeit_id') or Cmd.HasArgument('time_forfeit_key') or Cmd.HasArgument('adjudication_time') or Cmd.HasArgument('adjudication_threshold');
+     if Cmd.HasArgument('time_forfeit') or Cmd.HasArgument('time_forfeit_id') or Cmd.HasArgument('time_forfeit_key') then begin
+       if SameText(Cmd.Argument('time_forfeit'),'loss') and (Cmd.HasArgument('time_forfeit_id') or Cmd.HasArgument('time_forfeit_key')) then
+         Fail('BAD_ARGUMENT','Supply one time-forfeit selector');
+       if not SameText(Cmd.Argument('time_forfeit'),'loss') then begin
+         A:=Resolve('time_forfeit');
+         if (A.Kind=eekDxp) or ((A.Kind=eekUci)<>(V=GameVariantById('chess'))) then
+           Fail('GAME_MISMATCH','Time-forfeit adjudicator must support Hub for draughts or UCI for chess');
+         Settings.TimeForfeit.EngineKey:=EngineIdentityKey(A);Settings.TimeForfeit.EngineName:=A.IdText;
+       end;
+     end;
+     if Cmd.HasArgument('adjudication_time') then Settings.TimeForfeit.Seconds:=Number('adjudication_time');
+     if Cmd.HasArgument('adjudication_threshold') then Settings.TimeForfeit.ThresholdCp:=Number('adjudication_threshold');
+     if ((Cmd.HasArgument('adjudication_time') or Cmd.HasArgument('adjudication_threshold')) and
+       (Settings.TimeForfeit.EngineKey='')) then Fail('BAD_ARGUMENT','Adjudication settings require time_forfeit=engine-name');
+     try ValidateTimeForfeit(Settings.TimeForfeit);except on E:Exception do Fail('BAD_ARGUMENT',E.Message);end;
      AllowShared:=False;if Cmd.HasArgument('allow_shared_executable') then begin
        Msg:=LowerCase(Cmd['allow_shared_executable']);if (Msg<>'true') and (Msg<>'false') then Fail('BAD_ARGUMENT','allow_shared_executable requires true or false');
        AllowShared:=Msg='true';

@@ -8,7 +8,7 @@ function TournamentPdnTag(const AName, AValue: string): string;
 function UnusedTournamentPdnPath(const ACandidate: string; AFormat:TGameFileFormat=gffPdn): string;
 function TournamentPdnMatchesId(const AFileName, AId: string; AFormat:TGameFileFormat=gffPdn): Boolean;
 implementation
-uses uSprt, Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uDraughtsPdn, uChessPgn, Math;
+uses uTimeForfeit,uSprt, Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uDraughtsPdn, uChessPgn, Math;
 
 function TournamentDocumentText(AData: TJSONData): string;
 var
@@ -204,11 +204,11 @@ var
   Seen: TStringList;
   PairingKey: string;
 begin
-  ReadSprtConfig(Data.Find('sprt_view'));
+  ReadSprtConfig(Data.Find('sprt_view'));ReadTimeForfeit(Data.Find('time_forfeit'));
   CheckInteger(Data, 'storage_version', 1);
-  if Data.Get('storage_version', 1) > 4 then
+  if Data.Get('storage_version', 1) > 5 then
     raise EConvertError.Create('Unsupported tournament storage version');
-  if Data.Get('storage_version',1)=4 then begin
+  if Data.Get('storage_version',1)>=4 then begin
     CheckField(Data,'game_variant',[jtString]);CheckField(Data,'notation_format',[jtString]);
     CheckField(Data,'force_ponder_off',[jtBoolean]);
     if ((AFormat=gffPgn) and ((Data.Get('game_variant','')<>'chess') or
@@ -216,6 +216,7 @@ begin
       ((AFormat=gffPdn) and ((Data.Get('game_variant','')<>'draughts') or
       (Data.Get('notation_format','')<>'pdn') or Data.Get('force_ponder_off',True))) then
       raise EConvertError.Create('Unsupported tournament variant, format or ponder policy');
+    if (Data.Get('storage_version',1)=4) or (Data.Find('opening_ballot')<>nil) then begin
     CheckField(Data,'opening_ballot',[jtObject]);
     Ballot:=TJSONObject(Data.Find('opening_ballot'));
     if Ballot=nil then raise EConvertError.Create('Opening ballot is missing');
@@ -227,6 +228,7 @@ begin
         raise EConvertError.Create('Invalid opening ballot position');
     if Data.Get('pairing_type','')<>TournamentTypeDoubleRoundRobin then
       raise EConvertError.Create('Opening ballots require double round-robin');
+    end;
   end else if Data.Get('storage_version',1)=3 then begin
     CheckField(Data,'game_variant',[jtString]);CheckField(Data,'notation_format',[jtString]);
     CheckField(Data,'force_ponder_off',[jtBoolean]);
@@ -238,6 +240,11 @@ begin
     if (Data.Find('game_variant')<>nil) or (Data.Find('notation_format')<>nil) or
       (Data.Find('force_ponder_off')<>nil) then raise EConvertError.Create('Unexpected tournament format metadata');
   end;
+  if Data.Get('storage_version',1)=5 then begin
+    if (Data.Find('time_forfeit')=nil) or (ReadTimeForfeit(Data.Find('time_forfeit')).EngineKey='') then
+      raise EConvertError.Create('Version 5 requires an adjudicator time-forfeit policy');
+  end else if Data.Find('time_forfeit')<>nil then
+    raise EConvertError.Create('Time-forfeit adjudication requires tournament storage version 5');
   if (Data.Get('storage_version',1)<4) and (Data.Find('opening_ballot')<>nil) then
     raise EConvertError.Create('Opening ballots require tournament storage version 4');
   if (Data.Find('tournament_id') <> nil) and
@@ -307,14 +314,14 @@ begin
       ValidateRecord(TJSONObject(Game.Find('record')), True,AFormat)
     else if Data.Get('storage_version', 1) >= 2 then
       raise EConvertError.Create('Tournament game record is missing');
-    if Data.Get('storage_version',1)=4 then begin
+    if Data.Find('opening_ballot')<>nil then begin
       RecordData:=TJSONObject(Game.Find('record'));
       if Trim(RecordData.Get('starting_fen',''))='' then
         raise EConvertError.Create('Opening ballot game position is missing');
     end;
     CheckInteger(Game, 'game', 1);
     CheckInteger(Game, 'round', 1);
-    if Data.Get('storage_version',1)=4 then begin
+    if Data.Find('opening_ballot')<>nil then begin
       if Game.Get('round',1)>Positions.Count then
         raise EConvertError.Create('Opening ballot game index is out of range');
       if RecordData.Get('starting_fen','')<>Positions.Strings[Game.Get('round',1)-1] then

@@ -439,6 +439,14 @@ begin
  end;
 end;
 
+function LargeFontTab:TTournamentDialog;
+begin
+  Host.Font.Size:=18;Result:=Host.NewTournament(Chess);CheckTabReady(Host,Result);Pump;
+  Check(Result.Font.Size=18,'New tab inherits the host font');
+  Check((Result.Parent.ClientWidth>=Result.Constraints.MinWidth) and
+    (Result.Parent.ClientHeight>=Result.Constraints.MinHeight),Format('Host accommodates measured child minimums: page %dx%d, minimum %dx%d',[Result.Parent.ClientWidth,Result.Parent.ClientHeight,Result.Constraints.MinWidth,Result.Constraints.MinHeight]));
+end;
+
 procedure DiscardAll;
 begin
  GuiTestConfirmationResult:=mrNo;
@@ -463,7 +471,7 @@ begin
   Main:=TMainForm.Create(nil);Main.Show;Pump;
   Button(Main,'Tournament...').Click;Host:=Main.TournamentHost;Check(Host.Count=1,'First open creates one tab');
   if ParamStr(1)='--presentation-only' then begin
-   CheckHiddenHost;CheckRevealOrder;CheckSwitchPaintOrder;DiscardAll;
+   CheckHiddenHost;CheckRevealOrder;CheckSwitchPaintOrder;DiscardAll;D:=LargeFontTab;DiscardAll;Host.Font.Size:=10;
   end else if ParamStr(1)='--controls-only' then begin
     Starts.Original:=Host.OnStartGame;RegisterEngines(True);
     CheckRefereeStop(Chess);CheckRefereeStop(Draughts);DiscardAll;
@@ -582,10 +590,7 @@ begin
   try Check(Data.Get('tournament_id','')=D.TournamentIdentity,'Existing autosaved state remains readable after failed Save As');
   finally Data.Free;end;
   DiscardAll;
-  Host.Font.Size:=18;D:=Host.NewTournament(Chess);CheckTabReady(Host,D);Pump;
-  Check(D.Font.Size=18,'New tab inherits the host font');
-  Check((D.Parent.ClientWidth>=D.Constraints.MinWidth) and
-    (D.Parent.ClientHeight>=D.Constraints.MinHeight),'Host accommodates measured child minimums');
+  D:=LargeFontTab;
   Other:=Host.NewTournament(Draughts);Pump;
   Check(Host.ShowForVariant(Chess)=D,'Reopening main game selects its last-used tab');
   D.Close;Pump;

@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." >/dev/null && pwd -P)"
 OUT_DIR="${TMPDIR:-/tmp}/gwdgui-regression-checks"
 export GWDGUI_ROOT="$ROOT_DIR"
 CHECKS=(
+  time_forfeit_protocol_check.pas
+  time_forfeit_check.pas
   sprt_check.pas
   interactive_command_check.pas
   startup_command_check.pas

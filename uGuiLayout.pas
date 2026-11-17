@@ -27,6 +27,7 @@ type
   private
     FLayoutReady, FMeasuring,FLayoutQueued,FContentDirty: Boolean;
     FBaseMinWidth,FBaseMinHeight:Integer;
+    FOnLayoutMinimumChanged:TNotifyEvent;
     procedure AsyncLayout(Data:PtrInt);
     procedure RequestLayout(ContentChanged:Boolean);
   protected
@@ -41,6 +42,7 @@ type
     procedure EnableAutoLayout;
     procedure InvalidateLayout;
     procedure RefreshLayout; virtual;
+    property OnLayoutMinimumChanged:TNotifyEvent read FOnLayoutMinimumChanged write FOnLayoutMinimumChanged;
   end;
 
 function LayoutRow(AParent:TWinControl;const AControls:array of TControl;
@@ -321,13 +323,17 @@ begin
 end;
 
 procedure TGuiLayoutForm.RefreshMinimum;
+var OldWidth,OldHeight:Integer;
 begin
+  OldWidth:=Constraints.MinWidth;OldHeight:=Constraints.MinHeight;
   Constraints.MinWidth:=Max(FBaseMinWidth,MinimumWidth(Self)+Width-ClientWidth);
   Constraints.MinHeight:=Max(FBaseMinHeight,MinimumHeight(Self)+Height-ClientHeight);
   // A new constraint alone does not grow an already shown GTK/Windows form.
   // Wrapping can increase the minimum after a user narrows the window.
   if Width<Constraints.MinWidth then Width:=Constraints.MinWidth;
   if Height<Constraints.MinHeight then Height:=Constraints.MinHeight;
+  if ((OldWidth<>Constraints.MinWidth) or (OldHeight<>Constraints.MinHeight)) and
+    Assigned(FOnLayoutMinimumChanged) then FOnLayoutMinimumChanged(Self);
 end;
 
 procedure TGuiLayoutForm.RefreshLayout;
