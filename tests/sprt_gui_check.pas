@@ -25,7 +25,7 @@ begin
  finally L.Free;end;
 end;
 procedure VariantCheck(V:TGameVariant);
-var D:TTournamentDialog;P:TSprtPanel;C,Old:TSprtConfig;Defs:TExternalEngineList;G:TStringGrid;
+var D,Loaded:TTournamentDialog;P,LoadedPanel:TSprtPanel;C,Old:TSprtConfig;Defs:TExternalEngineList;G:TStringGrid;
  S:TGameSetup;MessageText,Name,Before,GamesText,Identity:string;
  Lines,Ballot:TStringList;J,Doc:TJSONObject;I,AIndex,BIndex,FontSize:Integer;Failed:Boolean;Graph:TSprtGraph;Preview:TSprtReport;Y,PointIndex:Integer;Image:TBitmap;Png:TPortableNetworkGraphic;
  procedure WinRow(Row:Integer);
@@ -104,7 +104,17 @@ begin
   Check(not P.Expanded and (P.Height<80),'Collapsed pane remains compact after font changes');
   Name:=Directory+'/'+GameVariantId(V)+'.json';D.SaveTournamentToFile(Name);Identity:=D.TournamentIdentity;
   Lines.LoadFromFile(Name);Before:=Lines.Text;
-  D.ResetForVariant(V);D.LoadTournamentFromFile(Name);Query;
+  Loaded:=TTournamentDialog.Create(nil,V);
+  try
+   Loaded.Show;Application.ProcessMessages;Loaded.LoadTournamentFromFile(Name);
+   LoadedPanel:=TSprtPanel(Loaded.FindComponent('TournamentSprt'));
+   Check((LoadedPanel.Report.Decision='h0') and (LoadedPanel.Report.DecisionPair=2),'Fresh load updates visible comparison without a query');
+   TButton(LoadedPanel.FindComponent('SprtToggle')).Click;
+   Check((LoadedPanel.Config.CandidateKey=P.Config.CandidateKey) and (LoadedPanel.Report.Included=2),'Opening loaded pane shows restored selection and evidence immediately');
+  finally Loaded.Free;end;
+  D.ResetForVariant(V);Check(P.Report.Total=0,'Reset clears the previous visible evidence');
+  D.LoadTournamentFromFile(Name);
+  Check((P.Report.Decision='h0') and (P.Report.DecisionPair=2),'Reload refreshes visible report before query');Query;
   Check((D.TournamentIdentity=Identity) and (J.Get('decision','')='h0') and (J.Get('decision_pair',0)=2),'Save/load replays same configured decision');
   Lines.LoadFromFile(Name);Check(Lines.Text=Before,'Reading SPRT leaves saved file unchanged');
   Doc:=TJSONObject(GetJSON(Before));try TJSONObject(Doc.Find('sprt_view')).Floats['alpha']:=0;Lines.Text:=Doc.AsJSON;Lines.SaveToFile(Name);finally Doc.Free;end;
@@ -113,12 +123,40 @@ begin
   Lines.Text:=Before;Lines.SaveToFile(Name);
  finally J.Free;D.Free;Defs.Free;Lines.Free;Ballot.Free;end;
 end;
+procedure LegacyLoadCheck(V:TGameVariant);
+var D,Loaded:TTournamentDialog;Defs:TExternalEngineList;Settings:TTournamentMatchSettings;
+ P:TSprtPanel;G:TStringGrid;Lines:TStringList;Doc:TJSONObject;Base,I:Integer;MessageText,FileName,Before:string;
+begin
+ D:=TTournamentDialog.Create(nil,V);Loaded:=nil;Defs:=TExternalEngineList.Create;Lines:=TStringList.Create;
+ try
+  LoadExternalEngines(EnginesJsonFileName,Defs);if V=Chess then Base:=0 else Base:=3;
+  Settings:=Default(TTournamentMatchSettings);Settings.Engine1Key:=EngineIdentityKey(Defs[Base]);Settings.Engine2Key:=EngineIdentityKey(Defs[Base+1]);
+  D.ConfigureNewTournament(Settings);Check(D.CreatePairing(MessageText,True),'Existing two-engine pairing');
+  G:=TStringGrid(D.FindComponent('TournamentPairings'));
+  for I:=1 to 2 do begin G.Row:=I;D.SetSelectedResult(V.ResultText(goDraw));end;
+  FileName:=Directory+'/'+GameVariantId(V)+'-legacy.json';D.SaveTournamentToFile(FileName);Lines.LoadFromFile(FileName);Before:=Lines.Text;
+  Doc:=TJSONObject(GetJSON(Before));try Check(Doc.Find('sprt_view')=nil,'Legacy fixture has no saved SPRT design');finally Doc.Free;end;
+  Loaded:=TTournamentDialog.Create(nil,V);Loaded.Show;Application.ProcessMessages;
+  P:=TSprtPanel(Loaded.FindComponent('TournamentSprt'));
+  for I:=1 to 2 do begin
+   Loaded.LoadTournamentFromFile(FileName);
+   Check((P.Config.CandidateKey<>'') and (P.Config.BaselineKey<>''),'Initial/repeated legacy load initializes underlying engine keys');
+   Check((TComboBox(P.FindComponent('SprtCandidate')).ItemIndex>=0) and
+    (TComboBox(P.FindComponent('SprtBaseline')).ItemIndex>=0),'Displayed selections match underlying legacy design');
+   Check((P.Report.Total=1) and (P.Report.Included=1) and (P.Report.Counts[2]=1),'Initial/repeated legacy load immediately shows paired draw evidence');
+   Application.ProcessMessages;
+   Check(not P.Config.Stored and not P.Config.BeforePlay,'Automatic legacy selection stays exploratory after native events');
+  end;
+  Lines.LoadFromFile(FileName);Check(Lines.Text=Before,'Legacy display refresh does not write SPRT metadata');
+ finally Loaded.Free;D.Free;Defs.Free;Lines.Free;end;
+end;
+
 begin
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
  RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
  Directory:=GetTempDir+'zgui-sprt-gui-'+IntToStr(GetProcessID);ForceDirectories(Directory);RegisterEngines;
  try
-  VariantCheck(Chess);VariantCheck(Draughts);WriteLn('SPRT GUI checks passed: ',Checks);
+  VariantCheck(Chess);VariantCheck(Draughts);LegacyLoadCheck(Chess);LegacyLoadCheck(Draughts);WriteLn('SPRT GUI checks passed: ',Checks);
  finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;end;
 end.

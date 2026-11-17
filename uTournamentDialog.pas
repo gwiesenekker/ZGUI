@@ -910,7 +910,7 @@ begin
     FLoadingTournament:=False;
     FCrossTableGrid.EndUpdate;FGrid.EndUpdate;EnableAlign;
   end;
-  RefreshLayout;UpdateButtons;
+  RefreshSprt;RefreshLayout;UpdateButtons;
   if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);
 end;
 
@@ -2528,7 +2528,7 @@ begin
     FLoadingTournament := False;
     Data.Free;OldLocks.Free;
   end;
-  AutoSaveTournament;UpdateButtons;
+  RefreshSprt;AutoSaveTournament;UpdateButtons;
   if Assigned(FOnTitleChanged) then FOnTitleChanged(Self);
 end;
 

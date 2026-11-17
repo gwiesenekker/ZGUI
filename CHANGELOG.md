@@ -4,6 +4,26 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Refresh SPRT comparison immediately after loading — 2026-11-17
+
+Commit: pending.
+
+- Correct the loaded-pane QA finding within the live-SPRT scope already
+  authorized with “Implement now; waive prior review”. Work notes:
+  chatgpt/SPRT_LOAD_REFRESH_NOTES.md.
+- Refresh the comparison after the load/reset guard is released. Previously,
+  loading updated the controls while retaining the earlier unavailable report;
+  a later CLI query or selection change happened to refresh it.
+- Reconcile underlying keys and displayed selections even when the participant
+  list is unchanged. Repeated loads of older two-engine events without SPRT
+  metadata initialize exploratory defaults instead of retaining empty keys.
+- Add both-game checks for fresh stored-design loads, immediate pane opening,
+  reset/reload, repeated legacy loads, exploratory provenance and unchanged
+  source files, without queries masking the display refresh.
+- Validation: GTK2 build, all 27 GUI suites (118 focused live-SPRT assertions),
+  full regression and both tournament suites pass. Native Windows execution
+  remains outstanding.
+
 ### Open saved tournament games in Game History — 2026-11-17
 
 Commit: `44e1607`.

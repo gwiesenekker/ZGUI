@@ -213,10 +213,11 @@ begin
 end;
 procedure TSprtPanel.SetParticipants(Names,Keys:TStrings);
 begin
- if (FKeys.Text=Keys.Text) and (FCandidate.Items.Text=Names.Text) then Exit;
  FUpdating:=True;
  try
-  FKeys.Assign(Keys);FCandidate.Items.Assign(Names);FBaseline.Items.Assign(Names);
+  if (FKeys.Text<>Keys.Text) or (FCandidate.Items.Text<>Names.Text) then begin
+   FKeys.Assign(Keys);FCandidate.Items.Assign(Names);FBaseline.Items.Assign(Names);
+  end;
   if (Keys.Count=2) and (FConfig.CandidateKey='') and (FConfig.BaselineKey='') then begin
    FConfig.CandidateKey:=Keys[0];FConfig.BaselineKey:=Keys[1];
   end;
