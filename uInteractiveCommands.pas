@@ -113,7 +113,7 @@ begin
    TokenizeCommand(Line,Tokens);if Tokens.Count=0 then Fail('BAD_ARGUMENT','Empty command');
    Name:=LowerCase(Tokens[0]);Spec:=TCommandDefinition.Create(Name);
    if Name='run_tournament' then AddParams(['engine1','engine2','engine1_id','engine2_id','engine1_key','engine2_key',
-      'name','ballot','time','moves','increment','concurrent','allow_shared_executable',
+      'name','ballot','shuffle_opening_pairs','time','moves','increment','concurrent','allow_shared_executable',
       'time_forfeit','time_forfeit_id','time_forfeit_key','adjudication_time','adjudication_threshold'])
    else if (Name='query_tournament') or (Name='stop_tournament') then begin
      Spec.Arguments.Add(TParameterDefinition.Create('id',True));
@@ -172,6 +172,12 @@ begin
        Fail('BAD_ARGUMENT','ballot requires a nonempty filename');
      if (Settings.Ballot<>'') and not FilenameIsAbsolute(Settings.Ballot) then
        Settings.Ballot:=ExpandFileName(IncludeTrailingPathDelimiter(FBaseDirectory)+Settings.Ballot);
+     if Cmd.HasArgument('shuffle_opening_pairs') then begin
+       Msg:=LowerCase(Cmd['shuffle_opening_pairs']);
+       if (Msg<>'true') and (Msg<>'false') then Fail('BAD_ARGUMENT','shuffle_opening_pairs requires true or false');
+       Settings.ShuffleOpeningPairs:=Msg='true';
+       if Settings.ShuffleOpeningPairs and (Settings.Ballot='') then Fail('BAD_ARGUMENT','shuffle_opening_pairs=true requires a ballot');
+     end;
      Settings.HasTime:=Cmd.HasArgument('time');if Settings.HasTime then Settings.Seconds:=Number('time');
      Settings.HasMoves:=Cmd.HasArgument('moves');if Settings.HasMoves then Settings.Moves:=IntegerValue('moves');
      Settings.HasIncrement:=Cmd.HasArgument('increment');if Settings.HasIncrement then Settings.Increment:=Number('increment');

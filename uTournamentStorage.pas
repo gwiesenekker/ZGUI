@@ -221,6 +221,7 @@ begin
     Ballot:=TJSONObject(Data.Find('opening_ballot'));
     if Ballot=nil then raise EConvertError.Create('Opening ballot is missing');
     CheckField(Ballot,'file_name',[jtString]);CheckField(Ballot,'positions',[jtArray]);
+    CheckField(Ballot,'shuffle_opening_pairs',[jtBoolean]);
     Positions:=TJSONArray(Ballot.Find('positions'));
     if (Positions=nil) or (Positions.Count=0) then raise EConvertError.Create('Opening ballot has no positions');
     for I:=0 to Positions.Count-1 do

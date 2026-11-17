@@ -229,7 +229,7 @@ begin
  try
   FenFile:=Directory+'/'+GameVariantId(V)+'.fen';
   for I:=1 to 13 do Fens.Add(V.DefaultStartingFEN);Fens.SaveToFile(FenFile);
-  Args:='engine1="'+A+'" engine2="'+B+'" ballot="'+FenFile+'" time=600 moves=75 increment=0.25 concurrent=1';
+  Args:='engine1="'+A+'" engine2="'+B+'" ballot="'+FenFile+'" shuffle_opening_pairs=true time=600 moves=75 increment=0.25 concurrent=1';
   Count:=Main.TournamentHost.Count;
   if V=Chess then begin
    Before:=RecoveryFiles;
@@ -241,6 +241,7 @@ begin
   J:=Response('run_tournament '+Args+' allow_shared_executable=true','OK');
   try Id:=J.Get('tournament',0);Check(J.Get('games_total',0)=26,'Ballot expands to 26 ordinary games');Check(J.Get('pairs_total',0)=13,'Duplicate FENs remain separate opening pairs');finally J.Free;end;
   D:=Main.TournamentHost.Dialogs[Main.TournamentHost.Count-1];
+  Check(TCheckBox(D.FindComponent('TournamentShuffleOpeningPairs')).Checked,'CLI shuffle uses shared GUI setting');
   Check(D.GameSetupForRow(1,Setup),'Shared game setup available');
   Check((Setup.TimeControl.MovesPerPeriod=75) and (Abs(Setup.TimeControl.MinutesPerPeriod-10)<0.00001) and
     (Abs(Setup.TimeControl.IncrementSeconds-0.25)<0.00001),'Typed settings use existing clock validator and locale conversion');
@@ -417,6 +418,9 @@ begin
    Error('run_tournament engine1_id=1 engine2_id=1','BAD_ARGUMENT');
    Error('run_tournament engine1_id=1 engine2_id=2 time=nan','BAD_ARGUMENT');
    Error('run_tournament engine1_id=1 engine2_id=2 ballot=','BAD_ARGUMENT');
+   Error('run_tournament engine1_id=1 engine2_id=2 shuffle_opening_pairs=maybe','BAD_ARGUMENT');
+   Error('run_tournament engine1_id=1 engine2_id=2 shuffle_opening_pairs=','BAD_ARGUMENT');
+   Error('run_tournament engine1_id=1 engine2_id=2 shuffle_opening_pairs=true','BAD_ARGUMENT');
    Error('run_tournament engine1_id=1 engine2_id=2 time=0','CONFIGURE');
    Error('run_tournament engine1_id=1 engine2_id=2 concurrent=0','CONFIGURE');
    Error('query_tournament id=999','UNKNOWN_TOURNAMENT');

@@ -3,6 +3,7 @@ unit uTournamentBallot;
 interface
 uses Classes,uGamePosition;
 function NormalizeBallotFEN(Variant:TGameVariant;const Text:string):string;
+procedure ShuffleOpeningPairs(Positions:TStrings);
 procedure LoadOpeningBallot(const FileName:string;Variant:TGameVariant;Positions:TStrings);
 implementation
 uses SysUtils;
@@ -12,6 +13,14 @@ begin
   if Trim(Text)='' then raise EConvertError.Create('Empty opening position');
   P:=Variant.CreatePosition;
   try P.LoadFromFEN(Trim(Text));Result:=P.ToFEN;finally P.Free;end;
+end;
+procedure ShuffleOpeningPairs(Positions:TStrings);
+var I,J:Integer;
+begin
+  // Shuffle entries, never the individual colour-reversed game rows.
+  for I:=Positions.Count-1 downto 1 do begin
+    J:=Random(I+1);Positions.Exchange(I,J);
+  end;
 end;
 procedure LoadOpeningBallot(const FileName:string;Variant:TGameVariant;Positions:TStrings);
 var Lines,Validated:TStringList;I:Integer;Line:string;

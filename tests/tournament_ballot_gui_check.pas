@@ -3,7 +3,7 @@ program tournament_ballot_gui_check;
 uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
  StdCtrls,Grids,CheckLst,ExtCtrls,FPJSON,JSONParser,uTournamentDialog,uTournamentStorage,
  uTournamentGridModel,uTournamentBallot,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
- uEngineRegistry,uGuiDialogs,uGameSetupTypes,uGameFileReader,uGameTreePdn;
+ uEngineRegistry,uGuiDialogs,uGameSetupTypes,uGameFileReader,uGameTreePdn,uSprtPanel,uSprt;
 type TStartProbe=class
   Positions:TStringList;
   procedure Start(Sender:TObject;const Setup:TGameSetup;const Title:string;out Game:TObject);
@@ -134,6 +134,70 @@ begin
   Check(TLabel(Loaded.FindComponent('TournamentBallotCount')).Caption='','Switching games clears game-specific ballot state');
  finally Loaded.Free;D.Free;P.Free;Fens.Free;Exported.Free;Probe.Positions.Free;Probe.Free;end;
 end;
+procedure ShuffledVariant(V:TGameVariant);
+var D,Loaded:TTournamentDialog;Source,Order:TStringList;P:TGamePosition;B:TCheckBox;
+ Grid:TStringGrid;Defs:TExternalEngineList;S:TGameSetup;C:TSprtConfig;I,Index:Integer;
+ FileName,Snapshot,Before,MessageText:string;Data,Report:TJSONObject;Positions:TJSONArray;Failed:Boolean;
+begin
+ D:=TTournamentDialog.Create(nil,V);Loaded:=nil;Source:=TStringList.Create;Order:=TStringList.Create;
+ P:=V.CreatePosition;Defs:=TExternalEngineList.Create;
+ FileName:=Directory+'/'+GameVariantId(V)+'-shuffle.fen';Snapshot:=ChangeFileExt(FileName,'.json');
+ try
+  B:=TCheckBox(D.FindComponent('TournamentShuffleOpeningPairs'));
+  Check((B<>nil) and not B.Checked and not B.Enabled,'Shuffling defaults off and requires a ballot');
+  for I:=1 to 8 do begin P.PlayMove(P.LegalMove(0));Source.Add(P.ToFEN);end;
+  Source.Add(Source[1]);Source.SaveToFile(FileName);D.LoadBallotFromFile(FileName);D.Show;Pump;
+  Check(B.Enabled,'Shuffle option enabled before pairing');B.Checked:=True;
+  with TCheckListBox(D.FindComponent('TournamentEngines')) do
+    for I:=0 to Items.Count-1 do Checked[I]:=True;
+  LoadExternalEngines(EnginesJsonFileName,Defs);Index:=0;if V=RegisteredGame(1) then Index:=2;
+  C:=DefaultSprtConfig;C.CandidateKey:=EngineIdentityKey(Defs[Index]);C.BaselineKey:=EngineIdentityKey(Defs[Index+1]);
+  TSprtPanel(D.FindComponent('TournamentSprt')).ApplyConfig(C);
+  RandSeed:=20261117;Check(D.CreatePairing(MessageText,True),'Shuffled pairing uses normal creation: '+MessageText);
+  Check(not B.Enabled,'Shuffle option locked after pairing');Grid:=TStringGrid(D.FindComponent('TournamentPairings'));
+  Check(Grid.RowCount=1+2*Source.Count,'Shuffle keeps game count including repeated openings');
+  for I:=0 to Source.Count-1 do begin
+   Check(D.GameSetupForRow(2*I+1,S),'First colour setup');Order.Add(S.StartingFEN);
+   Check(D.GameSetupForRow(2*I+2,S) and (S.StartingFEN=Order[I]),'Reverse colour keeps same shuffled position');
+   Check((Grid.Cells[TournamentColWhite,2*I+1]=Grid.Cells[TournamentColBlack,2*I+2]) and
+    (Grid.Cells[TournamentColBlack,2*I+1]=Grid.Cells[TournamentColWhite,2*I+2]),'Shuffled adjacent rows reverse colours');
+  end;
+  Check(Order.Text<>Source.Text,'GUI fixture uses shuffled rather than source order');
+  Before:=Order.Text;Order.Sort;Source.Sort;Check(Order.Text=Source.Text,'GUI shuffle retains duplicate frequency');Order.Text:=Before;
+  for I:=1 to Grid.RowCount-1 do begin Grid.Row:=I;D.SetSelectedResult(V.ResultText(goDraw));end;
+  Report:=D.SprtSnapshot;try Before:=Report.AsJSON;finally Report.Free;end;
+  D.SaveTournamentToFile(Snapshot);Data:=ReadTournamentDocument(Snapshot,GameGuiProfileFor(V).FileFormat);
+  try
+   Check(TJSONObject(Data.Find('opening_ballot')).Get('shuffle_opening_pairs',False),'Shuffle option saved');
+   Positions:=TJSONArray(TJSONObject(Data.Find('opening_ballot')).Find('positions'));
+   for I:=0 to Positions.Count-1 do Check(Positions.Strings[I]=Order[I],'Saved positions contain actual scheduled order');
+   TJSONObject(Data.Find('opening_ballot')).Delete('shuffle_opening_pairs');
+   WriteFile(FileName+'.legacy.json',Data.AsJSON);
+   TJSONObject(Data.Find('opening_ballot')).Add('shuffle_opening_pairs','true');
+   WriteFile(FileName+'.bad.json',Data.AsJSON);
+  finally Data.Free;end;
+  DeleteFile(FileName);FreeAndNil(D);Loaded:=TTournamentDialog.Create(nil,V);
+  Loaded.LoadTournamentFromFile(Snapshot);Loaded.Show;Pump;
+  Check(TCheckBox(Loaded.FindComponent('TournamentShuffleOpeningPairs')).Checked,'Saved shuffle setting restored');
+  Report:=Loaded.SprtSnapshot;try Check(Report.AsJSON=Before,'SPRT replay is identical after reopening shuffled event');finally Report.Free;end;
+  for I:=0 to Order.Count-1 do Check(Loaded.GameSetupForRow(2*I+1,S) and (S.StartingFEN=Order[I]),'Loading never reshuffles saved order');
+  Loaded.SaveTournamentToFile(Snapshot);Loaded.LoadTournamentFromFile(Snapshot);
+  Report:=Loaded.SprtSnapshot;try Check(Report.AsJSON=Before,'Repeated save/load preserves SPRT replay');finally Report.Free;end;
+  Failed:=False;try Loaded.LoadTournamentFromFile(FileName+'.bad.json');except on E:EConvertError do Failed:=True;end;
+  Check(Failed,'Invalid shuffle metadata rejected');
+  Loaded.LoadTournamentFromFile(FileName+'.legacy.json');
+  Check(not TCheckBox(Loaded.FindComponent('TournamentShuffleOpeningPairs')).Checked,'Older saves default shuffle off');
+  Report:=Loaded.SprtSnapshot;try Check(Report.AsJSON=Before,'Absent shuffle metadata preserves saved SPRT sequence');finally Report.Free;end;
+  Grid:=TStringGrid(Loaded.FindComponent('TournamentPairings'));Grid.Row:=3;Loaded.RescheduleSelectedGame(nil);
+  Check(Loaded.GameSetupForRow(3,S) and (S.StartingFEN=Order[1]),'Game replay keeps shuffled opening');
+  GuiTestConfirmationResult:=mrYes;try Click(Loaded,'ClearPairing');finally GuiTestConfirmationResult:=0;end;
+  Click(Loaded,'ClearOpeningBallot');B:=TCheckBox(Loaded.FindComponent('TournamentShuffleOpeningPairs'));
+  Check(not B.Checked and not B.Enabled,'Clearing ballot resets shuffle');
+  Source.SaveToFile(FileName);Loaded.LoadBallotFromFile(FileName);B.Checked:=True;
+  if V=RegisteredGame(0) then Loaded.ResetForVariant(RegisteredGame(1)) else Loaded.ResetForVariant(RegisteredGame(0));
+  Check(not B.Checked and not B.Enabled,'Game switching resets shuffle');
+ finally Defs.Free;P.Free;Order.Free;Source.Free;Loaded.Free;D.Free;end;
+end;
 procedure RealBallot(const Name:string);
 var D:TTournamentDialog;Fens:TStringList;I:Integer;List:TCheckListBox;
  Grid:TStringGrid;Setup:TGameSetup;Data:TJSONObject;
@@ -158,6 +222,7 @@ begin
  RegisterGame(TChessVariant.Create,ChessGuiProfile);RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
  RegisterDefaultGameVariant(RegisteredGame(0));Directory:=ExtractFilePath(ExpandFileName(ParamStr(0)))+'ballot-fixtures';ForceDirectories(Directory);
  try Peers;ForVariant(RegisteredGame(0),'chess');ForVariant(RegisteredGame(1),'draughts');
+  ShuffledVariant(RegisteredGame(0));ShuffledVariant(RegisteredGame(1));
   if ParamCount>0 then RealBallot(ParamStr(1));
  finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;end;
  WriteLn('Tournament ballot GUI checks passed (',Checks,' checks)');

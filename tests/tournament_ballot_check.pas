@@ -42,11 +42,34 @@ begin
   try Wrapper.Add('record',J);B.LoadFromJson(Wrapper);Check(B.StartingFEN=Second,'Per-game FEN survives saved record and attempt history');finally Wrapper.Free;end;
  finally A.Free;B.Free;P.Free;Engines.Free;Lines.Free;Fens.Free;DeleteFile(Name);end;
 end;
+procedure ShuffleChecks;
+var Positions,Original,Sorted,Engines:TStringList;R:TTournamentPairingRound;I:Integer;
+begin
+ Positions:=TStringList.Create;Original:=TStringList.Create;Sorted:=TStringList.Create;Engines:=TStringList.Create;
+ try
+  ShuffleOpeningPairs(Positions);Check(Positions.Count=0,'Empty shuffle is harmless');
+  Positions.Add('single');ShuffleOpeningPairs(Positions);Check(Positions[0]='single','Single opening unchanged');
+  Positions.Clear;for I:=1 to 20 do Positions.Add('opening '+IntToStr(I));Positions.Add(Positions[3]);Original.Assign(Positions);
+  RandSeed:=20261117;ShuffleOpeningPairs(Positions);
+  Check(Positions.Text<>Original.Text,'Fixed-seed fixture changes the schedule');
+  Sorted.Assign(Positions);Sorted.Sort;Original.Sort;Check(Sorted.Text=Original.Text,'Shuffle preserves every entry including duplicate frequency');
+  Engines.Add('A');Engines.Add('B');Engines.Add('C');R:=BuildBallotPairingRound(Engines,Positions);
+  Check(Length(R.Pairings)=6*Positions.Count,'Shuffled multi-engine schedule keeps every matchup');
+  for I:=0 to Length(R.Pairings) div 2-1 do begin
+   Check((R.Pairings[2*I].StartingFEN=Positions[I div 3]) and
+    (R.Pairings[2*I+1].StartingFEN=Positions[I div 3]),'Shuffled games use their scheduled opening');
+   Check((R.Pairings[2*I].White=R.Pairings[2*I+1].Black) and
+    (R.Pairings[2*I].Black=R.Pairings[2*I+1].White),'Shuffled multi-engine pair keeps colours reversed');
+   Check((R.Pairings[2*I].RoundNumber=I div 3+1) and
+    (R.Pairings[2*I+1].RoundNumber=I div 3+1),'Opening identity follows scheduled order');
+  end;
+ finally Engines.Free;Sorted.Free;Original.Free;Positions.Free;end;
+end;
 var Chess:TChessVariant;Draughts:TDraughtsVariant;Fens,Engines:TStringList;R:TTournamentPairingRound;
 begin
  Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
  try
-  ForVariant(Chess);ForVariant(Draughts);
+  ForVariant(Chess);ForVariant(Draughts);ShuffleChecks;
   if ParamCount>0 then begin
    Fens:=TStringList.Create;Engines:=TStringList.Create;
    try

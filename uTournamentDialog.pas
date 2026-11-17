@@ -25,6 +25,7 @@ type
   TTournamentMatchSettings=record
     Engine1Key,Engine2Key,Name,Ballot:string;
     HasTime,HasMoves,HasIncrement,HasConcurrency:Boolean;
+    ShuffleOpeningPairs:Boolean;
     Seconds,Increment:Double;
     Moves,Concurrency:Integer;
     TimeForfeit:TTimeForfeitSettings;
@@ -118,6 +119,7 @@ type
     FStartingFENEdit: TEdit;
     FBallotPositions:TStringList;
     FBallotFileName:string;
+    FShuffleOpeningPairs:TCheckBox;
     FBallotPathEdit:TEdit;
     FBallotCountLabel:TLabel;
     FBallotBrowseButton,FBallotClearButton:TButton;
@@ -709,6 +711,9 @@ begin
   FAdjudicationThreshold:=TGuiNumberEdit.Create(Self);FAdjudicationThreshold.Parent:=ButtonPanel;
   FAdjudicationThreshold.Name:='TournamentAdjudicationThreshold';TGuiNumberEdit(FAdjudicationThreshold).WidthSample:='99999';
   FAdjudicationThreshold.Text:='200';FAdjudicationThreshold.OnChange:=@ForfeitChanged;
+  FShuffleOpeningPairs:=TCheckBox.Create(Self);FShuffleOpeningPairs.Name:='TournamentShuffleOpeningPairs';
+  FShuffleOpeningPairs.Caption:='Shuffle opening pairs';
+  FShuffleOpeningPairs.OnChange:=@InvalidateTournamentResults;
   ClearTournamentPairingGrid(FGrid);
   PopulateEngines;
   AdjustPairingGridColumnWidths;
@@ -741,7 +746,7 @@ begin
   with LayoutRow(PairingActions,[CreateButton]) do Top:=0;
   with LayoutRow(PairingActions,[ClearButton]) do Top:=1;
   FRoundRobinGroup.Name:='TournamentPairingOptions';FRoundRobinGroup.AutoSize:=True;
-  with LayoutRow(ButtonPanel,[FRoundRobinGroup,PairingActions]) do Top:=4;
+  with LayoutRow(ButtonPanel,[FRoundRobinGroup,PairingActions,FShuffleOpeningPairs]) do Top:=4;
   with LayoutRow(ButtonPanel,[TimeLabel,FMovesEdit,MovesLabel,FMinutesEdit,FTimeUnitCombo,
     MinutesLabel,FIncrementEdit,IncrementLabel,FIncrementModeCombo]) do Top:=2;
   with LayoutRow(ButtonPanel,[TournamentLabel(Self,'Time forfeit:'),FTimeForfeitCombo,
@@ -767,6 +772,7 @@ begin
   if FBallotPathEdit=nil then Exit;
   Editable:=not FReadOnly and not IsRunning and TournamentPairingGridIsEmpty(FGrid) and (FStorageError='');
   FBallotBrowseButton.Enabled:=Editable;
+  FShuffleOpeningPairs.Enabled:=Editable and (FBallotPositions.Count>0);
   FBallotClearButton.Enabled:=Editable and (FBallotPositions.Count>0);
   FBallotPathEdit.Text:=FBallotFileName;FBallotPathEdit.Hint:=FBallotFileName;
   if FBallotPositions.Count=0 then FBallotCountLabel.Caption:=''
@@ -793,7 +799,7 @@ begin
   if FReadOnly then raise EInvalidOperation.Create('Tournament is read-only');
   if IsRunning or not TournamentPairingGridIsEmpty(FGrid) then
     raise EInvalidOperation.Create('Clear pairing before changing the opening ballot');
-  FBallotPositions.Clear;FBallotFileName:='';
+  FBallotPositions.Clear;FBallotFileName:='';FShuffleOpeningPairs.Checked:=False;
   UpdateButtons;InvalidateLayout;
 end;
 
@@ -888,7 +894,7 @@ begin
     FPdnPublishedHash:='';FVerifiedPdnFingerprint:='';FLegacyPdnFileName:='';
     FStorageNotice:='';FStorageError:='';FTournamentId:=GUIDToString(Id);
     FVariant:=AVariant;FProfile:=Profile;
-    FBallotPositions.Clear;FBallotFileName:='';
+    FBallotPositions.Clear;FBallotFileName:='';FShuffleOpeningPairs.Checked:=False;
     FStartingFENEdit.Text:=FVariant.DefaultStartingFEN;
     FMovesEdit.Text:=IntToStr(FProfile.DefaultClock.MovesPerPeriod);
     FMinutesEdit.Text:=FloatToStr(FProfile.DefaultClock.MinutesPerPeriod);
@@ -1101,6 +1107,8 @@ var Setup:TGameSetup;
 begin
   if (FBallotPositions.Count>0) and not TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex) then
     raise EConvertError.Create('Opening ballots require double round-robin');
+  if FShuffleOpeningPairs.Checked and (FBallotPositions.Count=0) then
+    raise EConvertError.Create('Shuffle opening pairs requires an opening ballot');
   Result:=FProfile.DefaultClock;
   if not TryStrToInt(Trim(FMovesEdit.Text),Result.MovesPerPeriod) then
     raise EConvertError.Create('Moves must be a nonnegative integer');
@@ -1546,6 +1554,7 @@ function TTournamentDialog.CreatePairing(out AMessage:string;CommandMode:Boolean
 var
   C:TSprtConfig;
   BlackEngines: TStringList;
+  PairingPositions:TStringList;
   Engines: TStringList;
   PairingRound: TTournamentPairingRound;
   Results: TStringList;
@@ -1564,7 +1573,7 @@ begin
   WhiteEngines := TStringList.Create;
   BlackEngines := TStringList.Create;
   Results := TStringList.Create;
-  Rounds := TStringList.Create;
+  Rounds := TStringList.Create;PairingPositions:=TStringList.Create;
   try
     CollectSelectedEngines(Engines);
     if Engines.Count < 2 then
@@ -1581,9 +1590,11 @@ begin
       Exit;
     end;
 
-    if FBallotPositions.Count>0 then
-      PairingRound:=BuildBallotPairingRound(Engines,FBallotPositions)
-    else PairingRound := BuildTournamentPairingRound(
+    if FBallotPositions.Count>0 then begin
+      PairingPositions.Assign(FBallotPositions);
+      if FShuffleOpeningPairs.Checked then ShuffleOpeningPairs(PairingPositions);
+      PairingRound:=BuildBallotPairingRound(Engines,PairingPositions);
+    end else PairingRound := BuildTournamentPairingRound(
       TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex),
       TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex), Engines,
       WhiteEngines, BlackEngines, Results, Rounds,FProfile.FileFormat);
@@ -1602,6 +1613,10 @@ begin
       ClearTournamentGameRefs;
       ClearTournamentPairingGrid(FGrid);
     end;
+    if PairingPositions.Count>0 then begin
+      FBallotPositions.Assign(PairingPositions);
+      FStartingFENEdit.Text:=FBallotPositions[0];
+    end;
     ApplyTournamentPairingRoundToGrid(FGrid, PairingRound,FProfile.FileFormat);
     if FBallotPositions.Count>0 then
       for I:=0 to High(PairingRound.Pairings) do
@@ -1612,7 +1627,7 @@ begin
     AdjustPairingGridColumnWidths;
     UpdateCrossTable;
   finally
-    Rounds.Free;
+    PairingPositions.Free;Rounds.Free;
     Results.Free;
     BlackEngines.Free;
     WhiteEngines.Free;
@@ -1646,6 +1661,7 @@ begin
     if Settings.HasTimeForfeit then SetForfeit(Settings.TimeForfeit);
     ReadSettings;MaxConcurrentGames;
     if Settings.Ballot<>'' then LoadBallotFromFile(Settings.Ballot);
+    FShuffleOpeningPairs.Checked:=Settings.ShuffleOpeningPairs;ReadSettings;
     FAcceptedTournamentSignature:=TournamentSignature;
     C:=FSprt.Config;C.CandidateKey:=Settings.Engine1Key;C.BaselineKey:=Settings.Engine2Key;FSprt.SetConfig(C);
   finally FLoadingTournament:=False;EnableAlign;end;
@@ -2265,6 +2281,7 @@ begin
       Data.Add('storage_version',4);Data.Add('game_variant',GameVariantId(FVariant));
       Data.Add('notation_format',FProfile.FileExtension);Data.Add('force_ponder_off',FProfile.TournamentForcePonderOff);
       Ballot:=TJSONObject.Create;Data.Add('opening_ballot',Ballot);Ballot.Add('file_name',FBallotFileName);
+      Ballot.Add('shuffle_opening_pairs',FShuffleOpeningPairs.Checked);
       Positions:=TJSONArray.Create;Ballot.Add('positions',Positions);
       for I:=0 to FBallotPositions.Count-1 do Positions.Add(FBallotPositions[I]);
     end else if FProfile.FileFormat=gffPgn then begin
@@ -2402,11 +2419,12 @@ begin
   OldLocks:=FFileLocks;FFileLocks:=LoadLocks;FReadOnly:=LoadReadOnly;
   FLoadingTournament := True;
   try
-    FBallotPositions.Clear;FBallotFileName:='';
+    FBallotPositions.Clear;FBallotFileName:='';FShuffleOpeningPairs.Checked:=False;
     if Ballot<>nil then begin
       Positions:=TJSONArray(Ballot.Find('positions'));
       for I:=0 to Positions.Count-1 do FBallotPositions.Add(NormalizeBallotFEN(FVariant,Positions.Strings[I]));
       FBallotFileName:=Ballot.Get('file_name','');
+      FShuffleOpeningPairs.Checked:=Ballot.Get('shuffle_opening_pairs',False);
     end;
     FTournamentNameEdit.Text := TJSONObject(Data).Get('tournament_name',
       'Tournament');
@@ -2565,7 +2583,8 @@ begin
     Trim(FMinutesEdit.Text) + '|' + Trim(FIncrementEdit.Text) + '|' +
     IntToStr(FIncrementModeCombo.ItemIndex) + '|' +
     IntToStr(FRoundRobinGroup.ItemIndex)+'|'+IntToStr(FTimeUnitCombo.ItemIndex)+'|'+
-    IntToStr(FTimeForfeitCombo.ItemIndex)+'|'+FAdjudicationTime.Text+'|'+FAdjudicationThreshold.Text;
+    IntToStr(FTimeForfeitCombo.ItemIndex)+'|'+FAdjudicationTime.Text+'|'+FAdjudicationThreshold.Text+'|'+
+    BoolToStr(FShuffleOpeningPairs.Checked,True);
 end;
 
 procedure TTournamentDialog.ApplyInvalidatingChange(Sender: TObject);

@@ -4,6 +4,31 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Shuffle opening pairs before tournament pairing — 2026-11-17
+
+Commit: pending.
+
+- Authorization: “Implement now; waive prior review” for the named GUI/CLI shuffle
+  option, keeping reversed-colour games paired and saving the order for SPRT.
+  Notes: chatgpt/OPENING_PAIR_SHUFFLE_NOTES.md.
+- Add an opt-in **Shuffle opening pairs** checkbox in the pairing row for both
+  chess and draughts, enabled only with a ballot before pairings exist. Default
+  remains file order. Clear ballot and game switching reset the option.
+- Shuffle a copy of the opening entries before the existing pairing generator;
+  preserve duplicate frequency, opening groups and reversed-colour game pairs.
+  Commit the chosen order only after accepting pairing creation.
+- Interactive `run_tournament` accepts `shuffle_opening_pairs=true|false` through
+  the same GUI configuration/pairing path. True requires a ballot.
+- Save the actual scheduled position list and optional boolean preference in
+  existing ballot metadata. Loading, resuming, game replay and SPRT queries do
+  not reshuffle. Older files default to false; no save-format version bump is
+  needed because existing readers already preserve the embedded position order.
+- Update the built-in manual and both-game unit/GUI/CLI tests. GTK2 build, full
+  regression, both tournament checks and all 27 GUI suites passed (248 ballot GUI
+  checks; 263 interactive CLI checks). Ballot unit checks: 224, or 225 including
+  the actual 79-position/158-game ballot. Font/DPI layout checks and screenshot
+  inspection passed. Native Windows execution remains outstanding.
+
 ### Preserve terminal results before timeout adjudication — 2026-11-17
 
 Commit: `066fb47`.

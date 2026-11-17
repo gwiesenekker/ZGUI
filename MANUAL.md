@@ -118,7 +118,7 @@ the same game: UCI is chess; Hub and DXP are draughts. Without a ballot it creat
 an ordinary double round-robin; a ballot creates two colour-reversed game rows per
 position, preserving the position's side to move and duplicate entries.
 
-Optional settings: `name`, `ballot`, `time` (seconds per period), `moves` (zero for
+Optional settings: `name`, `ballot`, `shuffle_opening_pairs`, `time` (seconds per period), `moves` (zero for
 sudden death), `increment` (fractional seconds allowed) and `concurrent`. Omitted
 clock settings use the selected game's existing GUI defaults. Use a decimal point
 in commands even if GUI edits use a decimal comma. Relative paths use the launch
@@ -294,6 +294,7 @@ spaces. Supply exactly one selector for each engine:
 | `engine2_key="..."` | Alternatively, second engine's identity key. |
 | `name="Test match"` | Optional tournament name; generated automatically when omitted. |
 | `ballot="C:\Matches\ballot2.fen"` | Optional opening-position file. Omit for a double round-robin from the game's default starting position. Relative paths use the launch directory; an explicitly empty filename is rejected. |
+| `shuffle_opening_pairs=true` | Shuffle ballot entries before creating pairings, keeping both colour-reversed games together. Accepts true or false; default: false. True requires a ballot. The actual order is saved and reused on load, resume and SPRT replay. |
 | `time=300` | Positive finite number of seconds per time-control period, not minutes. Omitted: selected game's GUI default. |
 | `moves=75` | Nonnegative integer moves per period; 0 means sudden death. Omitted: selected game's GUI default. |
 | `increment=3` | Nonnegative finite increment in seconds; decimal values such as 0.5 are accepted. Omitted: selected game's GUI default. |
@@ -1207,15 +1208,39 @@ To play the same set of opening positions with both engine colours:
    per line, using the selected game's FEN notation. Blank lines and lines
    beginning with `#`, `;` or `//` are ignored. A UTF-8 BOM is accepted. Invalid
    positions report the source line; no partial ballot is installed.
-3. Click **Create pairing**. Ballots select **Double round-robin** automatically.
+3. Optionally check **Shuffle opening pairs** in the pairing row before creating
+   the pairing. It defaults to off and is available only with a loaded ballot.
+4. Click **Create pairing**. Ballots select **Double round-robin** automatically.
    Every pair of selected engines plays each position twice, in consecutive rows,
    with White and Black reversed. The position itself, including side to move and
-   chess move counters, stays the same. Round is the ballot entry number.
-4. Set time controls/concurrency and click **Play** as usual.
+   chess move counters, stays the same. Round is the entry number in the scheduled
+   order.
+5. Set time controls/concurrency and click **Play** as usual.
 
-For two engines and 79 positions this creates **158 games**. Positions are used
-in file order, including repeated entries. Each game remains a normal tournament
-row with the existing engine reservations, clock, result, reason and replay rules.
+For two engines and 79 positions this creates **158 games**. By default, positions
+are used in file order, including repeated entries. With **Shuffle opening pairs**,
+Create pairing randomly permutes the opening entries first, then the existing
+pairing generator creates the colour-reversed games for each entry. Both games
+stay together; with several engines, every engine pairing uses the same scheduled
+opening order. Duplicate entries retain their frequency. A random permutation can
+occasionally be the same as the source order.
+
+Shuffling can reduce bias from favourable openings occurring early in a sequential
+test; it does not guarantee that a curated ballot is an independent random sample.
+The option is locked once pairings exist. Clearing pairings allows a new schedule;
+explicitly creating pairings with shuffling enabled generates a fresh permutation.
+Loading or starting a saved tournament, replaying a game, viewing SPRT, and
+querying it from the CLI never reshuffle the schedule.
+
+Interactive CLI example (substitute your engine IDs):
+
+```text
+run_tournament engine1_id=1 engine2_id=2 ballot="ballot2.fen" shuffle_opening_pairs=true time=600 moves=75
+```
+
+The shuffle option uses the same GUI pairing path. Each game remains a normal
+tournament row with the existing engine reservations, clock, result, reason and
+replay rules.
 This does not apply a ballot to Swiss pairings.
 
 While a ballot is loaded, the ordinary Starting FEN field shows the first
@@ -1224,8 +1249,11 @@ only before pairings exist: clear the pairing first to change the opening set.
 Clearing the ballot restores ordinary single-FEN operation. Switching between
 chess and draughts clears the ballot with the other game-specific settings.
 
-Save/recovery files embed both the validated position list and each game's
-starting FEN. Reopening or replaying uses those saved positions even if the
+Save/recovery files embed the actual scheduled position order, the shuffle option,
+and each game's starting FEN. The saved order is authoritative; no random seed or
+original ballot file is needed to reconstruct it. Existing files without the
+shuffle option load with it unchecked, preserving their saved order. Reopening
+or replaying uses those saved positions even if the
 original ballot file was moved, edited or removed. PGN/PDN exports retain the
 appropriate starting FEN for each recorded game. Ballot tournaments use save-file
 version 4; older ZGUI versions reject them rather than ignoring the openings.
