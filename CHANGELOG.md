@@ -4,6 +4,26 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Preserve terminal results before timeout adjudication — 2026-11-17
+
+Commit: pending.
+
+- Authorization: “Please implement the terminal-position safeguard and Adjudicator
+  wording, keeping symmetric adjudication. Prior review waived.” Scope and checks:
+  chatgpt/TIME_FORFEIT_TERMINAL_SAFEGUARD_NOTES.md.
+- Before optional timeout analysis, reuse the orchestrator's existing rules-result
+  check. Preserve terminal wins/draws and their reason without invoking the
+  adjudicator. Applies to chess and draughts; no GUI or game-specific rule changes.
+- Keep symmetric adjudication for nonterminal positions, including wins for the
+  side whose clock expired. The default Orchestrator timeout policy is unchanged.
+- Use “Adjudicator” in evaluation reasons and manual examples. Explain terminal
+  precedence and the symmetric policy in the built-in manual.
+- Validation: GTK2 build, full regression and both tournament checks passed.
+  All 27 GUI suites verified after updating the reason-prefix check/formatter
+  (464 timeout GUI checks); engine-reason checks rerun and passed. Focused timeout
+  tests: 127 assertions; the new checkmate case fails against the old orchestrator.
+  Native Windows execution remains outstanding.
+
 ### Describe SPRT progress and result in one line — 2026-11-17
 
 Commit: `f0907f6`.

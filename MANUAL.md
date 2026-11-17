@@ -1328,7 +1328,7 @@ asserting an independently verified rule cause.
 | Chess rules | **Orchestrator declared checkmate**; **Orchestrator declared draw by stalemate**, **insufficient mating material**, **75-move rule**, or **fivefold repetition**. |
 | Accepted chess claims | **Orchestrator declared draw by 50-move rule (claim accepted)** or **threefold repetition (claim accepted)**, including the **intended** variants. |
 | Draughts rules | **Orchestrator: White has no legal move** or **Black has no legal move**; **Orchestrator declared draw by 5-move endgame rule**, **16-move endgame rule**, **repetition; repetitions=N**, or **25-move rule; reversible_plies=N**. |
-| Adjudication | **Annotator engine evaluation score comparison threshold cp (White perspective)** plus the flag-fall cause; failure leaves * for referee attention. |
+| Adjudication | **Adjudicator engine evaluation score comparison threshold cp (White perspective)** plus the flag-fall cause; failure leaves * for referee attention. |
 | Clocks | **Orchestrator: Flag fell for white/black**, optionally with **engine move deadline expired** or **idle move deadline expired**. A chess timeout draw adds **opponent has insufficient mating material**. |
 | Engine reports | **Name (White/Black) claimed draw**, **claimed win**, **resigned**, or **ended game**, with raw **DXP reason N** when provided. Unrecognized details are preserved. A fallback can say **Engine ended game** with side or no-move information. |
 | Referee actions | **Referee stopped tournament**; **Referee declared win for White/Black**; **Referee declared draw**. A declaration follows the original cause when present. |
@@ -1485,8 +1485,11 @@ and cp-threshold edits then become enabled. Defaults are **1.0 seconds** and
 **200 cp**. The time must be positive and at most 3600 seconds; the threshold
 must be positive and at most 1000000000 cp.
 
-When a flag falls, both players shut down and ZGUI analyzes the unchanged final
-position in a fresh instance of the selected engine. A playing engine may also
+When a flag falls, ZGUI first checks the existing game rules for a result already
+decided on the board, such as checkmate, stalemate, or a rules-declared draw.
+That result and its reason take precedence; no adjudicator is started.
+Otherwise, both players shut down and ZGUI analyzes the unchanged final position
+in a fresh instance of the selected engine. A playing engine may also
 be the adjudicator. Its suggested move is never added to the game. The budget
 applies to the search, excluding startup/shutdown; an engine may return early.
 All comparisons use the adapters' normalized **White-perspective** evaluation:
@@ -1497,9 +1500,13 @@ All comparisons use the adapters' normalized **White-perspective** evaluation:
 | Score <= -threshold | Black wins. |
 | Score inside the band | Draw. |
 
+This evaluation policy is symmetric: either side can win, including the side
+whose flag fell. It is not capped at a draw for that side. The separate
+**Orchestrator** policy continues to use the normal timeout rules.
+
 The **Reason** column names the adjudicator and records the comparison, for
-example `Annotator Scan evaluation 300 >= 200 cp (White perspective)` or
-`Annotator Scan evaluation -100 > -200 cp (White perspective)`, followed by the
+example `Adjudicator Scan evaluation 300 >= 200 cp (White perspective)` or
+`Adjudicator Scan evaluation -100 > -200 cp (White perspective)`, followed by the
 original flag-fall cause. Positive/negative mate scores adjudicate a White/Black
 win; absent or ambiguous scores do not become zero. Failed, unavailable or
 cancelled analysis leaves `*` and an explicit reason for referee attention.

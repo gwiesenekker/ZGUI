@@ -61,7 +61,7 @@ begin
  else if Value<=-S.ThresholdCp then begin Result:=goBlackWins;Comparison:=' <= -'+FloatToStr(S.ThresholdCp,FS);end
  else if Value<0 then begin Result:=goDraw;Comparison:=' > -'+FloatToStr(S.ThresholdCp,FS);end
  else begin Result:=goDraw;Comparison:=' < '+FloatToStr(S.ThresholdCp,FS);end;
- Reason:='Annotator '+S.EngineName+' evaluation '+Text+Comparison+' cp (White perspective)';
+ Reason:='Adjudicator '+S.EngineName+' evaluation '+Text+Comparison+' cp (White perspective)';
 end;
 function AnalyzeTimeForfeit(const S:TTimeForfeitSettings;Definition:TExternalEngineDefinition;
  Position:TGamePosition;Token:TCancellationToken;OnLog:TEngineLogEvent;out Reason:string):TGameOutcome;

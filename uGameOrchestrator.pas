@@ -443,6 +443,9 @@ var
 begin
   LReason := AReason;
   if Assigned(FOnTimeForfeit) then begin
+    // A board result takes precedence over optional evaluation adjudication.
+    CheckOutcomeAfterMove;
+    if FState = gosGameOver then Exit;
     // Pause clock projection while the runner performs optional adjudication.
     ChangeState(gosWaiting,'Time forfeit adjudication');Outcome:=goOngoing;
     FOnTimeForfeit(Self,AExpired,Outcome,LReason);

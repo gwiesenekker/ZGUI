@@ -67,7 +67,7 @@ begin
  Check(not D.IsRunning,'Timeout games complete through existing runner');
  for I:=1 to G.RowCount-1 do begin
   Check(G.Cells[TournamentColResult,I]=V.ResultText(goWhiteWins),'Adjudication result overrides time loss in both colours');
-  Check((Pos('Annotator ',G.Cells[TournamentColReason,I])=1) and (Pos('300 >= 200',G.Cells[TournamentColReason,I])>0) and (Pos(Judge,G.Cells[TournamentColReason,I])>0),'Reason contains engine and comparison');
+  Check((Pos('Adjudicator ',G.Cells[TournamentColReason,I])=1) and (Pos('300 >= 200',G.Cells[TournamentColReason,I])>0) and (Pos(Judge,G.Cells[TournamentColReason,I])>0),'Reason contains engine and comparison: '+G.Cells[TournamentColReason,I]);
  end;
  Check(D.GameSetupForRow(1,S) and (S.TimeForfeit.EngineKey=EngineIdentityKey(S.TimeForfeitEngine)),'Shared setup retains adjudicator');
  L:=TStringList.Create;

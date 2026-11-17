@@ -290,7 +290,8 @@ function TournamentRuleEndText(const AReason:string):string;
 var Reason:string;
 begin
   Reason:=Trim(AReason);
-  if (Pos('Annotator ',Reason)=1) or (Pos('Time forfeit adjudication failed',Reason)=1) then
+  if (Pos('Adjudicator ',Reason)=1) or (Pos('Annotator ',Reason)=1) or
+    (Pos('Time forfeit adjudication failed',Reason)=1) then
     Result:=Reason
   else if Copy(LowerCase(Reason),1,8)='draw by ' then
     Result:='Orchestrator declared '+LowerCase(Copy(Reason,1,1))+Copy(Reason,2,MaxInt)
