@@ -8,7 +8,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,C
   uGameGuiMessages,uAnalyzerRunnerThread,uGuiDialogs,uGameTree,uGameTreeActor,uGameTreePdn,
   uChessPgn,uGameDocumentContext,uGameDatabase,uPreferences,Graphics,Grids,ExtCtrls,
   uTournamentDialog,uTournamentGridModel,uDatabaseForm,SQLite3Conn,SQLDB,uEnginesDialog,
-  uPvBrowser,uDraughtsPdn,uDraughtsPositionSetupForm;
+  uPvBrowser,uDraughtsPdn,uDraughtsPositionSetupForm,LCLType;
 type TDialogLifetimeProbe=class(TComponent)
 public
   Main:TMainForm;
@@ -182,6 +182,120 @@ begin
 end;
 procedure Pump;
 begin Application.ProcessMessages;Sleep(10);end;
+procedure BackgroundGameFollow;
+var V,NextVariant:TGameVariant;VariantIndex,Scenario:Integer;
+ procedure RunCase;
+ var Main:TMainForm;History:TListBox;Setup:TGameSetup;Older,Last,Posted,Selected:TRunningGame;
+   P:TGamePosition;I,OldIndex:Integer;Branch:TGameTreePlyNode;Expected:Boolean;
+   Move,Preview,Before,SavedPreview:string;Key:Word;Changed:Boolean;SavedCursor:Int64;Started:QWord;
+  function Fixture(Id:Integer):TRunningGame;
+  var J:Integer;Position:TGamePosition;
+  begin
+   Result:=TRunningGame.Create(Id,'Follow fixture',nil,pkHuman,pkHuman,'','','White','Black',nil,Setup);
+   Result.GameTree.SetHeader('Follow fixture','White','Black',V.ResultText(goDraw),Setup.StartingFEN);
+   Position:=V.CreatePositionFromFEN(Setup.StartingFEN);
+   try
+    if Scenario<>10 then for J:=1 to 2 do begin
+      Move:=Position.LegalMove(0);Result.GameTree.RecordMainlineMove(J,Move);Position.PlayMove(Move);
+    end;
+   finally Position.Free;end;
+   Result.GameTree.SetGameState(gosGameOver,Changed);
+   if (Id=7000) or not (Scenario in [2,12]) then Result.MarkFinished;
+   Main.TestRegisterGame(Result);
+  end;
+ begin
+  Main:=TMainForm.Create(nil);Older:=nil;Last:=nil;
+  try
+   Main.SelectGameVariant(V);
+   Setup:=Default(TGameSetup);Setup.Variant:=V;Setup.StartingFEN:=V.DefaultStartingFEN;
+   Setup.TimeControl:=GameGuiProfileFor(V).DefaultClock;Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
+   Older:=Fixture(7000);Last:=Fixture(7001);Selected:=Last;
+   History:=TListBox(Main.FindComponent('GameHistoryList'));
+   if Scenario=1 then Selected:=Older;
+   History.ItemIndex:=History.Items.IndexOfObject(Selected);History.OnClick(History);
+   Check(Main.ActiveGameTree=Selected.GameTree,'Follow fixture selects the real game');
+   case Scenario of
+    2: begin
+      // A terminal-looking tree alone is insufficient: shutdown is still pending.
+      Last.RequestStop('fixture still stopping');
+    end;
+    3: Main.TestDisplayedPosition.Cursor.Select(Last.GameTree,Last.GameTree.MainlineNode[1]);
+    4: Main.TestDisplayedPosition.Cursor.Select(Last.GameTree,Last.GameTree.MainlineNode[2]);
+    5: begin
+      P:=V.CreatePositionFromFEN(Setup.StartingFEN);
+      try Branch:=Last.GameTree.RecordBranchMove(Last.GameTree.Root,P.LegalMove(1));finally P.Free;end;
+      Main.TestDisplayedPosition.Cursor.Select(Last.GameTree,Branch);
+    end;
+    6: begin
+      P:=V.CreatePositionFromFEN(Setup.StartingFEN);
+      try
+       for I:=1 to Last.GameTree.MainlineCount do P.PlayMove(Last.GameTree.MainlineNode[I].MoveText);
+       Preview:=P.LegalMove(0);
+      finally P.Free;end;
+      Check(Main.TestDisplayedPosition.SelectPreview(2,1,Preview,Last.GameTree),'Enter PV preview at the final ply');
+    end;
+    7: begin
+      Main.TestDisplayedPosition.Cursor.Select(Last.GameTree,Last.GameTree.MainlineNode[1]);
+      Key:=VK_ESCAPE;Main.OnKeyDown(Main,Key,[]);
+      Check(Main.TestDisplayedPosition.Cursor.Following,'Escape resumes live following');
+    end;
+    8: Main.TestDisplayedPosition.Cursor.Select(Last.GameTree,Last.GameTree.MainlineNode[1]);
+    12: begin
+      Last.MarkRunningIfStarting;Last.GameTree.SetGameState(gosRunning,Changed);
+    end;
+    9: begin
+      Main.SelectGameVariant(V);Selected:=nil;
+    end;
+   end;
+   Before:=GameTreeToPdnText(Last.GameTree);OldIndex:=History.ItemIndex;
+   SavedCursor:=Main.TestDisplayedPosition.Cursor.NodeId;SavedPreview:=Main.TestDisplayedPosition.PreviewMoves;
+   Setup.Variant:=NextVariant;Setup.StartingFEN:=NextVariant.DefaultStartingFEN;
+   Setup.TimeControl:=GameGuiProfileFor(NextVariant).DefaultClock;
+   Expected:=(Scenario in [0,7,8,10,11]);
+   Posted:=Main.StartGameFromSetup(Setup,'Posted fixture',Scenario=8);
+   if Expected then begin
+     Check((History.Items.Objects[History.ItemIndex]=Posted) and (Main.ActiveGameTree=Posted.GameTree),
+       Format('Follow new game: %s scenario %d',[GameVariantId(V),Scenario]));
+     Check(Main.TestDisplayedPosition.Cursor.Following,'Newly selected game follows live moves');
+     if NextVariant=Chess then Check(Main.FindComponent('MainBoard') is TChessBoardControl,'Auto-follow activates chess board')
+     else Check(Main.FindComponent('MainBoard') is TDraughtsBoardControl,'Auto-follow activates draughts board');
+     if Scenario in [0,11] then begin
+       Started:=GetTickCount64;
+       repeat Pump;Main.TestDrainGuiEvents(True);until (Posted.State=gosRunning) or (GetTickCount64-Started>3000);
+       Check(Posted.State=gosRunning,'Followed game becomes live');
+       P:=NextVariant.CreatePositionFromFEN(Setup.StartingFEN);
+       try
+         Move:=P.LegalMove(0);P.PlayMove(Move);Posted.Runner.PostHumanMove(Move);
+         Started:=GetTickCount64;
+         repeat Pump;Main.TestDrainGuiEvents(True);until (Posted.MainlineCount=1) or (GetTickCount64-Started>3000);
+         Check((Posted.MainlineCount=1) and (Main.ActiveGameTree=Posted.GameTree) and
+           (TGameBoardControl(Main.FindComponent('MainBoard')).Position.ToFEN=P.ToFEN),
+           'Incoming moves update the automatically followed board');
+       finally P.Free;end;
+     end;
+   end else begin
+     Check((History.ItemIndex=OldIndex) and ((Selected=nil) or (Main.ActiveGameTree=Selected.GameTree)),
+       Format('Preserve browsing/selection: %s scenario %d',[GameVariantId(V),Scenario]));
+     Check((Main.TestDisplayedPosition.Cursor.NodeId=SavedCursor) and
+       (Main.TestDisplayedPosition.PreviewMoves=SavedPreview),'New background game preserves the browsing cursor and preview');
+   end;
+   Check(GameTreeToPdnText(Last.GameTree)=Before,'Auto-follow never changes the old game tree');
+  finally
+    if Older<>nil then Older.MarkFinished;
+    if Last<>nil then Last.MarkFinished;
+    Main.Free;
+  end;
+ end;
+begin
+ for VariantIndex:=0 to 1 do begin
+  if VariantIndex=0 then V:=Chess else V:=Draughts;
+  for Scenario:=0 to 12 do begin
+    NextVariant:=V;
+    if Scenario=11 then begin if V=Chess then NextVariant:=Draughts else NextVariant:=Chess;end;
+    RunCase;
+  end;
+ end;
+end;
 procedure MixedViews;
 var Main:TMainForm;ChessTree,DraughtsTree:Pointer;Setup:TGameSetup;A,B:TRunningGame;
     History:TListBox;Tick:QWord;I:Integer;Key:Word;
@@ -656,6 +770,7 @@ begin
   RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
   try UsageAndStartup;WriteLn('Registry');Flush(Output);RegistryAndContexts;
     WriteLn('Preferences/files');Flush(Output);PreferencesAndFiles;
+    WriteLn('Background follow');Flush(Output);BackgroundGameFollow;
     WriteLn('Views');Flush(Output);MixedViews;DraughtsStartup;
     WriteLn('Review follow-up');Flush(Output);ReviewPvAttach;ReviewRemaining;
     WriteLn('Databases');Flush(Output);DatabaseContexts;

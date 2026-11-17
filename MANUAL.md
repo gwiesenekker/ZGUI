@@ -66,9 +66,11 @@ save the tournament before launching it this way.
 This continues eligible unplayed games. Completed results and referee decisions
 are preserved; stopped or failed games require the existing Reschedule action.
 An already-running tournament in the same window is selected without starting it
-twice. The main board selects the tournament's game once; later background games
-never switch the selected board. This selection follows the ordinary last-game
-preference behavior. Select a game row to watch its board and moves.
+twice. The main board selects the tournament's game once. Later background games
+follow the Game History rule: automatically switch only when the previously
+selected game was last in the list, fully finished and in live-follow mode.
+Browsing an earlier game or a clicked move preserves the current view. Select a
+game row to watch its board and moves.
 
 Help and startup errors are shown in the GUI, including on Windows. The GUI stays
 open after completion, and its Stop and Save/Discard/Cancel controls keep their
@@ -191,8 +193,8 @@ a reason. `attention` means an unresolved stopped/failed row needs referee actio
 GUI Stop and normal referee controls remain available. A GUI modal dialog causes
 commands to return `BUSY`; retry after it closes. In `--cli` sessions, engine-failure
 notices appear in the existing analysis log without a blocking popup. Ordinary
-GUI sessions keep their engine-problem dialogs. Background games never switch
-the selected board automatically.
+GUI sessions keep their engine-problem dialogs. New background games use the
+same conditional automatic-follow rule as Game History.
 
 `stop_tournament id=N` requests the same asynchronous Stop action as the GUI
 button for that CLI-created tournament. The `OK` JSON acknowledgement contains
@@ -767,6 +769,23 @@ analysis features such as Auto Play.
 
 Selecting a running game follows its current position. Selecting a stopped or
 finished game lets you inspect its game tree and move history.
+
+When a new background game is posted, ZGUI automatically selects it only if all
+three conditions held before its row was added:
+
+- the selected game was the last entry in Game History;
+- that game had fully finished, including runner shutdown; and
+- its view was in live-follow mode, without move/variation/PV browsing.
+
+Clicking in the move list pauses automatic switching, **even when the clicked
+move is the last move**. Return to live-follow mode with Escape in the main move
+view to allow following again. Selecting an earlier game, an earlier position,
+a variation or a PV preserves that view when another game arrives. An ongoing or
+still-stopping game also remains selected. After newer games have arrived during
+browsing, select the latest list entry and resume live following to follow
+subsequent arrivals. This rule applies across tournament
+tabs and across chess and draughts, using the existing game and board selection.
+An explicit **New game...** or replay action still selects its new game normally.
 
 ### 3.3 How games end
 

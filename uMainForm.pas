@@ -489,6 +489,7 @@ type
       out AErrorText: string): Boolean;
     function SelectedGame: TRunningGame;
     function SelectedDisplayedGame: TRunningGame;
+    function ShouldFollowNewGame:Boolean;
     procedure SavePdnClick(Sender: TObject);
     function SaveCurrentGameWithDialog: Boolean;
     function SaveTreeWithDialog(Tree:TGameTree):Boolean;
@@ -546,6 +547,7 @@ type
     procedure TestDrainGuiEvents(ADrainAll: Boolean);
     procedure TestReportEngineProblem(const CaptionText,MessageText:string);
     property TestAnalyzerLog:TMemo read FAnalyzerMemo;
+    property TestDisplayedPosition:TDisplayedPosition read FDisplayedPosition;
     property TestGuiEventQueue: TThreadMessageQueue read FGuiEventQueue;
     property TestAnalysis: TAnalysisCoordinator read FAnalysis;
     property TestAutoPlay: TAutoPlayCoordinator read FAutoPlay;
@@ -5659,6 +5661,18 @@ begin
   StartGameFromSetup(ASetup);
 end;
 
+function TMainForm.ShouldFollowNewGame:Boolean;
+var Game:TRunningGame;
+begin
+  Result:=False;
+  if FClosing or (FGamesListBox.ItemIndex<>FGamesListBox.Items.Count-1) then Exit;
+  Game:=SelectedDisplayedGame;
+  if (Game=nil) or (Game.Lifecycle<>rglFinished) or
+    (ActiveGameTree<>Game.GameTree) or (FDisplayedPosition=nil) then Exit;
+  // A clicked move is browsing, even at the final ply. Reuse the live cursor.
+  Result:=FDisplayedPosition.Cursor.Following and (Trim(FDisplayedPosition.PreviewMoves)='');
+end;
+
 function TMainForm.StartGameFromSetup(const ASetup: TGameSetup;
   const ATitlePrefix: string;ASelectGame:Boolean): TRunningGame;
 var
@@ -5672,6 +5686,7 @@ var
   LTitle: string;
   LWhiteEngineKey: string;
   LWhiteName: string;
+  LSelectGame:Boolean;
 begin
   LVariant:=GameSetupVariant(ASetup);
   if not (gfNewGame in GameGuiProfileFor(LVariant).Features) then
@@ -5710,10 +5725,11 @@ begin
   finally
     LReservationKeys.Free;
   end;
+  LSelectGame:=ASelectGame or ShouldFollowNewGame;
   FGames.Add(Result);
   FGamesListBox.Items.AddObject(LTitle + ' - starting', Result);
   InitializeRunningGameTree(Result);
-  if ASelectGame then begin
+  if LSelectGame then begin
     FGamesListBox.ItemIndex := FGamesListBox.Items.Count - 1;
     UseDocument(Result.GameTree);
     ClearHumanMoveSelection;

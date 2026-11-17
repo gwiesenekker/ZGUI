@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Follow new games while watching the finished list tail — 2026-11-17
+
+Commit: pending.
+
+- User waiver: “Implement now; waive prior review” for conditional automatic
+  following of newly posted background games, for chess and draughts. The user
+  clarified browsing means clicking in the move list. Record the scope and
+  refinement in chatgpt/AUTOMATIC_GAME_FOLLOW_NOTES.md.
+- Before appending a game, check that the previous selection is the list's last
+  game, fully finished and in live-follow mode with no PV preview. Reuse the
+  existing new-game selection path when eligible. Clicked moves, including a
+  clicked final move, earlier games, variations, standalone boards, ongoing and
+  stopping games keep their selection. Escape resumption allows following again.
+- Intentionally change background-arrival selection for both games, including
+  across tournament tabs/game types. Preserve explicit New Game/replay selection,
+  GUI layout, runners, clocks, game trees and tournament execution.
+- Extend multi-game GUI checks and update the built-in manual.
+- Validation: GTK2 build, all 24 GUI suites (301 multi-game assertions), full
+  regression and both tournament suites pass. Native Windows execution was not
+  performed.
+
 ### Expose opening-pair results in CLI tournament queries — 2026-11-17
 
 Commit: `b4b9744`.
