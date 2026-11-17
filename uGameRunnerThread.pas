@@ -916,7 +916,16 @@ begin
         RequestStopFromRunner('runner shutdown');
       FCommandQueue.Close;
       if FOrchestrator <> nil then
-        FOrchestrator.StopEngines;
+      begin
+        try FOrchestrator.StopEngines;
+        finally
+          // History uses the published snapshot, tree and log, not live adapters.
+          // Dispose workers here on their runner thread, before completion is posted.
+          DetachRuntimeLogHandlers;
+          try FOrchestrator.Engine[gsWhite] := nil;
+          finally FOrchestrator.Engine[gsBlack] := nil;end;
+        end;
+      end;
     end;
     except
       on E: Exception do

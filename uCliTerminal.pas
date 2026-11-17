@@ -137,6 +137,7 @@ begin
  while not Finished do begin CancelThreadIo(Handle);Sleep(10);end;
  {$ENDIF}
  WaitFor;
+ FStarted:=False; // Stop and the destructor must not reap the same thread twice.
 end;
 destructor TCliTerminal.Destroy;
 var Obj:TObject;

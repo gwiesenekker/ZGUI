@@ -4,6 +4,33 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Release finished-game engine workers and stop CLI transport once — 2026-11-17
+
+Commit: pending.
+
+- Authorization: “address the findings you agree with” and “Please update
+  CHANGELOG.md, compile, test, and commit.”
+  Prior Claude review: claude/review-f875efe-shutdown.md (C14, F6, F7); opening-pair
+  review claude/review-e4991b9.md reports no new defects. Notes:
+  chatgpt/SHUTDOWN_REVIEW_F875EFE_NOTES.md.
+- Make CLI Stop idempotent after a successful wait, preserving the main form's
+  early transport stop without a second join during terminal destruction (C14).
+- After stopping a completed game's engines, detach runtime log callbacks and
+  release both adapters on the existing runner thread before publishing completion.
+  Finished history retains its snapshots/tree/logs without idle protocol workers;
+  avoids serial worker waits on the GUI thread for retained finished games (F6/F7).
+  Applies to chess and draughts; no pairing, clocks, results or persistence changes.
+- F8 remains deferred: Claude confirms that the normal close detaches tournament
+  ownership before history removal. No shutdown save-batching implementation or
+  global two-pass engine-worker API is introduced in this fix.
+- Preserve the separate, uncommitted shared choice-dialog caption fix.
+- Validation: full regression (2,242 new lifetime checks; 60 CLI transport checks),
+  lifecycle, DXP, both tournament checks and all 27 GUI suites passed. A temporary
+  160-game Stockfish CLI match returned from 7 threads before to 6 afterward;
+  idle CPU sampled at 0.5% of a core before/after. GUI close took 0.53 s including
+  confirmations (0.053 s after the final Discard), exit code 0. GTK2 build passed;
+  native Windows QA remains outstanding.
+
 ### Keep draughts square labels clear of pieces — 2026-11-17
 
 Commit: `71b0544`.

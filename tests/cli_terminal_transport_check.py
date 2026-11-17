@@ -80,4 +80,10 @@ if os.name=='posix':
  finally:
   if p.poll() is None:p.kill()
   os.close(master)
+# Stop is called explicitly twice by the helper and again by its destructor.
+# Repeat process teardown to exercise the intermittent double-join regression.
+for i in range(20):
+ p=subprocess.run([exe],input=b'ping\n',stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=5)
+ check(p.returncode==0, 'repeated terminal Stop/destruction exits cleanly '+str(i))
+ check(b'EAccessViolation' not in p.stderr and b'Exception' not in p.stderr, 'no shutdown exception '+str(i))
 print(f'CLI terminal transport checks passed: {checks}')

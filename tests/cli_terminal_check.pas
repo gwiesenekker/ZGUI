@@ -53,6 +53,7 @@ begin
      Sleep(5);
    end;
    Terminal.Stop;
+   Terminal.Stop; // Main-form shutdown followed by terminal destructor must be safe.
  finally
    for I:=0 to 1 do Engines[I].Free;
    Sink.Free;Args.Free;Terminal.Free;
