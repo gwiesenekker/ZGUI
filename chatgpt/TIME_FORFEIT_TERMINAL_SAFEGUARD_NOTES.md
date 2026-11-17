@@ -1,5 +1,7 @@
 # Terminal-position safeguard for time-forfeit adjudication
 
+Implementation commit: `066fb47`.
+
 2026-11-17 authorization, in the user's words:
 
 > Please implement the terminal-position safeguard and Adjudicator wording, keeping symmetric adjudication. Prior review waived. Please update CHANGELOG.md, compile, test, and commit.

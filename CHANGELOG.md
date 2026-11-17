@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Preserve terminal results before timeout adjudication — 2026-11-17
 
-Commit: pending.
+Commit: `066fb47`.
 
 - Authorization: “Please implement the terminal-position safeguard and Adjudicator
   wording, keeping symmetric adjudication. Prior review waived.” Scope and checks:
