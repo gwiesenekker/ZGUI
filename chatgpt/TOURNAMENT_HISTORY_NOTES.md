@@ -1,5 +1,7 @@
 # Saved tournament games in Game History
 
+Implementation commit: `44e1607`.
+
 Authorization 2026-11-17: user answered **“Apply now; waive prior review”** for
 double-clicking a saved tournament game to load/select it in Game History through
 the shared tournament/history selection path. Applies to chess and draughts.

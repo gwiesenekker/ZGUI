@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Open saved tournament games in Game History — 2026-11-17
 
-Commit: pending.
+Commit: `44e1607`.
 
 - User waiver: “Apply now; waive prior review” for saved tournament-game
   double-click selection through the shared history path, for chess and draughts.
