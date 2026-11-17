@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Add interactive stop_tournament — 2026-11-17
 
-Commit: pending.
+Commit: `cb32a86`.
 
 - User waiver: “Implement now; waive prior review”. Scope: stop_tournament id=N
   for both games, using the existing GUI Stop action, retaining tabs/results and

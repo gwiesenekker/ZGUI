@@ -26,4 +26,4 @@ For the explicitly named shared scope, the user selected: “Implement now; waiv
 
 ## Commit
 
-Pending.
+Implementation: `cb32a86`.
