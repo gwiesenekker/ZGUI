@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Add live paired GSPRT tournament comparison — 2026-11-17
 
-Commit: pending.
+Commit: `720eddf`.
 
 - User waiver: “Implement now; waive prior review” for the live SPRT view,
   independent candidate/baseline selection, shared calculation and CLI report,

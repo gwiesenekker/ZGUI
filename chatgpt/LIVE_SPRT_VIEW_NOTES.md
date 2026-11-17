@@ -1,5 +1,7 @@
 # Live paired GSPRT view
 
+Implementation commit: `720eddf`.
+
 Authorization: 2026-11-17. The user answered **“Implement now; waive prior review”**
 for independent candidate/baseline selectors, a collapsible counts/graph pane,
 one paired-SPRT calculator shared by GUI and query_tournament, saved settings and
