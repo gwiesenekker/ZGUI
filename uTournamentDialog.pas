@@ -197,7 +197,7 @@ type
     function SprtSnapshot:TJSONObject;
     function StartTournament(out AMessage:string;CommandMode:Boolean=False;
       AllowShared:Boolean=False):TTournamentStartResult;
-    procedure RefreshLayout; override;
+    procedure MeasureLayout; override;
     procedure LoadBallotFromFile(const FileName:string);
     procedure ClearOpeningBallot;
     procedure ResetForVariant(AVariant:TGameVariant);
@@ -723,11 +723,10 @@ begin
   SettingsColumn:=TPanel.Create(Self);SettingsColumn.Parent:=ButtonPanel;
   SettingsColumn.BevelOuter:=bvNone;SettingsColumn.Align:=alTop;
   SettingsColumn.AutoSize:=True;SettingsColumn.Top:=0;
-  with LayoutFields(SettingsColumn,[NameLabel,FTournamentNameEdit]) do Top:=0;
+  NameLabel.Name:='TournamentNameLabel';
   if FGameCombo<>nil then
-    FenRow:=LayoutRow(SettingsColumn,[FGameCombo,FenLabel,FStartingFENEdit],2)
-  else FenRow:=LayoutRow(SettingsColumn,[FenLabel,FStartingFENEdit],1);
-  FenRow.Top:=1;
+    with LayoutRow(SettingsColumn,[FGameCombo,NameLabel,FTournamentNameEdit],2) do Top:=0
+  else with LayoutFields(SettingsColumn,[NameLabel,FTournamentNameEdit]) do Top:=0;
   FBallotPathEdit:=TEdit.Create(Self);FBallotPathEdit.Name:='TournamentBallotFile';
   FBallotPathEdit.ReadOnly:=True;FBallotPathEdit.ShowHint:=True;
   FBallotCountLabel:=TLabel.Create(Self);FBallotCountLabel.Name:='TournamentBallotCount';
@@ -735,19 +734,20 @@ begin
   FBallotBrowseButton.Caption:='Ballot file...';FBallotBrowseButton.OnClick:=@BrowseBallotClick;
   FBallotClearButton:=TButton.Create(Self);FBallotClearButton.Name:='ClearOpeningBallot';
   FBallotClearButton.Caption:='Clear ballot';FBallotClearButton.OnClick:=@ClearBallotClick;
-  with LayoutRow(SettingsColumn,[FBallotBrowseButton,FBallotPathEdit,FBallotClearButton,FBallotCountLabel],1) do Top:=2;
+  FenRow:=LayoutRow(SettingsColumn,[FenLabel,FStartingFENEdit,FBallotBrowseButton,
+    FBallotPathEdit,FBallotClearButton,FBallotCountLabel],[1,3]);FenRow.Top:=1;
   PairingActions:=LayoutStack(ButtonPanel);
   with LayoutRow(PairingActions,[CreateButton]) do Top:=0;
   with LayoutRow(PairingActions,[ClearButton]) do Top:=1;
   FRoundRobinGroup.Name:='TournamentPairingOptions';FRoundRobinGroup.AutoSize:=True;
-  with LayoutFlow(ButtonPanel,[FRoundRobinGroup,PairingActions]) do Top:=1;
+  with LayoutRow(ButtonPanel,[FRoundRobinGroup,PairingActions]) do Top:=4;
   with LayoutRow(ButtonPanel,[TimeLabel,FMovesEdit,MovesLabel,FMinutesEdit,FTimeUnitCombo,
     MinutesLabel,FIncrementEdit,IncrementLabel,FIncrementModeCombo]) do Top:=2;
-  with LayoutFlow(ButtonPanel,[TournamentLabel(Self,'Time forfeit:'),FTimeForfeitCombo,
+  with LayoutRow(ButtonPanel,[TournamentLabel(Self,'Time forfeit:'),FTimeForfeitCombo,
     TournamentLabel(Self,'Adjudication time:'),FAdjudicationTime,TournamentLabel(Self,'seconds; threshold:'),
     FAdjudicationThreshold,TournamentLabel(Self,'cp')]) do Top:=3;
   with LayoutRow(ButtonPanel,[FStartStopButton,ConcurrentLabel,FConcurrentGamesEdit,
-    FStopButton,SaveButton,LoadButton]) do Top:=4;
+    FStopButton,SaveButton,LoadButton]) do Top:=5;
   ButtonPanel.AutoSize:=True;
   UpdateButtons;RefreshSprt;
   EnableAutoLayout;
@@ -823,50 +823,48 @@ begin
   if Result='' then Result:=FVariant.DefaultStartingFEN;
 end;
 
-procedure TTournamentDialog.RefreshLayout;
+procedure TTournamentDialog.MeasureLayout;
 const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
-var FieldWidth,ContentWidth,GameWidth,I,CountWidth,Extra:Integer;Fields:TWinControl;
+var FieldWidth,CountWidth:Integer;Fields:TWinControl;
+ function RowMinimum(Row:TWinControl):Integer;
+ var J:Integer;C:TControl;
+ begin
+  Result:=Max(0,Row.ControlCount-1)*Row.ChildSizing.HorizontalSpacing;
+  for J:=0 to Row.ControlCount-1 do begin
+   C:=Row.Controls[J];Inc(Result,C.Constraints.MinWidth+C.BorderSpacing.Left+C.BorderSpacing.Right+2*C.BorderSpacing.Around);
+  end;
+ end;
+ procedure FitChoice(Choice:TComboBox);
+ var I,W:Integer;
+ begin
+  if Choice=nil then Exit;W:=0;
+  for I:=0 to Choice.Items.Count-1 do W:=Max(W,MeasureGuiText(Choice.Items[I],Choice.Font).cx);
+  Inc(W,MeasureGuiText('Ag',Choice.Font).cy+MeasureGuiText('MM',Choice.Font).cx);
+  Choice.Constraints.MaxWidth:=0;Choice.Constraints.MinWidth:=W;Choice.Constraints.MaxWidth:=W;
+  if Choice.Parent<>nil then Choice.Parent.Constraints.MinWidth:=RowMinimum(Choice.Parent);
+ end;
 begin
-  inherited RefreshLayout;
+  inherited MeasureLayout;
   if FStartingFENEdit=nil then Exit;
   if (FBallotCountLabel<>nil) and (FBallotCountLabel.Parent<>nil) then begin
     CountWidth:=Max(MeasureGuiText('9999 positions',FBallotCountLabel.Font).cx,
       MeasureGuiText(FBallotCountLabel.Caption,FBallotCountLabel.Font).cx)+
       MeasureGuiText('MM',FBallotCountLabel.Font).cx;
-    // Reserve the count cell even while its caption is empty. Keep the
-    // containing row's minimum in step with its measured fixed-width cell.
-    Extra:=Max(0,CountWidth-FBallotCountLabel.Constraints.MinWidth);
     FBallotCountLabel.Constraints.MaxWidth:=0;
     FBallotCountLabel.Constraints.MinWidth:=CountWidth;
     FBallotCountLabel.Constraints.MaxWidth:=CountWidth;
-    FBallotCountLabel.Parent.Constraints.MinWidth:=
-      FBallotCountLabel.Parent.Constraints.MinWidth+Extra;
   end;
   FieldWidth:=MeasureGuiText(FStartingFENEdit.Text,FStartingFENEdit.Font).cx;
   if GameVariantId(FVariant)='chess' then
     FieldWidth:=Max(FieldWidth,MeasureGuiText(ChessFenSample,FStartingFENEdit.Font).cx);
   Inc(FieldWidth,MeasureGuiText('MM',FStartingFENEdit.Font).cx);
   FStartingFENEdit.Constraints.MinWidth:=FieldWidth;
+  FitChoice(FGameCombo);FitChoice(FTimeForfeitCombo);
   Fields:=FStartingFENEdit.Parent;
-  ContentWidth:=FieldWidth;
-  if FGameCombo<>nil then begin
-    GameWidth:=0;
-    for I:=0 to FGameCombo.Items.Count-1 do
-      GameWidth:=Max(GameWidth,MeasureGuiText(FGameCombo.Items[I],FGameCombo.Font).cx);
-    Inc(GameWidth,MeasureGuiText('Ag',FGameCombo.Font).cy+MeasureGuiText('MM',FGameCombo.Font).cx);
-    FGameCombo.Constraints.MaxWidth:=0;
-    FGameCombo.Constraints.MinWidth:=GameWidth;
-    FGameCombo.Constraints.MaxWidth:=GameWidth;
-    Inc(ContentWidth,FGameCombo.Constraints.MinWidth);
-  end;
-  for I:=0 to Fields.ControlCount-1 do
-    if Fields.Controls[I] is TLabel then
-      Inc(ContentWidth,MeasureGuiText(TLabel(Fields.Controls[I]).Caption,Fields.Controls[I].Font).cx);
-  Inc(ContentWidth,(Fields.ControlCount-1)*Fields.ChildSizing.HorizontalSpacing);
-  Fields.Constraints.MinWidth:=ContentWidth;
-  Fields.Parent.Constraints.MinWidth:=ContentWidth;
+  Fields.Constraints.MinWidth:=RowMinimum(Fields);
+  FTournamentNameEdit.Parent.Constraints.MinWidth:=RowMinimum(FTournamentNameEdit.Parent);
+  Fields.Parent.Constraints.MinWidth:=Max(Fields.Constraints.MinWidth,FTournamentNameEdit.Parent.Constraints.MinWidth);
   if FSprt<>nil then FSprt.RefreshMeasurements;
-  RefreshMinimum;
 end;
 
 procedure TTournamentDialog.ResetForVariant(AVariant:TGameVariant);

@@ -31,6 +31,9 @@ type
     procedure AsyncLayout(Data:PtrInt);
     procedure RequestLayout(ContentChanged:Boolean);
   protected
+    // Form-specific measurements belong to the same guarded pass, before the
+    // final minimum is published to an embedding parent.
+    procedure MeasureLayout; virtual;
     procedure RefreshMinimum;
     procedure FontChanged(Sender:TObject); override;
     procedure DoShow; override;
@@ -46,7 +49,9 @@ type
   end;
 
 function LayoutRow(AParent:TWinControl;const AControls:array of TControl;
-  StretchIndex:Integer=-1):TPanel;
+  StretchIndex:Integer=-1):TPanel; overload;
+function LayoutRow(AParent:TWinControl;const AControls:array of TControl;
+  const StretchIndices:array of Integer):TPanel; overload;
 function LayoutFields(AParent:TWinControl;const AControls:array of TControl):TPanel;
 function LayoutStack(AParent:TWinControl):TPanel;
 function LayoutFlow(AParent:TWinControl;const AControls:array of TControl):TFlowPanel;
@@ -114,12 +119,18 @@ end;
 
 function LayoutRow(AParent:TWinControl;const AControls:array of TControl;
   StretchIndex:Integer):TPanel;
-var I:Integer;
+begin Result:=LayoutRow(AParent,AControls,[StretchIndex]);end;
+
+function LayoutRow(AParent:TWinControl;const AControls:array of TControl;
+  const StretchIndices:array of Integer):TPanel;
+var I,J:Integer;Stretch:Boolean;
 begin
   Result:=LayoutStack(AParent);
   // Explicit order: keep controls owned by their original forms, including events.
   for I:=0 to High(AControls) do begin
-    AControls[I].Parent:=Result;PrepareCell(AControls[I],I=StretchIndex);
+    AControls[I].Parent:=Result;Stretch:=False;
+    for J:=0 to High(StretchIndices) do if I=StretchIndices[J] then Stretch:=True;
+    PrepareCell(AControls[I],Stretch);
   end;
   Result.ChildSizing.EnlargeHorizontal:=crsHomogenousChildResize;
   Result.ChildSizing.ShrinkHorizontal:=crsHomogenousChildResize;
@@ -342,8 +353,13 @@ begin
   FMeasuring:=True;
   try
     MeasureControls(Self);
+    MeasureLayout;
     RefreshMinimum;
   finally FMeasuring:=False;end;
+end;
+
+procedure TGuiLayoutForm.MeasureLayout;
+begin
 end;
 
 procedure TGuiLayoutForm.RequestLayout(ContentChanged:Boolean);

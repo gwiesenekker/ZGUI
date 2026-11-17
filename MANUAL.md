@@ -1145,12 +1145,18 @@ an engine-directory number or a participant count. Filtering by game can leave
 gaps, and adding/removing registrations can change these display numbers.
 Tournament records identify engines using their saved configuration identity.
 
-The tournament name and Starting FEN occupy full-width rows. The FEN minimum
-width follows its text and font. The Chess/Draughts chooser precedes the words
-**Starting FEN**.
-The Pairing options come next, with **Clear pairing** below **Create pairing**.
-Time controls occupy the next row; Play, concurrent games, Stop, Save and Load
-occupy the following row.
+Tournament settings use six rows:
+
+1. Chess/Draughts selector and tournament name.
+2. Starting FEN, ballot file/path, Clear ballot and position count.
+3. Time controls.
+4. Time forfeit and adjudication inputs.
+5. Pairing options, with Create pairing above Clear pairing beside the radio group.
+6. Play, concurrent games, Stop, Save and Load.
+
+Labels, inputs and buttons are vertically aligned using their measured sizes.
+The FEN minimum width follows its text and font; the FEN and ballot-path fields
+share additional space as the window grows.
 
 ### 7.1 Tournament settings
 
@@ -1333,8 +1339,10 @@ asserting an independently verified rule cause.
 
 This reference describes displayed causes; it does not add adjudication rules.
 
-The cross table ranks engines by points, wins, Sonnenborn-Berger score, and then
-name. It also shows the individual matchup results.
+The cross table ranks engines by points, wins, Sonneborn-Berger score, and then
+name. It also shows the individual matchup results. In a head-to-head event
+with only two engines, their SB totals are equal; use Points to read the match
+score.
 
 ### 7.4 Saving and loading tournaments
 

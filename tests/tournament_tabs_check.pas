@@ -352,7 +352,7 @@ begin
 end;
 procedure CheckTimeControlRows(V:TGameVariant);
 var D,R:TTournamentDialog;U:TComboBox;Value:TEdit;Data:TJSONObject;
- Name:string;I:Integer;C:TControl;Row:TWinControl;Rejected:Boolean;
+ Name:string;I:Integer;C:TControl;Row,ForfeitRow,PairingRow:TWinControl;Rejected:Boolean;
 const TimeNames:array[0..4]of string=('TournamentMoves','TournamentMinutes','TournamentTimeUnit',
  'TournamentIncrement','TournamentIncrementMode');
 begin
@@ -362,8 +362,8 @@ begin
   U:=TComboBox(D.FindComponent('TournamentTimeUnit'));Value:=TEdit(D.FindComponent('TournamentMinutes'));
   Check((U.ItemIndex=0) and (U.Text='minutes'),'Minutes is the default time unit');
   Row:=Value.Parent;
-  Check(TControl(D.FindComponent('TournamentPairingOptions')).Parent.Top<Row.Top,
-   'Pairing options precede the time-control row');
+  Check(TControl(D.FindComponent('TournamentPairingOptions')).Parent.Top>Row.Top,
+   'Pairing options follow time controls and time-forfeit row');
   Check(Button(D,'Clear pairing').Parent.Top>Button(D,'Create pairing').Parent.Top,
    'Clear pairing is below Create pairing');
   for I:=0 to High(TimeNames) do begin
@@ -376,6 +376,19 @@ begin
    'Play, concurrency and Stop share the action row');
   Check((Button(D,'Play').Parent.Top>Row.Top) and (Button(D,'Play').Left<Button(D,'Stop').Left),
    'Actions follow the time controls');
+  ForfeitRow:=TControl(D.FindComponent('TournamentTimeForfeit')).Parent;
+  PairingRow:=TControl(D.FindComponent('TournamentPairingOptions')).Parent;
+  Check((ForfeitRow.Top>Row.Top) and (ForfeitRow.Top<PairingRow.Top) and
+    (Button(D,'Play').Parent.Top>PairingRow.Top),'Six-row order ends with pairing and actions');
+  for I:=0 to ForfeitRow.ControlCount-1 do begin
+   C:=ForfeitRow.Controls[I];
+   Check(Abs((2*C.Top+C.Height)-ForfeitRow.ClientHeight)<=3,'Time-forfeit labels and inputs are vertically centered');
+  end;
+  C:=TControl(D.FindComponent('TournamentPairingOptions'));
+  Check((Button(D,'Create pairing').Parent.Parent.Parent=PairingRow) and
+    (Button(D,'Clear pairing').Parent.Parent.Parent=PairingRow),'Pairing buttons share the radio-group row');
+  Check(Abs((2*Button(D,'Create pairing').Parent.Parent.Top+Button(D,'Create pairing').Parent.Parent.Height)-(2*C.Top+C.Height))<=3,
+    'Pairing action stack is centered beside the radio group');
   Check(not Button(D,'Play').Enabled and not Button(D,'Stop').Enabled,'Unpaired tournament disables Play and Stop');
   Check(Button(D,'Save...').Enabled and Button(D,'Load...').Enabled,'Idle file controls are available');
   TEdit(D.FindComponent('TournamentMoves')).Text:='40';Value.Text:='12.5';

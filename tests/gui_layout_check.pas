@@ -54,10 +54,11 @@ begin
    Check(Child.Width>=W,Path+' complete starting FEN plus margin');
    Choice:=TComboBox(Root.FindComponent('TournamentVariant'));
    if Choice<>nil then begin
-    Check(Choice.Parent=Child.Parent,Path+' game chooser shares FEN row');
-    Check(TControl(Root.FindComponent('TournamentStartingFENLabel')).Left>=Choice.Left+Choice.Width,
-     Path+' game chooser precedes Starting FEN label');
-    Check(Abs(Choice.Top-Child.Top)<=2,Path+' game chooser aligns with FEN');
+    Check(Choice.Parent=TControl(Root.FindComponent('TournamentName')).Parent,Path+' game chooser shares tournament-name row');
+    Check(TControl(Root.FindComponent('TournamentNameLabel')).Left>=Choice.Left+Choice.Width,
+     Path+' game chooser precedes tournament name');
+    Check(Choice.Parent.Top<Child.Parent.Top,Path+' name row precedes FEN and ballot row');
+    Check(TControl(Root.FindComponent('TournamentBallotFile')).Parent=Child.Parent,Path+' FEN and ballot path share a row');
     W:=0;for J:=0 to Choice.Items.Count-1 do W:=Max(W,MeasureGuiText(Choice.Items[J],Choice.Font).cx);
     Inc(W,MeasureGuiText('Ag',Choice.Font).cy+MeasureGuiText('MM',Choice.Font).cx);
     Check(Choice.Width<=W+2,Path+' chooser width is measured to its values: '+IntToStr(Choice.Width)+' expected '+IntToStr(W));

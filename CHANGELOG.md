@@ -4,6 +4,32 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Arrange tournament settings in six aligned rows — 2026-11-17
+
+Commit: pending.
+
+- User waiver: “Apply now; waive prior review” for the named six-row tournament
+  layout cleanup, measured sizing/vertical alignment and retained concurrency
+  field. Work notes: chatgpt/TOURNAMENT_SIX_ROW_LAYOUT_NOTES.md.
+- Arrange Chess/Draughts and tournament name first; starting FEN, ballot path,
+  browse/clear buttons and position count second; time controls third; Time
+  forfeit fourth; pairing options and stacked Create/Clear actions fifth;
+  Play/concurrency/Stop/Save/Load sixth. Apply the same layout to both games.
+- Reuse the existing measured-row helper with multiple expanding fields. Center
+  labels and controls, size engine choices to their contents, and center pairing
+  actions alongside the radio group. Retain full measured FEN and count widths.
+- Complete custom tournament measurements inside the shared guarded layout pass
+  before publishing its minimum to the host, avoiding intermediate resize loops
+  at large fonts. Preserve existing controls, handlers and tournament execution.
+- Update the built-in manual to match the six-row arrangement.
+- Inspect the reported two-engine SB values: both equal 159*157/2 = 12481.5
+  under the existing calculation; scoring code is unchanged.
+- Validation: GTK2 build, all 27 GUI suites, full regression and both tournament
+  suites pass. Focused six-row font/window/DPI inspection passes 1552 assertions
+  and populated-engine presentation checks pass 258 assertions. Inspect normal
+  and enlarged-font captures on the hidden display. Native Windows execution
+  remains outstanding.
+
 ### Refresh SPRT comparison immediately after loading — 2026-11-17
 
 Commit: `8bc7286`.
