@@ -1,5 +1,7 @@
 # Six-row tournament settings layout
 
+Implementation commit: `7e080b8`.
+
 Authorization 2026-11-17: user answered **“Apply now; waive prior review”** for
 the six-row tournament layout, measured sizing and vertical alignment, retaining
 concurrency on the Play row and preserving tournament behavior.

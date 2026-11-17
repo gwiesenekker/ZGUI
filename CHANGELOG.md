@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Arrange tournament settings in six aligned rows — 2026-11-17
 
-Commit: pending.
+Commit: `7e080b8`.
 
 - User waiver: “Apply now; waive prior review” for the named six-row tournament
   layout cleanup, measured sizing/vertical alignment and retained concurrency
