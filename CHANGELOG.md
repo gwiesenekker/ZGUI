@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Correct shared choice-dialog button labels — 2026-11-17
 
-Commit: pending.
+Commit: `3875399`.
 
 - Authorization: “Apply now; waive prior Claude review” for the shared choice
   dialog caption fix; notes: chatgpt/CHOICE_DIALOG_CAPTION_NOTES.md.

@@ -1,6 +1,7 @@
 # Choice-dialog caption fix
 
 Date: 2026-11-17.
+Implementation commit: `3875399`.
 User authorization: “Apply now; waive prior Claude review”.
 Scope: default the shared choice dialog confirmation caption to OK, with the
 move-selection caller explicitly requesting Play move. Both database creation
