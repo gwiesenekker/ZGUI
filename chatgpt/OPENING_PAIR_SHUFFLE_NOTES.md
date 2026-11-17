@@ -1,5 +1,7 @@
 # Shuffle opening pairs
 
+Implementation commit: `f53fa0a`.
+
 2026-11-17 authorization: user answered **“Implement now; waive prior review”**
 for this named scope: opt-in “Shuffle opening pairs” checkbox and CLI option for
 chess and draughts; shuffle before pairing, retain reversed-colour pairs, save

@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Shuffle opening pairs before tournament pairing — 2026-11-17
 
-Commit: pending.
+Commit: `f53fa0a`.
 
 - Authorization: “Implement now; waive prior review” for the named GUI/CLI shuffle
   option, keeping reversed-colour games paired and saving the order for SPRT.
