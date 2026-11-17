@@ -30,4 +30,4 @@ The user clarified that the final-move condition can mean not browsing/clicking,
 
 ## Commit
 
-Pending.
+Implementation: `06438c2`.

@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Follow new games while watching the finished list tail — 2026-11-17
 
-Commit: pending.
+Commit: `06438c2`.
 
 - User waiver: “Implement now; waive prior review” for conditional automatic
   following of newly posted background games, for chess and draughts. The user
