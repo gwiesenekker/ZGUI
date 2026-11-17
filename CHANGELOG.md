@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Describe SPRT progress and result in one line — 2026-11-17
 
-Commit: pending.
+Commit: `f0907f6`.
 
 - User approved the one-line status proposal with “Please proceed!”, within the
   live-SPRT scope previously authorized with “Implement now; waive prior review”.

@@ -1,5 +1,7 @@
 # Single-line SPRT status
 
+Implementation commit: `f0907f6`.
+
 2026-11-17 authorization: user approved the proposed running/finished/boundary
 status lines with **“Please proceed!”**. This is within the live-pane scope
 previously authorized with **“Implement now; waive prior review”**. The user then
