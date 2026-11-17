@@ -181,10 +181,40 @@ after a ZGUI restart is separate functionality.
 An external paired-SPRT runner should consume the **contiguous completed prefix**:
 process pairs in pair-number order and wait when either result is null, even if
 later pairs are complete. Keep the statistical hypotheses, pair-count categories,
-likelihood calculation and stopping decision in that runner. At its first boundary
+likelihood calculation and stopping decision in that runner, or request the shared
+calculation with `sprt=true` (see below). At its first boundary
 crossing, record the deciding pair and call `stop_tournament`; any later finished
 games remain in ZGUI's match record outside that decision sample. ZGUI does not
-perform SPRT or freeze results at an external decision boundary.
+automatically stop at an external decision boundary.
+
+Add `sprt=true` to include the live pane's calculation:
+
+```text
+query_tournament id=1 pairs=true sprt=true
+```
+
+The optional `sprt` object uses the candidate/baseline and hypotheses currently
+selected in that tournament tab. Its perspective can differ from the ordinary
+engine1 aggregate and `pairs` array. Omitted or false leaves the response unchanged.
+`sprt` accepts true or false. Available reports contain:
+
+| Field | Meaning |
+| --- | --- |
+| `available`, `model` | Availability and `paired-logistic-v1` (paired logistic-Elo GSPRT). An unavailable report contains `reason`. |
+| `candidate_key`, `baseline_key` | Exact engine registration identities selected in the pane. |
+| `elo0`, `elo1`, `alpha`, `beta`, `mode` | Current design and provenance, described in section 7.7. |
+| `counts` | Five counts in pair-score order: 0, 0.5, 1, 1.5, 2. Only the decision sample counts. |
+| `pairs_total`, `pairs_complete`, `pairs_included`, `prefix_complete` | Scheduled, complete, included and contiguous-complete-prefix pair counts. |
+| `waiting_at_pair` | First unfinished pair number, or 0 if none. |
+| `later_complete` | Complete pairs outside the included sample. |
+| `llr`, `lower_bound`, `upper_bound` | Current generalized log-likelihood ratio and decision boundaries. |
+| `decision`, `decision_pair` | `continue`, `h0` or `h1`; first crossing's opening number (0 before crossing). |
+| `automatic_stop` | Always false. The external runner may call `stop_tournament`. |
+
+Querying does not edit saved files. The current interactive IDs still refer only
+to CLI-created two-engine matches. The GUI pane also supports selecting a
+head-to-head comparison inside a multi-engine tournament. Changing a CLI match's
+schedule retains the existing `MATCH_CHANGED` protection.
 
 Query states are `error`, `stopping`, `completed`, `running`, `waiting`, `attention`
 or `stopped`, with that precedence. The response includes total/completed/active/
@@ -228,7 +258,7 @@ backslashes, useful for UNC paths: `ballot='\\server\share\my ballot.fen'`.
 Commands are single-line, at most 64 KiB, with LF or CRLF endings. Invalid UTF-8,
 NUL bytes, malformed quoting and oversized lines are rejected; processing resumes
 at the next line. There is no shell execution, completion/history, CLI quit
-command or SPRT in this version.
+command or automatic SPRT stopping in this version.
 
 Stable error codes: `BAD_ARGUMENT`, `UNKNOWN_ENGINE`, `AMBIGUOUS_ENGINE`,
 `GAME_MISMATCH`, `BUSY`, `CONFIGURE`, `PAIRING`, `STORAGE`,
@@ -248,7 +278,7 @@ on Windows or `./zgui --cli` on Linux. The same commands work through pipes.
 | --- | --- | --- |
 | `list_engines` | None | List registered engines, their session IDs, keys, names, protocols, game and executable availability. Does not launch engines. |
 | `run_tournament` | Two engine selectors; optional settings below | Create and start a two-engine match in a normal tournament tab. Returns immediately with a tournament ID. |
-| `query_tournament` | Required `id=N`; optional `pairs=true` (default false) | Read the current state of the CLI-created tournament with that returned ID. Repeat to monitor progress. |
+| `query_tournament` | Required `id=N`; optional `pairs=true`, `sprt=true` (both default false) | Read the current state of the CLI-created tournament with that returned ID. Repeat to monitor progress. |
 | `stop_tournament` | Required `id=N` | Request the GUI Stop action for that tournament; return immediately and keep its tab/results. Query to monitor shutdown. |
 
 Parameters for `run_tournament` use `name=value` syntax. Quote values containing
@@ -292,6 +322,7 @@ Query response fields are:
 | `pairs_total`, `pairs_completed` | Total opening pairs and pairs with both results known. |
 | `wins`, `draws`, `losses` | Results from engine1's perspective, regardless of colour. |
 | `referee_results` | Number of games with an effective referee result override. |
+| `sprt` | Present only with sprt=true: the live pane's current GSPRT design and evidence report (section 7.7). |
 | `pairs` | Present only with pairs=true: all scheduled pairs with opening number/FEN, game numbers and normalized engine1 scores. |
 
 Each response is one `OK ` or `ERROR ` line followed by JSON. Engine and tournament
@@ -1416,6 +1447,70 @@ an existing PGN/PDN archive, ZGUI preserves that archive and creates a separate 
 for the linked records. Missing older moves cannot be recovered from standings.
 Preserve the older archive along with the tournament JSON. ZGUI prompts to save
 tournament state when closing if unsaved tournament data exists.
+
+### 7.7 Live SPRT comparison
+
+Expand **SPRT comparison** below the tournament games table. Choose **Candidate**
+and **Baseline** using its independent selectors; **Swap** reverses them. The
+existing engine checkboxes continue to filter standings. They do not change this
+comparison once pairings exist. Drag the splitter to resize the pane, or collapse
+it to give the space back to the games table.
+
+Use **Test settings...** to set H0/H1 in **logistic Elo** and alpha/beta as
+fractions. Defaults are 0 and 5 Elo with alpha=beta=0.05. H0 must be below H1;
+alpha and beta must each be positive and their sum below 1. This is a paired
+**generalized sequential probability ratio test (GSPRT)**, labelled SPRT in the
+interface. It estimates the five outcome probabilities under each Elo hypothesis;
+it does not assume a fixed draw rate. Normalized Elo is not supported in this model.
+
+The left table counts two-game scores from the candidate's perspective:
+
+| Pair score | Outcomes |
+| --- | --- |
+| 0 | Two losses (LL). |
+| 0.5 | Loss and draw (LD/DL). |
+| 1 | Two draws or a win and loss (DD/WL/LW). |
+| 1.5 | Win and draw (WD/DW). |
+| 2 | Two wins (WW). |
+
+Only games against the selected opponent count, for chess and draughts. Each
+scheduled opening must have exactly two games with colours reversed and the same
+starting FEN. A double round-robin ballot provides these pairs; duplicate ballot
+FEN entries remain separate. Without a ballot, a double round robin gives one
+pair per selected opponent. Single legs and Swiss schedules are unavailable for
+this view; an explanation is shown instead of a misleading calculation.
+
+The graph shows the generalized log-likelihood ratio (LLR) and H0/H1 boundaries.
+Positive evidence favours H1; negative evidence favours H0. Pairs enter in
+scheduled opening order. If pair 8 finishes before pair 7, it waits. The view
+replays this sequence and freezes its evidence sample at the **first crossing**.
+The status shows Continue, H0 reached or H1 reached and the deciding pair number.
+Complete pairs outside that sample are reported separately; no game results are
+removed. A missing or corrected result causes the view to reconstruct the current
+sample and crossing from the saved effective results.
+
+**Auto-stop is off.** This display never stops a tournament. A fixed match can
+continue after crossing, and an external runner can query `sprt=true` and issue
+`stop_tournament` using the same calculation.
+
+Explicitly applying a complete design before any play marks it **Configured before
+play**. Defaults and designs chosen or changed after play are **Exploratory**.
+Referee result changes or replayed attempts mark the comparison **Amended results**.
+These labels describe the stored history, not independent proof of experimental
+pre-registration. The alpha/beta rates are nominal, asymptotic GSPRT targets, not
+exact finite-sample guarantees. Choosing hypotheses after seeing results does not
+support the same error-rate claim as a preplanned test. A fixed, curated ballot
+also differs from independent random sampling.
+
+Explicit comparison settings are saved in optional versioned `sprt_view` metadata
+inside tournament JSON; reopening reconstructs the graph and first crossing.
+Older tournament files without this block open with exploratory defaults. Older
+ZGUI versions may drop this view metadata when resaving; game records are unaffected.
+An unchanged Apply preserves the existing design declaration.
+
+The calculation is independently implemented and checked against the logistic
+likelihood reference in [Fishtest's statistical documentation](https://official-stockfish.github.io/docs/fishtest-wiki/Fishtest-Mathematics.html).
+Fishtest is a reference, not a runtime dependency.
 
 ## 8. PGN, PDN and FEN
 

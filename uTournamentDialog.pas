@@ -5,7 +5,7 @@ unit uTournamentDialog;
 interface
 
 uses
-  FPJSON, uTournamentFileLocks,
+  FPJSON, uTournamentFileLocks,uSprt,uSprtPanel,uTournamentPairResults,
   CheckLst, uGuiLayout, Classes, Contnrs, Controls, ExtCtrls, Forms, Grids, StdCtrls, SysUtils,
   Menus, SyncObjs, Types, uEngineRegistry, uGameSetupTypes, uTournamentGameRecord,
   uGameGuiProfile,uGamePosition,uGameOrchestrator;
@@ -35,6 +35,16 @@ type
   TTournamentSelectGameEvent = procedure(Sender: TObject; AGame: TObject) of object;
 
   TTournamentDialog = class(TGuiLayoutForm)
+  private
+    FSprt:TSprtPanel;
+    FSprtKey,FSprtError:string;
+    FSprtReport:TSprtReport;
+    FSprtAmended:Boolean;
+    function ComparisonRows:TComparisonRows;
+    procedure RefreshSprt;
+    procedure SprtChanged(Sender:TObject);
+    procedure NoteSprtStarted;
+    function HasStartedPlay:Boolean;
   private
     FOnContextRequested:TTournamentContextEvent;
     FOnTargets:TTournamentTargetsEvent;
@@ -166,6 +176,7 @@ type
     function MatchSnapshot(const Engine1Key,Engine2Key:string;IncludePairs:Boolean=False):TJSONObject;
     function AbandonUnpublished:Boolean;
     procedure StopTournament;
+    function SprtSnapshot:TJSONObject;
     function StartTournament(out AMessage:string;CommandMode:Boolean=False;
       AllowShared:Boolean=False):TTournamentStartResult;
     procedure RefreshLayout; override;
@@ -644,6 +655,10 @@ begin
   PopupItem.OnClick := @RescheduleSelectedGame;
   PairingPopup.Items.Add(PopupItem);
   FGrid.PopupMenu := PairingPopup;
+  Splitter:=TSplitter.Create(Self);Splitter.Parent:=PairingPanel;Splitter.Align:=alBottom;Splitter.Height:=6;
+  Splitter.ResizeAnchor:=akBottom;
+  FSprt:=TSprtPanel.Create(Self);FSprt.Parent:=PairingPanel;FSprt.Align:=alBottom;
+  FSprt.OnChanged:=@SprtChanged;
   FGrid.Cells[TournamentColGame, 0] := 'Game';
   FGrid.Cells[TournamentColRound, 0] := 'Round';
   FGrid.Cells[TournamentColWhite, 0] := 'White';
@@ -697,7 +712,7 @@ begin
   with LayoutRow(ButtonPanel,[FStartStopButton,ConcurrentLabel,FConcurrentGamesEdit,
     FStopButton,SaveButton,LoadButton]) do Top:=3;
   ButtonPanel.AutoSize:=True;
-  UpdateButtons;
+  UpdateButtons;RefreshSprt;
   EnableAutoLayout;
   finally EnableAlign;end;
 end;
@@ -813,6 +828,7 @@ begin
   Inc(ContentWidth,(Fields.ControlCount-1)*Fields.ChildSizing.HorizontalSpacing);
   Fields.Constraints.MinWidth:=ContentWidth;
   Fields.Parent.Constraints.MinWidth:=ContentWidth;
+  if FSprt<>nil then FSprt.RefreshMeasurements;
   RefreshMinimum;
 end;
 
@@ -829,6 +845,7 @@ begin
   try
     FTimer.Enabled:=False;FRunning:=False;FClosing:=False;
     FCloseStopped:=False;FRefereeStopPending:=False;FLastGameStartTick:=0;
+    FSprt.SetConfig(DefaultSprtConfig);FSprtKey:='';
     ClearTournamentGameRefs;FWhiteEngines.Clear;FBlackEngines.Clear;
     FreeAndNil(FFileLocks);FReadOnly:=False;
     FFileName:='';FPdnFileName:='';FPdnFileOwned:=False;
@@ -925,7 +942,7 @@ function TTournamentDialog.HasTournamentData: Boolean;
 begin
   Result := (Trim(FFileName) <> '') or
     (not TournamentPairingGridIsEmpty(FGrid)) or
-    HasNonByeResults or (SettingsSignature <> FInitialSettingsSignature);
+    HasNonByeResults or (SettingsSignature <> FInitialSettingsSignature) or FSprt.Config.Stored;
 end;
 
 function TTournamentDialog.IsRunning: Boolean;
@@ -1447,6 +1464,7 @@ end;
 
 function TTournamentDialog.CreatePairing(out AMessage:string;CommandMode:Boolean):Boolean;
 var
+  C:TSprtConfig;
   BlackEngines: TStringList;
   Engines: TStringList;
   PairingRound: TTournamentPairingRound;
@@ -1498,6 +1516,9 @@ begin
     if not TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) then
     begin
       if not StartNewTournamentStorage then Exit;
+      if HasStartedPlay then begin
+       C:=FSprt.Config;C.BeforePlay:=False;C.HasStarted:=True;FSprt.SetConfig(C);
+      end;
       ClearTournamentGameRefs;
       ClearTournamentPairingGrid(FGrid);
     end;
@@ -1522,7 +1543,7 @@ begin
 end;
 
 procedure TTournamentDialog.ConfigureNewTournament(const Settings:TTournamentMatchSettings);
-var I:Integer;A,B:TExternalEngineDefinition;
+var I:Integer;A,B:TExternalEngineDefinition;C:TSprtConfig;
 begin
   if FReadOnly or IsRunning or (FFileName<>'') or not TournamentPairingGridIsEmpty(FGrid) then
     raise EInvalidOperation.Create('Configure requires a fresh unpublished tournament');
@@ -1545,8 +1566,9 @@ begin
     ReadSettings;MaxConcurrentGames;
     if Settings.Ballot<>'' then LoadBallotFromFile(Settings.Ballot);
     FAcceptedTournamentSignature:=TournamentSignature;
+    C:=FSprt.Config;C.CandidateKey:=Settings.Engine1Key;C.BaselineKey:=Settings.Engine2Key;FSprt.SetConfig(C);
   finally FLoadingTournament:=False;EnableAlign;end;
-  UpdateButtons;RefreshLayout;
+  UpdateButtons;RefreshSprt;RefreshLayout;
 end;
 
 function TTournamentDialog.AbandonUnpublished:Boolean;
@@ -1555,87 +1577,137 @@ begin
   if Result then FLoadingTournament:=True; // destructor must not autosave an abandoned setup
 end;
 
-function TTournamentDialog.MatchSnapshot(const Engine1Key,Engine2Key:string;IncludePairs:Boolean):TJSONObject;
-var Row,Total,Done,ActiveCount,Pending,Unresolved,Wins,Draws,Losses,Manual,Pairs,I,P,N:Integer;
-  R:TTournamentGameRecord;Outcome:TTournamentResult;FirstReason,AttentionReason,Reason,State,Err:string;
-  PairCounts:array of Integer;PairKnown:array of Integer;PairFen,PairWhite:array of string;
-  PairGames:array of array[0..1] of Integer;
-  PairScores:array of array[0..1] of Double;
-  Entries,Games,Scores:TJSONArray;Entry:TJSONObject;Slot:Integer;Score:Double;
-  WhiteIsOne,Known:Boolean;
+function TTournamentDialog.HasStartedPlay:Boolean;
+var I:Integer;R:TTournamentGameRecord;Reason:string;
 begin
-  Total:=FGrid.RowCount-1;N:=FBallotPositions.Count;if N=0 then N:=1;
-  if (Engine1Key=Engine2Key) or (Total<>2*N) or (FGameRecords.Count<Total) then
-    raise EInvalidOperation.Create('MATCH_CHANGED');
-  SetLength(PairCounts,N);SetLength(PairKnown,N);SetLength(PairFen,N);SetLength(PairWhite,N);
-  if IncludePairs then begin SetLength(PairGames,N);SetLength(PairScores,N);end;
-  Done:=0;ActiveCount:=0;Pending:=0;Unresolved:=0;Wins:=0;Draws:=0;Losses:=0;Manual:=0;Pairs:=0;
-  FirstReason:='';AttentionReason:='';Err:=FStorageError;
-  for Row:=1 to Total do begin
-    R:=TTournamentGameRecord(FGameRecords[Row-1]);
-    WhiteIsOne:=R.WhiteEngineKey=Engine1Key;
-    if not (((R.WhiteEngineKey=Engine1Key) and (R.BlackEngineKey=Engine2Key)) or
-      ((R.WhiteEngineKey=Engine2Key) and (R.BlackEngineKey=Engine1Key))) then raise EInvalidOperation.Create('MATCH_CHANGED');
-    P:=0;if FBallotPositions.Count>0 then P:=StrToIntDef(FGrid.Cells[TournamentColRound,Row],0)-1;
-    if (P<0) or (P>=N) then raise EInvalidOperation.Create('MATCH_CHANGED');
-    Inc(PairCounts[P]);
-    if PairCounts[P]=1 then begin PairFen[P]:=StartingFENForRow(Row);PairWhite[P]:=R.WhiteEngineKey;end
-    else if (PairCounts[P]>2) or (PairFen[P]<>StartingFENForRow(Row)) or
-      (PairWhite[P]=R.WhiteEngineKey) then raise EInvalidOperation.Create('MATCH_CHANGED');
-    Outcome:=ParseTournamentResult(R.EffectiveResult,FProfile.FileFormat);Known:=TournamentResultIsKnown(Outcome);Score:=-1;
-    Reason:=Trim(FGrid.Cells[TournamentColReason,Row]);
-    if (FirstReason='') and (Reason<>'') then FirstReason:=Reason;
-    if (Err='') and (R.CaptureError<>'') then Err:=R.CaptureError;
-    if Known then begin
-      Inc(Done);Inc(PairKnown[P]);if R.ManualResult<>'' then Inc(Manual);
-      if Outcome=trDraw then begin Inc(Draws);Score:=0.5;end
-      else if ((Outcome=trWhiteWin) and WhiteIsOne) or ((Outcome=trBlackWin) and not WhiteIsOne) then begin Inc(Wins);Score:=1;end
-      else begin Inc(Losses);Score:=0;end;
-    end;
-    if IncludePairs then begin
-      Slot:=PairCounts[P]-1;
-      PairGames[P][Slot]:=StrToIntDef(FGrid.Cells[TournamentColGame,Row],Row);
-      PairScores[P][Slot]:=Score;
-    end;
-    if IsRowRunning(Row) then Inc(ActiveCount)
-    else if not Known then
-      if (Reason<>'') and not TournamentReasonIsTransient(Reason) then begin
-        Inc(Unresolved);if AttentionReason='' then AttentionReason:=Reason;
-      end else Inc(Pending);
+ Result:=FSprt.Config.HasStarted or (FRunningGames.Count>0);
+ if Result then Exit;
+ for I:=0 to FGameRecords.Count-1 do begin
+  R:=TTournamentGameRecord(FGameRecords[I]);
+  if R.HasRecord or (R.Attempt>1) or (R.StartDate<>'') then Exit(True);
+ end;
+ for I:=1 to FGrid.RowCount-1 do begin
+  Reason:=FGrid.Cells[TournamentColReason,I];
+  if SameText(Reason,'Running') or SameText(Reason,'Stopping') or
+    ((Reason<>'') and not TournamentReasonIsTransient(Reason)) then Exit(True);
+ end;
+end;
+procedure TTournamentDialog.NoteSprtStarted;
+var C:TSprtConfig;
+begin C:=FSprt.Config;C.HasStarted:=True;FSprt.SetConfig(C);end;
+procedure TTournamentDialog.SprtChanged(Sender:TObject);
+var C:TSprtConfig;
+begin
+ if FLoadingTournament then Exit;
+ C:=FSprt.Config;C.HasStarted:=HasStartedPlay;C.Stored:=True;
+ C.BeforePlay:=not C.HasStarted and (C.CandidateKey<>'') and (C.BaselineKey<>'');
+ FSprt.SetConfig(C);FSprtKey:='';RefreshSprt;
+ if (FFileName<>'') or not TournamentPairingGridIsEmpty(FGrid) then AutoSaveTournament;
+end;
+procedure TTournamentDialog.RefreshSprt;
+var Names,Keys:TStringList;Rows:TComparisonRows;Pairs:TSprtPairs;C:TSprtConfig;I:Integer;Key:string;
+ Data:TJSONArray;Settings:TJSONObject;
+ procedure Participant(const Identity,Name:string);
+ begin if (Identity<>'') and (Keys.IndexOf(Identity)<0) then begin Keys.Add(Identity);Names.Add(Name);end;end;
+begin
+ if (FSprt=nil) or FLoadingTournament or FClosing then Exit;
+ Names:=TStringList.Create;Keys:=TStringList.Create;
+ try
+  Rows:=ComparisonRows;
+  for I:=0 to High(Rows) do begin
+   Participant(Rows[I].WhiteKey,FGrid.Cells[TournamentColWhite,I+1]);
+   Participant(Rows[I].BlackKey,FGrid.Cells[TournamentColBlack,I+1]);
   end;
-  for I:=0 to N-1 do begin
-    if PairCounts[I]<>2 then raise EInvalidOperation.Create('MATCH_CHANGED');
-    if PairKnown[I]=2 then Inc(Pairs);
-    if (FBallotPositions.Count>0) and (PairFen[I]<>FBallotPositions[I]) then raise EInvalidOperation.Create('MATCH_CHANGED');
+  if Length(Rows)=0 then for I:=0 to FEngineCheckList.Items.Count-1 do
+   if FEngineCheckList.Checked[I] then Participant(EngineIdentityKey(TExternalEngineDefinition(FEngineCheckList.Items.Objects[I])),FEngineCheckList.Items[I]);
+  FSprt.SetParticipants(Names,Keys);C:=FSprt.Config;
+  if HasStartedPlay and not C.HasStarted then begin C.HasStarted:=True;FSprt.SetConfig(C);end;
+  FSprtAmended:=False;
+  for I:=0 to High(Rows) do if
+    (((Rows[I].WhiteKey=C.CandidateKey) and (Rows[I].BlackKey=C.BaselineKey)) or
+     ((Rows[I].WhiteKey=C.BaselineKey) and (Rows[I].BlackKey=C.CandidateKey))) then
+      FSprtAmended:=FSprtAmended or Rows[I].Amended;
+  try
+   if TournamentRoundRobinIndexIsSwiss(FRoundRobinGroup.ItemIndex) then
+     raise EConvertError.Create('SPRT requires fixed colour-reversed pairs; Swiss is not supported');
+   ValidateSprtConfig(C,True);
+   Pairs:=CollectComparisonPairs(Rows,C.CandidateKey,C.BaselineKey,FBallotPositions,False);
+   Data:=PairResultsJson(Pairs);Settings:=SprtConfigJson(C);
+   try Key:=Data.AsJSON+Settings.AsJSON+BoolToStr(FSprtAmended,True);finally Data.Free;Settings.Free;end;
+   if Key<>FSprtKey then begin FSprtReport:=EvaluateSprt(C,Pairs);FSprtKey:=Key;end;
+   FSprtError:='';
+  except on E:Exception do begin FSprtError:=E.Message;FSprtReport:=Default(TSprtReport);FSprtKey:='';end;end;
+  FSprt.ShowReport(FSprtReport,FSprtAmended,FSprtError);
+ finally Keys.Free;Names.Free;end;
+end;
+function TTournamentDialog.SprtSnapshot:TJSONObject;
+begin
+ RefreshSprt;
+ if FSprtError<>'' then begin
+  Result:=TJSONObject.Create;Result.Add('available',False);Result.Add('reason',FSprtError);Result.Add('model',SprtModel);
+ end else Result:=SprtReportJson(FSprt.Config,FSprtReport,FSprtAmended);
+end;
+
+function TTournamentDialog.ComparisonRows:TComparisonRows;
+var Row,N:Integer;R:TTournamentGameRecord;
+begin
+ Result:=nil;SetLength(Result,Max(0,FGrid.RowCount-1));N:=0;
+ for Row:=1 to FGrid.RowCount-1 do if TournamentGridHasPairingAtRow(FGrid,Row) then begin
+  Result[N].Number:=StrToIntDef(FGrid.Cells[TournamentColGame,Row],Row);
+  Result[N].Opening:=StrToIntDef(FGrid.Cells[TournamentColRound,Row],0);
+  Result[N].Fen:=Trim(FStartingFENEdit.Text);if Result[N].Fen='' then Result[N].Fen:=FVariant.DefaultStartingFEN;
+  R:=nil;if Row<=FGameRecords.Count then R:=TTournamentGameRecord(FGameRecords[Row-1]);
+  if R<>nil then begin
+   if R.StartingFEN<>'' then Result[N].Fen:=R.StartingFEN;
+   Result[N].WhiteKey:=R.WhiteEngineKey;Result[N].BlackKey:=R.BlackEngineKey;
+   Result[N].Outcome:=ParseTournamentResult(R.EffectiveResult,FProfile.FileFormat);
+   Result[N].Amended:=(R.ManualResult<>'') or (R.Attempt>1);
+  end else Result[N].Outcome:=ParseTournamentResult(FGrid.Cells[TournamentColResult,Row],FProfile.FileFormat);
+  if Result[N].WhiteKey='' then Result[N].WhiteKey:=EngineKeyForName(FGrid.Cells[TournamentColWhite,Row]);
+  if Result[N].BlackKey='' then Result[N].BlackKey:=EngineKeyForName(FGrid.Cells[TournamentColBlack,Row]);
+  Inc(N);
+ end;
+ SetLength(Result,N);
+end;
+function TTournamentDialog.MatchSnapshot(const Engine1Key,Engine2Key:string;IncludePairs:Boolean):TJSONObject;
+var Row,Total,Done,ActiveCount,Pending,Unresolved,Wins,Draws,Losses,Manual,Pairs,I,N:Integer;
+ R:TTournamentGameRecord;FirstReason,AttentionReason,Reason,State,Err:string;
+ Rows:TComparisonRows;OpeningPairs:TSprtPairs;Score:Double;Known:Boolean;
+begin
+ Total:=FGrid.RowCount-1;N:=FBallotPositions.Count;if N=0 then N:=1;
+ if (Engine1Key=Engine2Key) or (Total<>2*N) or (FGameRecords.Count<Total) then raise EInvalidOperation.Create('MATCH_CHANGED');
+ Rows:=ComparisonRows;
+ OpeningPairs:=CollectComparisonPairs(Rows,Engine1Key,Engine2Key,FBallotPositions,True);
+ Done:=0;ActiveCount:=0;Pending:=0;Unresolved:=0;Wins:=0;Draws:=0;Losses:=0;Manual:=0;Pairs:=0;
+ FirstReason:='';AttentionReason:='';Err:=FStorageError;
+ for Row:=1 to Total do begin
+  R:=TTournamentGameRecord(FGameRecords[Row-1]);
+  Score:=CandidateScore(Rows[Row-1].Outcome,Rows[Row-1].WhiteKey=Engine1Key);Known:=Score>=0;
+  Reason:=Trim(FGrid.Cells[TournamentColReason,Row]);
+  if (FirstReason='') and (Reason<>'') then FirstReason:=Reason;
+  if (Err='') and (R.CaptureError<>'') then Err:=R.CaptureError;
+  if Known then begin
+   Inc(Done);if R.ManualResult<>'' then Inc(Manual);
+   if Score=0.5 then Inc(Draws) else if Score=1 then Inc(Wins) else Inc(Losses);
   end;
-  if Err<>'' then begin State:='error';Reason:=Err;end
-  else begin
-    Reason:=FirstReason;
-    if FRefereeStopPending then State:='stopping'
-    else if Done=Total then State:='completed'
-    else if FRunning then begin if ActiveCount>0 then State:='running' else State:='waiting';end
-    else if Unresolved>0 then begin State:='attention';Reason:=AttentionReason;end else State:='stopped';
-  end;
-  Result:=TJSONObject.Create;
-  Result.Add('state',State);Result.Add('reason',Reason);Result.Add('games_total',Total);
-  Result.Add('games_completed',Done);Result.Add('games_active',ActiveCount);Result.Add('games_pending',Pending);
-  Result.Add('unresolved_games',Unresolved);Result.Add('wins',Wins);Result.Add('draws',Draws);Result.Add('losses',Losses);
-  Result.Add('referee_results',Manual);Result.Add('pairs_total',N);Result.Add('pairs_completed',Pairs);
-  if IncludePairs then begin
-    Entries:=TJSONArray.Create;Result.Add('pairs',Entries);
-    // Opening occurrence, not FEN equality or completion order, identifies a pair.
-    for I:=0 to N-1 do begin
-      Entry:=TJSONObject.Create;Entries.Add(Entry);
-      Entry.Add('pair',I+1);Entry.Add('fen',PairFen[I]);
-      Games:=TJSONArray.Create;Entry.Add('games',Games);
-      Scores:=TJSONArray.Create;Entry.Add('results',Scores);
-      for Slot:=0 to 1 do begin
-        Games.Add(PairGames[I][Slot]);
-        if PairScores[I][Slot]<0 then Scores.Add(TJSONNull.Create)
-        else Scores.Add(PairScores[I][Slot]);
-      end;
-    end;
-  end;
+  if IsRowRunning(Row) then Inc(ActiveCount)
+  else if not Known then
+   if (Reason<>'') and not TournamentReasonIsTransient(Reason) then begin
+    Inc(Unresolved);if AttentionReason='' then AttentionReason:=Reason;
+   end else Inc(Pending);
+ end;
+ for I:=0 to High(OpeningPairs) do if (OpeningPairs[I].Scores[0]>=0) and (OpeningPairs[I].Scores[1]>=0) then Inc(Pairs);
+ if Err<>'' then begin State:='error';Reason:=Err;end else begin
+  Reason:=FirstReason;
+  if FRefereeStopPending then State:='stopping' else if Done=Total then State:='completed'
+  else if FRunning then begin if ActiveCount>0 then State:='running' else State:='waiting';end
+  else if Unresolved>0 then begin State:='attention';Reason:=AttentionReason;end else State:='stopped';
+ end;
+ Result:=TJSONObject.Create;Result.Add('state',State);Result.Add('reason',Reason);Result.Add('games_total',Total);
+ Result.Add('games_completed',Done);Result.Add('games_active',ActiveCount);Result.Add('games_pending',Pending);
+ Result.Add('unresolved_games',Unresolved);Result.Add('wins',Wins);Result.Add('draws',Draws);Result.Add('losses',Losses);
+ Result.Add('referee_results',Manual);Result.Add('pairs_total',N);Result.Add('pairs_completed',Pairs);
+ if IncludePairs then Result.Add('pairs',PairResultsJson(OpeningPairs));
 end;
 
 procedure TTournamentDialog.CreatePairingClick(Sender:TObject);
@@ -2085,6 +2157,7 @@ begin
       Data.Add('storage_version',3);Data.Add('game_variant','chess');
       Data.Add('notation_format','pgn');Data.Add('force_ponder_off',FProfile.TournamentForcePonderOff);
     end else Data.Add('storage_version', 2);
+    if FSprt.Config.Stored then Data.Add('sprt_view',SprtConfigJson(FSprt.Config));
     Data.Add('legacy_pdn_file_name', FLegacyPdnFileName);
     Data.Add('tournament_id', FTournamentId);
     Data.Add('pdn_file_name', ExtractRelativePath(ExpandFileName(AFileName),
@@ -2182,6 +2255,7 @@ begin
     Setup.TimeControl.IncrementSeconds:=Data.Get('increment_seconds',Setup.TimeControl.IncrementSeconds);
     if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
     ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);
+    ReadSprtConfig(Data.Find('sprt_view'));
     TimeUnit:=Data.Get('time_unit','minutes');
     Ballot:=TJSONObject(Data.Find('opening_ballot'));
     if Ballot<>nil then begin
@@ -2263,6 +2337,7 @@ begin
       end;
 
     ClearTournamentGameRefs;
+    FSprt.SetConfig(ReadSprtConfig(Data.Find('sprt_view')));FSprtKey:='';
     ClearTournamentPairingGrid(FGrid);
     Games := TJSONObject(Data).Find('games');
     if (Games <> nil) and (Games.JSONType = jtArray) then
@@ -2672,6 +2747,7 @@ begin
   if not (AGame is TRunningGame) or
     (not TournamentGridHasPairingAtRow(FGrid, ARow)) or IsRowRunning(ARow) then
     raise EInvalidOperation.Create('Cannot register a game for this tournament row');
+  NoteSprtStarted;
   RunningGame := TTournamentRunningGame.Create;
   RunningGame.Active := True;
   RunningGame.Row := ARow;
@@ -2980,6 +3056,7 @@ begin
     WhiteEngines.Free;
     Engines.Free;
   end;
+  RefreshSprt;
 end;
 
 end.

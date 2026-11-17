@@ -18,6 +18,10 @@ type
   // A splitter-sized pane has a preferred height separate from its minimum.
   TGuiSplitPanel = class(TPanel);
 
+  // Composite controls own their internal measurements and scrolling. The form
+  // treats their declared minimum as a boundary instead of resizing children.
+  TGuiCompositePanel = class(TGuiSplitPanel);
+
   // Reuses LCL alignment/child sizing. Only content measurements are refreshed here.
   TGuiLayoutForm = class(TForm)
   private
@@ -170,6 +174,7 @@ end;
 procedure MeasureControls(C:TWinControl);
 var I,J,W,H,TextHeight,Cols,Required,Buttons,ButtonHeight,Rows:Integer;Child:TControl;ColumnWidths,RowHeights:array of Integer;
 begin
+  if C is TGuiCompositePanel then Exit;
   Buttons:=0;ButtonHeight:=0;
   for I:=0 to C.ControlCount-1 do begin
     Child:=C.Controls[I];
@@ -276,6 +281,7 @@ function MinimumWidth(C:TWinControl):Integer;
 var I,Side,Middle,W:Integer;Child:TControl;
 begin
   Result:=C.Constraints.MinWidth;
+  if C is TGuiCompositePanel then Exit;
   if (C is TPanel) and not (C is TMeasuredPanel) then Result:=OriginalMinimum(C).Width;
   if C is TForm then Result:=0;
   if (C is TScrollBox) or (C is TMeasuredPanel) then Exit;
@@ -294,6 +300,7 @@ function MinimumHeight(C:TWinControl):Integer;
 var I,Edge,Middle,H:Integer;Child:TControl;
 begin
   Result:=C.Constraints.MinHeight;
+  if C is TGuiCompositePanel then Exit;
   if (C is TPanel) and not (C is TMeasuredPanel) then Result:=OriginalMinimum(C).Height;
   if C is TForm then Result:=0;
   if C is TScrollBox then Exit;

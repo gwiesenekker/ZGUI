@@ -4,6 +4,37 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Add live paired GSPRT tournament comparison — 2026-11-17
+
+Commit: pending.
+
+- User waiver: “Implement now; waive prior review” for the live SPRT view,
+  independent candidate/baseline selection, shared calculation and CLI report,
+  saved settings/provenance and both games, without automatic stopping. The user
+  confirmed “Please proceed with the live SPRT view using GSPRT.” Scope and
+  references: chatgpt/LIVE_SPRT_VIEW_NOTES.md.
+- Add a collapsible, splitter-sized pane below the games table for chess and
+  draughts, with independent selectors, Swap, measured five-category counts,
+  hypothesis/error settings and an LLR graph. Preserve standings checkboxes and
+  the existing tournament/game/engine execution paths.
+- Calculate paired logistic-Elo GSPRT with constrained outcome probabilities.
+  Reuse scheduled opening membership and result normalization for pair snapshots
+  and comparison views. Wait for the completed prefix, preserve duplicate FEN
+  occurrences and report the first crossing while fixed matches continue.
+- Share the exact report with optional query_tournament sprt=true, preserving
+  omitted/false response shapes. Save explicit settings in versioned optional
+  metadata and reconstruct evidence on reload; label exploratory, preconfigured
+  and amended comparisons. Swiss and incomplete single-leg schedules report why
+  they are unavailable. No automatic stopping or new scheduler.
+- Update the built-in manual, numerical/reference tests, both-game GUI tests and
+  real pipe checks. Add a measured composite-panel boundary so the form fitter
+  does not override the new pane's internal native control sizing.
+- Validation: GTK2 build, all 25 GUI suites (84 live-SPRT, 255 CLI GUI,
+  107 pipe/application and 301 multi-game assertions), full regression and both
+  tournament suites pass. Independent numerical checks pass 29 assertions.
+  Inspect normal/enlarged-font screenshots on a hidden display. Native Windows
+  execution remains outstanding.
+
 ### Follow new games while watching the finished list tail — 2026-11-17
 
 Commit: `06438c2`.

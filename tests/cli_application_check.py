@@ -63,7 +63,8 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   for match in [a,b]:
    q=c.command('query_tournament id='+str(match['tournament']));check(q['games_total']==2,'query actual ordinary match')
    check('pairs' not in q,'default query keeps its existing shape')
-   detailed=c.command('query_tournament id='+str(match['tournament'])+' pairs=true')
+   detailed=c.command('query_tournament id='+str(match['tournament'])+' pairs=true sprt=true')
+   check(detailed['sprt']['available'] and detailed['sprt']['model']=='paired-logistic-v1' and not detailed['sprt']['automatic_stop'],'pipe exposes shared GSPRT report for both games')
    check(len(detailed['pairs'])==1 and detailed['pairs'][0]['pair']==1 and
          detailed['pairs'][0]['games']==[1,2] and len(detailed['pairs'][0]['results'])==2,
          'both games expose a full pair without a ballot')

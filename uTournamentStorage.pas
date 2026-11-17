@@ -8,7 +8,7 @@ function TournamentPdnTag(const AName, AValue: string): string;
 function UnusedTournamentPdnPath(const ACandidate: string; AFormat:TGameFileFormat=gffPdn): string;
 function TournamentPdnMatchesId(const AFileName, AId: string; AFormat:TGameFileFormat=gffPdn): Boolean;
 implementation
-uses Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uDraughtsPdn, uChessPgn, Math;
+uses uSprt, Classes, SysUtils, JSONParser, uTournamentTypes, uTournamentResults, uDraughtsPdn, uChessPgn, Math;
 
 function TournamentDocumentText(AData: TJSONData): string;
 var
@@ -204,6 +204,7 @@ var
   Seen: TStringList;
   PairingKey: string;
 begin
+  ReadSprtConfig(Data.Find('sprt_view'));
   CheckInteger(Data, 'storage_version', 1);
   if Data.Get('storage_version', 1) > 4 then
     raise EConvertError.Create('Unsupported tournament storage version');

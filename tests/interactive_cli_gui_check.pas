@@ -1,7 +1,7 @@
 program interactive_cli_gui_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} uCliProtocolOutput,Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
- ExtCtrls,Grids,Dialogs,FPJSON,JSONParser,uMainForm,uTournamentDialog,uTournamentHostForm,
+ ExtCtrls,Grids,Dialogs,FPJSON,JSONParser,uMainForm,uSprtPanel,uSprt,uTournamentDialog,uTournamentHostForm,
  uTournamentStorage,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
  uEngineRegistry,uEngineParamsJson,uGameSetupTypes,uDraughtsHubEngine,uChessUciEngine,uGuiDialogs,
  uStartupCommand,uRunningGame,uGameTree,uAtomicFile,FileUtil,uTournamentGridModel,uTournamentBallot;
@@ -174,10 +174,17 @@ var J,Plain,Disabled:TJSONObject;Entries:TJSONArray;I:Integer;Grid:TStringGrid;S
 begin
  Grid:=TStringGrid(D.FindComponent('TournamentPairings'));OpeningFen:=NormalizeBallotFEN(V,V.DefaultStartingFEN);
  Plain:=Response('query_tournament id='+IntToStr(Id),'OK');
- Disabled:=Response('query_tournament id='+IntToStr(Id)+' pairs=false','OK');
+ Disabled:=Response('query_tournament id='+IntToStr(Id)+' pairs=false sprt=false','OK');
  try
-  Check((Plain.Find('pairs')=nil) and (Plain.AsJSON=Disabled.AsJSON),'Omitted/false pairs preserve the existing response');
+  Check((Plain.Find('sprt')=nil) and (Plain.Find('pairs')=nil) and (Plain.AsJSON=Disabled.AsJSON),'Omitted/false pairs preserve the existing response');
  finally Disabled.Free;Plain.Free;end;
+ J:=Response('query_tournament id='+IntToStr(Id)+' sprt=TRUE','OK');
+ try
+  Check(TJSONObject(J.Find('sprt')).Get('available',False),'Optional SPRT report available');
+  Check(TJSONObject(J.Find('sprt')).Get('model','')=SprtModel,'Explicit paired logistic GSPRT model');
+  Check(Abs(TJSONObject(J.Find('sprt')).Get('llr',0.0)-TSprtPanel(D.FindComponent('TournamentSprt')).Report.LLR)<1e-12,'CLI and GUI share GSPRT result');
+  Check(not TJSONObject(J.Find('sprt')).Get('automatic_stop',True),'GSPRT never automatically stops games');
+ finally J.Free;end;
  J:=Response('query_tournament id='+IntToStr(Id)+' pairs=TRUE','OK');
  try
   Entries:=TJSONArray(J.Find('pairs'));Check(Entries.Count=13,'All opening occurrences, including duplicate FENs and incomplete pairs');
@@ -413,6 +420,9 @@ begin
    Error('run_tournament engine1_id=1 engine2_id=2 time=0','CONFIGURE');
    Error('run_tournament engine1_id=1 engine2_id=2 concurrent=0','CONFIGURE');
    Error('query_tournament id=999','UNKNOWN_TOURNAMENT');
+   Error('query_tournament id=999 sprt=maybe','BAD_ARGUMENT');
+   Error('query_tournament id=999 sprt=','BAD_ARGUMENT');
+   Error('stop_tournament id=999 sprt=true','BAD_ARGUMENT');
    Error('query_tournament id=999 pairs=maybe','BAD_ARGUMENT');
    Error('query_tournament id=999 pairs=','BAD_ARGUMENT');
    Error('query_tournament id=999 pairs=true','UNKNOWN_TOURNAMENT');

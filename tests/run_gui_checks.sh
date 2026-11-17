@@ -24,6 +24,8 @@ run_check() {
   fi
 }
 
+run_check "sprt_gui_check (GTK2, paired GSPRT view, persistence and both games)" sprt_gui_check "/sprt" 90s
+
 run_check "interactive_cli_gui_check (GTK2, shared match setup, queries and modal BUSY)" interactive_cli_gui_check "/interactive-cli" 90s
 
 echo "==> cli_application_check (pipes through GUI dispatcher and responsive shutdown)"
