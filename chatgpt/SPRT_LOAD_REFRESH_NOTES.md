@@ -1,5 +1,7 @@
 # Loaded SPRT comparison refresh
 
+Implementation commit: `8bc7286`.
+
 2026-11-17 QA: both visible engine selections were present after loading, while
 the pane still said Comparison unavailable / Select a candidate and baseline.
 This correction stays within the existing live-SPRT authorization on 2026-11-17:

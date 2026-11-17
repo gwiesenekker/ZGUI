@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Refresh SPRT comparison immediately after loading — 2026-11-17
 
-Commit: pending.
+Commit: `8bc7286`.
 
 - Correct the loaded-pane QA finding within the live-SPRT scope already
   authorized with “Implement now; waive prior review”. Work notes:
