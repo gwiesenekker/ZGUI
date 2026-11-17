@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Keep draughts square labels clear of pieces — 2026-11-17
 
-Commit: pending.
+Commit: `71b0544`.
 
 - Move square numbers closer to the upper-left corner and size their font in
   pixels relative to the square, avoiding overlap with the pieces.
@@ -15,7 +15,7 @@ Commit: pending.
 
 ### Fix Windows tournament-lock compilation — 2026-11-17
 
-Commit: pending.
+Commit: `71b0544`.
 
 - Authorization: “Apply the two-call fix now; waive prior Claude review”.
   Scope and notes: chatgpt/WINDOWS_ENVIRONMENT_LOOKUP_NOTES.md.
