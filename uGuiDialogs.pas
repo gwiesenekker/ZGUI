@@ -22,7 +22,7 @@ var GuiTestConfirmationResult: Integer = 0;
 function MeasureGuiText(const AText:string; AFont:TFont):TSize;
 function ExecuteGuiFileDialog(Dialog: TOpenDialog): Boolean;
 function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
-  AText: string; AChoices: TStrings): Integer;
+  AText: string; AChoices: TStrings; const AAcceptCaption: string = 'OK'): Integer;
 function ShowGuiConfirmationDialog(AOwner: TCustomForm; const ACaption,
   AText, AAcceptCaption, ARejectCaption: string; ARejectResult: Integer;
   ADefaultToCancel: Boolean = False): Integer;
@@ -331,7 +331,7 @@ begin
 end;
 
 function ShowGuiChoiceDialog(AOwner: TCustomForm; const ACaption,
-  AText: string; AChoices: TStrings): Integer;
+  AText: string; AChoices: TStrings; const AAcceptCaption: string): Integer;
 var Dialog: TForm; Prompt: TLabel; Choices: TListBox; Button: TButton;
 begin
   Result := -1;
@@ -348,7 +348,7 @@ begin
     Choices.Items.Assign(AChoices); Choices.ItemIndex := 0;
     Dialog.ActiveControl := Choices;
     Button := TButton.Create(Dialog); Button.Parent := Dialog;
-    Button.Name := 'ChooseButton'; Button.Caption := 'Play move';
+    Button.Name := 'ChooseButton'; Button.Caption := AAcceptCaption;
     Button.SetBounds(252, 248, 90, 28); Button.ModalResult := mrOK;
     Button.Default := True; Dialog.DefaultControl := Button;
     Button := TButton.Create(Dialog); Button.Parent := Dialog;

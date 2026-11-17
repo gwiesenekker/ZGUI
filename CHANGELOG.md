@@ -4,6 +4,20 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Correct shared choice-dialog button labels — 2026-11-17
+
+Commit: pending.
+
+- Authorization: “Apply now; waive prior Claude review” for the shared choice
+  dialog caption fix; notes: chatgpt/CHOICE_DIALOG_CAPTION_NOTES.md.
+- Create database and Open game now use OK for game selection; move selection
+  retains Play move. Applies to both chess and draughts.
+- Validation: GTK2 build and fresh chess-board, draughts/main-form boundaries and
+  multi-game GUI checks passed. All 27 GUI suites and both tournament checks also
+  passed with these edits during the shutdown-review validation. Earlier layout
+  failures did not recur in that run. Native Windows QA remains outstanding.
+
+
 ### Release finished-game engine workers and stop CLI transport once — 2026-11-17
 
 Commit: `e4d55b0`.
@@ -30,6 +44,7 @@ Commit: `e4d55b0`.
   idle CPU sampled at 0.5% of a core before/after. GUI close took 0.53 s including
   confirmations (0.053 s after the final Discard), exit code 0. GTK2 build passed;
   native Windows QA remains outstanding.
+
 
 ### Keep draughts square labels clear of pieces — 2026-11-17
 

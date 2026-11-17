@@ -2336,7 +2336,7 @@ begin
     Fen := LPosition.ToFEN;
     for I := 0 to Choices.Count - 1 do Captions.Add(LPosition.MoveNotation(Choices[I]));
     Choice := ShowGuiChoiceDialog(Self, 'Choose move',
-      'Several moves reach this square. Choose the move to play.', Captions);
+      'Several moves reach this square. Choose the move to play.', Captions, 'Play move');
     // A modal chooser pumps events. Never apply a choice to a changed position.
     if (Choice < 0) or (Choice >= Choices.Count) or (ActiveGameTree = nil) then Exit;
     if (ActiveGameTree.GameTreeId <> TreeId) or
