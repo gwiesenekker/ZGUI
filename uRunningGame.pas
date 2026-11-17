@@ -48,6 +48,7 @@ type
 
   TRunningGame = class
   private
+    FTournamentRecordKey:string;
     FTournamentOwner:TObject; // Borrowed owner token; no tournament logic here.
     FId: Integer;
     FStartedAt: TDateTime;
@@ -125,6 +126,7 @@ type
     procedure UpdateListCaption(const ACaption: string);
     property Id: Integer read FId;
     property StartedAt: TDateTime read FStartedAt;
+    property TournamentRecordKey:string read FTournamentRecordKey write FTournamentRecordKey;
     property TournamentOwner:TObject read FTournamentOwner write FTournamentOwner;
     property GameTreeActor: TGameTreeActor read FGameTreeActor;
     property GameTree: TGameTree read FGameTree;

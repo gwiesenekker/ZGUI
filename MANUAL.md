@@ -343,7 +343,7 @@ interactive run_tournament command creates a match; its startup namesake takes
 only a saved file. There are no interactive quit, engine-registration or SPRT commands. Use
 stop_tournament or the GUI to stop tournaments; close ZGUI through its GUI.
 
-The tournament commands also accept `time_forfeit=loss` (default) or a unique
+Interactive `run_tournament` also accepts `time_forfeit=loss` (default) or a unique
 Hub/UCI engine name, `adjudication_time=1.0` (seconds), and
 `adjudication_threshold=200` (cp). The last two require a selected adjudicator.
 Use `time_forfeit_id` or `time_forfeit_key` instead of its name if ambiguous.
@@ -1251,6 +1251,16 @@ completed games.
 Starting a game selects its row. Rows that already fit stay in their current
 place; the grid scrolls only when needed to reveal a started row. Between starts,
 you can scroll the list manually without it snapping back on each timer update.
+
+Double-click a saved tournament game to load it into **Game History** and display
+its board, moves, comments, variations and effective result. If that game is
+already present, ZGUI selects the existing entry; reopening the same event does
+not add another copy. Identity includes the tournament, game number and replay
+attempt, so distinct ballot games are retained. A referee's changed result updates
+the existing history header without replacing its moves or annotations. Live games
+retain their existing selection path. Unplayed rows have no saved game to open.
+Viewing saved games starts no engines, reserves no engines and does not rewrite
+the tournament file. Entries remain available after the tournament tab closes.
 
 Click **Stop** to stop the tournament's active games and pending scheduling.
 Incomplete games keep result `*` with **Referee stopped tournament**, including

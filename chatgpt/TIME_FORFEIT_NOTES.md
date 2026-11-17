@@ -1,5 +1,7 @@
 # Time forfeit adjudication
 
+Implementation commit: `1dd5baf`.
+
 2026-11-17 authorization: the user answered **“Implement now; waive prior review”**
 for the named shared change: rules-based default; optional Hub adjudicator for
 draughts/UCI for chess; 1.0-second analysis, configurable positive cp threshold,
@@ -66,8 +68,8 @@ insets omitted from host minimums: measure from the realized active page, notify
 the host when measured child minimums change, and guard nested measurement.
 Focused presentation passes 241 assertions; complete tabs pass 411. Pipe checks
 pass 107, mathematical/protocol checks 29/68/22. Normal and enlarged-font live
-pane checks pass, with point/LLR/Elo hint assertions. The full GUI suite will also
-be rerun with the separate saved-tournament-history fix.
+pane checks pass, with point/LLR/Elo hint assertions. The final combined run with saved-tournament-history support passes all 27
+GUI suites (415 tab, 107 pipe/application and 88 live-pane assertions).
 Dedicated coverage includes threshold equality and both
 signs, mate scores, absent evaluations, failed launch/search, cancellation, final
 position preservation, GUI/CLI policy equivalence, save/reload, reservations and

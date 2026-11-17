@@ -30,6 +30,12 @@ type
     TimeForfeit:TTimeForfeitSettings;
     HasTimeForfeit:Boolean;
   end;
+  TTournamentRecordView=record
+    Variant:TGameVariant;
+    Key,Title,GameText,StartingFEN,ResultText,Reason:string;
+    TimeControl:TTimeControl;
+  end;
+  TTournamentOpenRecordEvent=procedure(Sender:TObject;const View:TTournamentRecordView) of object;
   TTournamentStartResult = (tsrStarted, tsrAlreadyRunning, tsrNothingEligible, tsrCancelled, tsrFailed);
 
   TTournamentStartGameEvent = procedure(Sender: TObject; const ASetup: TGameSetup;
@@ -97,6 +103,10 @@ type
     FRefereeStopPending: Boolean;
     FMovesEdit: TEdit;
     FOnSelectGame: TTournamentSelectGameEvent;
+    FOnOpenRecord:TTournamentOpenRecordEvent;
+    procedure PairingGridDblClick(Sender:TObject);
+    function HistoryKey(Row:Integer):string;
+  private
     FOnStartGame: TTournamentStartGameEvent;
     FPdnWriteLock: TCriticalSection;
     FRoundRobinGroup: TRadioGroup;
@@ -118,7 +128,7 @@ type
     procedure ClearBallotClick(Sender:TObject);
     procedure UpdateBallotControls;
     function StartingFENForRow(ARow:Integer):string;
-    function ReadSettings:TTimeControl;
+    function ReadSettings(CheckForfeit:Boolean=True):TTimeControl;
     function GameFileExtension:string;
     procedure AddLabelledEdit(AParent: TWinControl; const ACaption: string;
       AEdit: TEdit; var ATop: Integer);
@@ -220,6 +230,7 @@ type
     property OnTargets:TTournamentTargetsEvent read FOnTargets write FOnTargets;
     property OnTitleChanged:TNotifyEvent read FOnTitleChanged write FOnTitleChanged;
     property OnContextRequested:TTournamentContextEvent read FOnContextRequested write FOnContextRequested;
+    property OnOpenRecord:TTournamentOpenRecordEvent read FOnOpenRecord write FOnOpenRecord;
     property OnSelectGame: TTournamentSelectGameEvent read FOnSelectGame write FOnSelectGame;
     property OnStartGame: TTournamentStartGameEvent read FOnStartGame write FOnStartGame;
   end;
@@ -643,6 +654,7 @@ begin
   FGrid.Options := FGrid.Options + [goColSizing] - [goEditing, goRowSelect];
   FGrid.OnDrawCell := @PairingGridDrawCell;
   FGrid.OnMouseDown := @PairingGridMouseDown;
+  FGrid.OnDblClick:=@PairingGridDblClick;
   PairingPopup := TPopupMenu.Create(Self);
   PopupItem := TMenuItem.Create(Self);
   PopupItem.Caption := '*';
@@ -1085,7 +1097,7 @@ begin
  InvalidateTournamentResults(Sender);UpdateButtons;
 end;
 
-function TTournamentDialog.ReadSettings:TTimeControl;
+function TTournamentDialog.ReadSettings(CheckForfeit:Boolean):TTimeControl;
 var Setup:TGameSetup;
 begin
   if (FBallotPositions.Count>0) and not TournamentRoundRobinIndexIsDouble(FRoundRobinGroup.ItemIndex) then
@@ -1103,7 +1115,7 @@ begin
   Setup:=Default(TGameSetup);Setup.Variant:=FVariant;Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;
   Setup.TimeControl:=Result;Setup.StartingFEN:=Trim(FStartingFENEdit.Text);
   if Setup.StartingFEN='' then Setup.StartingFEN:=FVariant.DefaultStartingFEN;
-  ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);ReadForfeit;
+  ValidateGameSetup(Setup,FVariant,FProfile.EngineKinds);if CheckForfeit then ReadForfeit;
 end;
 
 function TTournamentDialog.ConfirmSharedExecutables(CommandMode:Boolean;AllowShared:Boolean):Boolean;
@@ -2029,6 +2041,38 @@ begin
   end;
 end;
 
+function TTournamentDialog.HistoryKey(Row:Integer):string;
+begin
+ Result:=GameVariantId(FVariant)+':'+FTournamentId+':'+FGrid.Cells[TournamentColGame,Row]+':'+IntToStr(GameRecord(Row).Attempt);
+end;
+procedure TTournamentDialog.PairingGridDblClick(Sender:TObject);
+var Row:Integer;Game:TRunningGame;RecordData:TTournamentGameRecord;View:TTournamentRecordView;
+begin
+ Row:=FGrid.Row;
+ if not TournamentGridHasPairingAtRow(FGrid,Row) then Exit;
+ Game:=TournamentRunningGameFor(Owner,FindTournamentGameByRow(Row));
+ if (Game<>nil) and IsRowRunning(Row) then begin
+  if Assigned(FOnSelectGame) then FOnSelectGame(Self,Game);Exit;
+ end;
+ if not Assigned(FOnOpenRecord) then Exit;
+ RecordData:=GameRecord(Row);
+ // Unplayed rows have no saved game yet. Live games keep their existing path.
+ if not RecordData.HasRecord and (RecordData.EffectiveResult='*') then begin
+  if (Game<>nil) and Assigned(FOnSelectGame) then FOnSelectGame(Self,Game);Exit;
+ end;
+ View:=Default(TTournamentRecordView);View.Variant:=FVariant;View.Key:=HistoryKey(Row);
+ View.Title:=FTournamentNameEdit.Text+' #'+FGrid.Cells[TournamentColGame,Row];
+ View.StartingFEN:=StartingFENForRow(Row);View.ResultText:=RecordData.EffectiveResult;
+ View.Reason:=FGrid.Cells[TournamentColReason,Row];
+ try
+  View.TimeControl:=ReadSettings(False);
+  View.GameText:=RecordData.RenderGame(FProfile.FileFormat,FTournamentId,FTournamentNameEdit.Text,
+    FGrid.Cells[TournamentColRound,Row],FGrid.Cells[TournamentColGame,Row],
+    FGrid.Cells[TournamentColWhite,Row],FGrid.Cells[TournamentColBlack,Row],View.StartingFEN);
+  FOnOpenRecord(Self,View);
+ except on E:Exception do ShowGuiOkDialog(Self,'Open tournament game',E.Message);end;
+end;
+
 procedure TTournamentDialog.SetSelectedResult(const AResultText: string);
 begin
   if FReadOnly then Exit;
@@ -2837,6 +2881,7 @@ begin
   RunningGame.Row := ARow;
   RunningGame.GameId := TRunningGame(AGame).Id;
   TRunningGame(AGame).TournamentOwner := Self;
+  TRunningGame(AGame).TournamentRecordKey:=HistoryKey(ARow);
   if FProfile.FileFormat=gffPgn then GameRecord(ARow).StartDate:=FormatDateTime('yyyy.mm.dd',TRunningGame(AGame).StartedAt);
   FRunningGames.Add(RunningGame);
   FGrid.Cells[TournamentColReason, ARow] := 'Running';

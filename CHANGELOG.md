@@ -4,9 +4,31 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
-### Add optional Time forfeit adjudication — 2026-11-17
+### Open saved tournament games in Game History — 2026-11-17
 
 Commit: pending.
+
+- User waiver: “Apply now; waive prior review” for saved tournament-game
+  double-click selection through the shared history path, for chess and draughts.
+  Scope and reuse details: chatgpt/TOURNAMENT_HISTORY_NOTES.md.
+- Reuse saved-record PGN/PDN rendering, existing importers and the existing
+  finished-game history container. Double-click loads the game with its effective
+  result, mainline, comments and variations without starting or reserving engines.
+- Identify entries by variant, event UUID, game number and replay attempt.
+  Repeated clicks and event reloads select the existing entry. Preserve live-game
+  selection; referee result changes update the history header without replacing
+  its moves/annotations. Unplayed rows do not create placeholders.
+- Keep imported history independent of the tournament tab and leave source files
+  unchanged. Reuse clock configuration while allowing history viewing with a
+  missing adjudicator. Update the manual and both-game GUI coverage.
+- Validation: GTK2 build, all 27 GUI suites (33 focused saved-history assertions,
+  including missing-adjudicator viewing; 415 complete tab assertions), full
+  regression and both tournament suites pass. No test memory leaks reported.
+  Native Windows execution remains outstanding.
+
+### Add optional Time forfeit adjudication — 2026-11-17
+
+Commit: `1dd5baf`.
 
 - User waiver: “Implement now; waive prior review” for optional clock-expiry
   adjudication through an existing Hub/UCI engine, rules-based default, saved/CLI
@@ -29,9 +51,9 @@ Commit: pending.
   and show LLR beside the graph. Add point markers and hover hints for opening
   number, LLR, prefix estimated logistic Elo and the first crossing, using the score-history hint behavior.
 - Validation: GTK2 application/test builds, full regression and both tournament
-  suites pass. All 26 GUI suites pass, including focused reruns after locale,
-  native page-inset sizing and deterministic close-automation fixes (411 tab,
-  107 pipe/application, 86 initial graph assertions). Real protocol cancellation
+  suites pass. The final combined 27 GUI suites pass, after fixes for locale,
+  native page-inset sizing and deterministic close automation (415 tab,
+  107 pipe/application, 88 graph assertions). Real protocol cancellation
   checks pass 22 assertions and policy checks pass 68. Native Windows execution
   remains outstanding.
 

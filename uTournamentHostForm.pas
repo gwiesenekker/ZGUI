@@ -37,6 +37,7 @@ type
     FPlans:array of TTournamentClosePlan;
     FOnStartGame:TTournamentStartGameEvent;
     FOnSelectGame:TTournamentSelectGameEvent;
+    FOnOpenRecord:TTournamentOpenRecordEvent;
     function GetCount:Integer;
     function GetDialog(Index:Integer):TTournamentDialog;
     function ActiveTab:TTournamentTab;
@@ -81,6 +82,7 @@ type
     property Dialogs[Index:Integer]:TTournamentDialog read GetDialog;
     property Pages:TPageControl read FPages;
     property OnStartGame:TTournamentStartGameEvent read FOnStartGame write FOnStartGame;
+    property OnOpenRecord:TTournamentOpenRecordEvent read FOnOpenRecord write FOnOpenRecord;
     property OnSelectGame:TTournamentSelectGameEvent read FOnSelectGame write FOnSelectGame;
   end;
 implementation
@@ -152,7 +154,7 @@ function TTournamentHostForm.CreateDialog(Variant:TGameVariant):TTournamentDialo
 begin
   Result:=TTournamentDialog.Create(Owner,Variant);
   Result.Font.Assign(Font);
-  Result.OnStartGame:=FOnStartGame;Result.OnSelectGame:=FOnSelectGame;
+  Result.OnStartGame:=FOnStartGame;Result.OnSelectGame:=FOnSelectGame;Result.OnOpenRecord:=FOnOpenRecord;
   Result.OnContextRequested:=@ContextRequested;Result.OnTargets:=@CheckTargets;
   Result.OnTitleChanged:=@TitleChanged;Result.OnCloseQuery:=@ChildCloseQuery;
   // Wrapping can settle after embedding/font propagation. Reuse the queued

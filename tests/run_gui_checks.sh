@@ -24,6 +24,8 @@ run_check() {
   fi
 }
 
+run_check "tournament_history_gui_check (GTK2, saved-game history selection, results and deduplication)" tournament_history_gui_check "/tournament-history" 60s
+
 run_check "time_forfeit_gui_check (GTK2, timeout adjudication, shared reservations, CLI and saved policies)" time_forfeit_gui_check "/time-forfeit" 90s
 
 run_check "sprt_gui_check (GTK2, paired GSPRT view, persistence and both games)" sprt_gui_check "/sprt" 90s

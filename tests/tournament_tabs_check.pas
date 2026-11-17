@@ -409,13 +409,15 @@ begin
 end;
 
 procedure CheckRefereeStop(V:TGameVariant);
-var D,R:TTournamentDialog;Name:string;G:TRunningGame;
+var D,R:TTournamentDialog;Name:string;G:TRunningGame;HistoryCount:Integer;
 begin
  D:=Host.NewTournament(V);R:=nil;Configure(D);
  try
   GuiTestConfirmationResult:=mrYes;
   try Button(D,'Play').Click;finally GuiTestConfirmationResult:=0;end;
-  WaitStarted(D);G:=RunningGame(D);
+  WaitStarted(D);G:=RunningGame(D);HistoryCount:=Main.TestGameCount;Grid(D).Row:=1;
+  Check(Assigned(Grid(D).OnDblClick),'Tournament double-click hook');Grid(D).OnDblClick(Grid(D));
+  Check((Main.TestGameCount=HistoryCount) and (Main.ActiveGameTree=G.GameTree),'Live double-click reuses existing game and runner');
   Check(not Button(D,'Play').Enabled and Button(D,'Stop').Enabled,'Running tournament exposes separate Stop');
   Check(not Button(D,'Save...').Enabled and not Button(D,'Load...').Enabled,'File controls disabled while running');
   Button(D,'Stop').Click;

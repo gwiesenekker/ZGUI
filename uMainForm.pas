@@ -509,6 +509,7 @@ type
     procedure ClearMctsStatsGrid;
     procedure ToggleBoardFlipped;
     procedure TournamentSelectGame(Sender: TObject; AGame: TObject);
+    procedure TournamentOpenRecord(Sender:TObject;const View:TTournamentRecordView);
     procedure TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
       const ATitlePrefix: string; out AGame: TObject);
     procedure ImportPdnTree(AGameTree: TGameTree; AGame: TPdnGame);
@@ -589,7 +590,7 @@ var
 
 implementation
 
-uses uGameTreeNodeData, LCLIntf, uGameDocumentContext, Math;
+uses uChessPgn,uGameTreeNodeData, LCLIntf, uGameDocumentContext, Math;
 
 constructor TMainForm.Create(AOwner: TComponent);
 var
@@ -6158,6 +6159,7 @@ begin
     FTournamentHost:=TTournamentHostForm.Create(Self);
     FTournamentHost.OnStartGame:=@TournamentStartGame;
     FTournamentHost.OnSelectGame:=@TournamentSelectGame;
+    FTournamentHost.OnOpenRecord:=@TournamentOpenRecord;
   end;
 end;
 
@@ -6280,6 +6282,52 @@ begin
 
   FGamesListBox.ItemIndex := LIndex;
   ApplyGameToDisplay(LRunningGame);
+end;
+
+procedure TMainForm.TournamentOpenRecord(Sender:TObject;const View:TTournamentRecordView);
+var I:Integer;Game:TRunningGame;Setup:TGameSetup;Entry:TGameFileEntry;Games:TList;Pdn:TPdnGame;
+ Header:TGameTreeHeaderInput;Command:TGameTreeCommand;ErrorText:string;NewEntry:Boolean;
+ procedure ApplySavedHeader;
+ begin
+  Header:=CurrentGameTreeHeaderInput(Game,Game.GameTree);Header.ResultText:=View.ResultText;
+  Header.GameState:=gosGameOver;Header.StatusText:=View.Reason;
+  Command:=Game.GameTreeActor.CreateSetHeaderCommand(Header);
+  try if not ExecuteGameTreeCommand(Game.GameTreeActor,Command,ErrorText) then raise EConvertError.Create(ErrorText);
+  finally Command.Free;end;
+ end;
+begin
+ if (View.Variant=nil) or (View.Key='') then Exit;Game:=nil;
+ for I:=0 to FGames.Count-1 do if TRunningGame(FGames[I]).TournamentRecordKey=View.Key then begin Game:=TRunningGame(FGames[I]);Break;end;
+ if Game<>nil then begin
+  if Game.Lifecycle=rglFinished then ApplySavedHeader;
+  TournamentSelectGame(Sender,Game);Exit;
+ end;
+ Setup:=Default(TGameSetup);Setup.Variant:=View.Variant;Setup.StartingFEN:=View.StartingFEN;
+ Setup.WhitePlayer:=pkHuman;Setup.BlackPlayer:=pkHuman;Setup.TimeControl:=View.TimeControl;
+ Inc(FNextGameId);Game:=TRunningGame.Create(FNextGameId,View.Title,nil,pkHuman,pkHuman,'','','White','Black',nil,Setup);
+ Game.TournamentRecordKey:=View.Key;Game.MarkFinished;FGames.Add(Game);NewEntry:=True;
+ try
+  if GameGuiProfileFor(View.Variant).FileFormat=gffPgn then begin
+   Entry:=ChessPgnEntryFromText(View.GameText,View.Variant);
+   try Entry.Validate;Entry.ImportInto(Game.GameTreeActor);finally Entry.Free;end;
+  end else begin
+   Games:=TList.Create;
+   try
+    LoadPdnGamesFromText(View.GameText,Games);
+    if Games.Count<>1 then raise EConvertError.Create('Expected one saved tournament game');
+    Pdn:=TPdnGame(Games[0]);Pdn.ParseDeferredMoves;Pdn.ValidateMoveTree;
+    if not RebuildStandaloneGameTreeFromImport(Game.GameTree,Pdn.EventName,Pdn.WhiteName,Pdn.BlackName,
+      Pdn.ResultText,Pdn.StartingFEN,Pdn.MovesText,Pdn.MoveAnnotationsText,Pdn.InitialCommentText) then
+      raise EConvertError.Create('Could not load saved tournament game');
+    ImportPdnTree(Game.GameTree,Pdn);
+   finally for I:=0 to Games.Count-1 do TObject(Games[I]).Free;Games.Free;end;
+  end;
+  ApplySavedHeader;FGamesListBox.Items.AddObject(View.Title,Game);NewEntry:=False;
+  UpdateGameListItem(Game);TournamentSelectGame(Sender,Game);
+ except
+  if NewEntry then RemoveGame(Game);
+  raise;
+ end;
 end;
 
 procedure TMainForm.TournamentStartGame(Sender: TObject; const ASetup: TGameSetup;
