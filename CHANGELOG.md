@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Expose opening-pair results in CLI tournament queries — 2026-11-17
 
-Commit: pending.
+Commit: `b4b9744`.
 
 - User waiver: “Implement now; waive prior review”. Scope: optional pairs=true
   on query_tournament for both games, using existing snapshots; keep SPRT in the

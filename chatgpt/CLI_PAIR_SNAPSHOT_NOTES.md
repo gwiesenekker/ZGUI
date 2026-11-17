@@ -31,4 +31,4 @@ For the named shared scope the user selected: “Implement now; waive prior revi
 
 ## Commit
 
-Pending.
+Implementation: `b4b9744`.
