@@ -4,6 +4,28 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Keep draughts square labels clear of pieces — 2026-11-17
+
+Commit: pending.
+
+- Move square numbers closer to the upper-left corner and size their font in
+  pixels relative to the square, avoiding overlap with the pieces.
+- Draughts-only rendering change; chess rendering is unchanged.
+- Validation: the GTK2 multi-game GUI checks passed for chess and draughts.
+
+### Fix Windows tournament-lock compilation — 2026-11-17
+
+Commit: pending.
+
+- Authorization: “Apply the two-call fix now; waive prior Claude review”.
+  Scope and notes: chatgpt/WINDOWS_ENVIRONMENT_LOOKUP_NOTES.md.
+- Qualify both environment lookups with SysUtils to resolve the string-returning
+  function when the Windows unit is imported.
+- Validation: chess and draughts tournament checks passed. The full Linux GUI
+  run passed 23 suites; setup_preferences_check, gui_layout_check,
+  engine_parameter_scroll_check and main_readability_gui_check failed.
+  Native Windows compilation remains to be verified.
+
 ### Shuffle opening pairs before tournament pairing — 2026-11-17
 
 Commit: `f53fa0a`.

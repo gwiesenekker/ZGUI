@@ -105,8 +105,8 @@ begin
       FileClose(H);raise ETournamentReadOnly.Create('Tournament directory is read-only: '+FileName);
     end;
     L:=TLease.Create;L.Handle:=H;L.References:=0;
-    Info:='ZGUI PID '+IntToStr(GetProcessID)+' host '+GetEnvironmentVariable('HOSTNAME')+
-      GetEnvironmentVariable('COMPUTERNAME')+LineEnding;
+    Info:='ZGUI PID '+IntToStr(GetProcessID)+' host '+SysUtils.GetEnvironmentVariable('HOSTNAME')+
+      SysUtils.GetEnvironmentVariable('COMPUTERNAME')+LineEnding;
     FileSeek(H,0,fsFromBeginning);FileWrite(H,Info[1],Length(Info));
     Leases.AddObject(Name,L);
   end;

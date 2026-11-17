@@ -58,8 +58,9 @@ procedure TDraughtsBoardControl.DrawCoordinates(ASquare, ARow, ACol: Integer; co
 begin
   Canvas.Brush.Style := bsClear;
   Canvas.Font.Color := clWhite;
-  Canvas.Font.Size := Max(7, BoardSquareSize div 7);
-  Canvas.TextOut(ACell.Left + 4, ACell.Top + 3, IntToStr(ASquare));
+  // Pixel sizing keeps the corner label proportional to the piece at any DPI.
+  Canvas.Font.Height := -Max(6, BoardSquareSize div 6);
+  Canvas.TextOut(ACell.Left + 1, ACell.Top + 1, IntToStr(ASquare));
   Canvas.Brush.Style := bsSolid;
 end;
 procedure TDraughtsBoardControl.DrawPiece(ASquare: Integer; const ACell: TRect);
