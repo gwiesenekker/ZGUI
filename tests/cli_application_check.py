@@ -68,12 +68,15 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   check(pathlib.Path(str(state)+'.modal.ready').exists(),'real modal dialog opened')
   busy=c.command('list_engines','ERROR');check(busy['code']=='BUSY','pipe request refuses nested modal loop')
   busy=c.command('query_tournament id='+str(a['tournament']),'ERROR');check(busy['code']=='BUSY','pipe query refuses open modal')
+  busy=c.command('stop_tournament id='+str(a['tournament']),'ERROR');check(busy['code']=='BUSY','stop refuses open modal without changing tournament')
   pathlib.Path(str(state)+'.modal.done').touch();end=time.monotonic()+4
   while not pathlib.Path(str(state)+'.modal.closed').exists() and time.monotonic()<end:time.sleep(.05)
   check(pathlib.Path(str(state)+'.modal.closed').exists(),'modal dialog closed normally')
   c.command('list_engines')
+  extras=[]
   for i in range(3):
    extra=c.command(f'run_tournament engine1_id=1 engine2_id=2 name="Extra {i}" time=120 allow_shared_executable=true')
+   extras.append(extra)
    check(extra['games_total']==2,'additional tournament uses normal pairing')
   report(state,lambda x:x['tabs']==5)
   pathlib.Path(str(state)+'.engine-problem').touch()
@@ -81,15 +84,28 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   c.command('list_engines')
   q=c.command('query_tournament id='+str(a['tournament']))
   check(q['games_total']==2,'queued engine notices do not block read-only CLI')
+  queued=extras[-1]['tournament']
+  ack=c.command('stop_tournament id='+str(queued));check(ack['tournament']==queued,'stop acknowledges queued tournament')
+  q=c.command('query_tournament id='+str(queued))
+  check(q['state']=='stopped' and q['games_active']==0 and q['games_pending']==2,'queued stop releases waiting request without starting games')
+  for match in [a,b]:
+   ack=c.command('stop_tournament id='+str(match['tournament']))
+   check(ack['command']=='stop_tournament' and ack['tournament']==match['tournament'],'both games stop through CLI')
+   if match is a:
+    other=c.command('query_tournament id='+str(b['tournament']))
+    check(other['state']=='running','stopping chess leaves draughts running')
   state.with_suffix('.json.stop').touch()
   for match in [a,b]:
    end=time.monotonic()+6
    while True:
     q=c.command('query_tournament id='+str(match['tournament']))
     if q['state'] in ['attention','stopped','completed','error']:break
-    if time.monotonic()>end:raise AssertionError('GUI Stop not reflected by query')
+    if time.monotonic()>end:raise AssertionError('Stop not reflected by query')
     time.sleep(.1)
-   check(q['games_active']==0,'GUI Stop stops CLI-started games')
+   check(q['games_active']==0,'CLI Stop drains games')
+   check('Referee stopped tournament' in q['reason'],'CLI Stop uses existing referee reason')
+   c.command('stop_tournament id='+str(match['tournament']))
+  check(report(state,lambda x:True)['tabs']==5,'stopping keeps all tabs visible')
   c.p.stdin.close();before=report(state,lambda x:True)['ticks'];time.sleep(.2)
   after=report(state,lambda x:x['ticks']>before)
   check(c.p.poll() is None and after['main_visible'],'input EOF leaves GUI and tournament window open')
@@ -112,11 +128,18 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   c=Client(str(exe),['--cli'],folder)
   try:
    data=c.command('list_engines');check(len(data['engines'])==4,'actual zgui --cli reaches the GUI dispatcher')
+   matches=[]
    for i in range(5):
     match=c.command(f'run_tournament engine1_id=1 engine2_id=2 name="Real {i}" time=120 allow_shared_executable=true')
+    matches.append(match)
     q=c.command('query_tournament id='+str(match['tournament']))
     check(q['games_total']==2,'real binary creates and queries five tournaments')
+   for match in [matches[0],matches[-1]]:
+    ack=c.command('stop_tournament id='+str(match['tournament']))
+    check(ack['tournament']==match['tournament'],'actual binary accepts Stop for active/queued tournaments')
+    c.command('query_tournament id='+str(match['tournament']))
    c.command('query_tournament id=999','ERROR')
+   bad=c.command('stop_tournament id=999','ERROR');check(bad['code']=='UNKNOWN_TOURNAMENT','actual Stop rejects unknown ID')
    c.p.stdin.close();time.sleep(.2);check(c.p.poll() is None,'actual executable keeps GUI alive at EOF')
    windows=[];end=time.monotonic()+3
    while not windows and time.monotonic()<end:

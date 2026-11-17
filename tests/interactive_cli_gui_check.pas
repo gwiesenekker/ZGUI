@@ -83,12 +83,19 @@ var J:TJSONObject;
 begin J:=Response(Command,'ERROR',Code);J.Free;end;
 procedure Pump;
 begin Application.ProcessMessages;Main.TestDrainGuiEvents(True);Sleep(10);end;
-procedure Stop(D:TTournamentDialog);
-var Tick:QWord;
+procedure StopByCli(Id:Integer;D:TTournamentDialog);
+var Tick:QWord;J:TJSONObject;Count:Integer;SavedName:string;
 begin
- TButton(D.FindComponent('TournamentStop')).Click;Tick:=GetTickCount64;
+ Count:=Main.TournamentHost.Count;SavedName:=D.SaveFileName;
+ J:=Response('stop_tournament id='+IntToStr(Id),'OK');
+ try Check(J.Get('tournament',0)=Id,'Stop acknowledges the same CLI tournament');finally J.Free;end;
+ J:=Response('stop_tournament id='+IntToStr(Id),'OK');J.Free;
+ Tick:=GetTickCount64;
  while D.IsRunning and (GetTickCount64-Tick<5000) do Pump;
- Check(not D.IsRunning,'Existing Stop drains match');
+ Check(not D.IsRunning,'Shared stop path drains match asynchronously');
+ Check((Main.TournamentHost.Count=Count) and (D.SaveFileName=SavedName),'Stop preserves tournament tab and file identity');
+ J:=Response('query_tournament id='+IntToStr(Id),'OK');
+ try Check(J.Get('games_active',-1)=0,'Stopped tournament remains queryable with no active games');finally J.Free;end;
 end;
 procedure LocaleSettings;
 var D:TTournamentDialog;Engines:TExternalEngineList;Settings:TTournamentMatchSettings;Old:Char;
@@ -175,7 +182,7 @@ begin
   Check((Setup.TimeControl.MovesPerPeriod=75) and (Abs(Setup.TimeControl.MinutesPerPeriod-10)<0.00001) and
     (Abs(Setup.TimeControl.IncrementSeconds-0.25)<0.00001),'Typed settings use existing clock validator and locale conversion');
   Check(Main.TournamentHost.Visible,'CLI creates visible ordinary tournament tab');
-  for I:=1 to 30 do Pump;Stop(D);Grid:=TStringGrid(D.FindComponent('TournamentPairings'));
+  for I:=1 to 30 do Pump;StopByCli(Id,D);Grid:=TStringGrid(D.FindComponent('TournamentPairings'));
   for I:=1 to 25 do begin
     Grid.Row:=I;D.GameSetupForRow(I,Setup);
     if I<=2 then begin
@@ -191,6 +198,8 @@ begin
     Check((J.Get('wins',0)=1) and (J.Get('draws',0)=23) and (J.Get('losses',0)=1),'Results follow engine1 perspective, including both colours and both formats');
    finally J.Free;end;
    L.LoadFromFile(Name);Check(L.Text=Before,'Query does not save/change document');
+   J:=Response('stop_tournament id='+IntToStr(Id),'OK');J.Free;
+   L.LoadFromFile(Name);Check(L.Text=Before,'Repeated Stop leaves stopped results and file unchanged');
    Grid.Row:=1;D.RescheduleSelectedGame(nil);
    J:=Response('query_tournament id='+IntToStr(Id),'OK');
    try Check((J.Get('games_completed',0)=24) and (J.Get('pairs_completed',0)=11),'Counts decrease after GUI reschedule');finally J.Free;end;
@@ -208,7 +217,9 @@ begin
      Obj.Strings['black_engine_key']:=Obj.Get('white_engine_key','');L.Text:=Doc.AsJSON;L.SaveToFile(Name);
    finally Doc.Free;end;
    D.LoadTournamentFromFile(Name);Error('query_tournament id='+IntToStr(Id),'MATCH_CHANGED');
+   J:=Response('stop_tournament id='+IntToStr(Id),'OK');J.Free;
    D.ResetForVariant(V);Error('query_tournament id='+IntToStr(Id),'TOURNAMENT_REPLACED');
+   Error('stop_tournament id='+IntToStr(Id),'TOURNAMENT_REPLACED');
   finally L.Free;end;
  finally Fens.Free;end;
 end;
@@ -220,7 +231,7 @@ end;
 procedure TModalProbe.Show(Sender:TObject);
 begin
  Error('list_engines','BUSY');Error('run_tournament engine1_id=1 engine2_id=2','BUSY');
- Error('query_tournament id='+IntToStr(Id),'BUSY');
+ Error('query_tournament id='+IntToStr(Id),'BUSY');Error('stop_tournament id='+IntToStr(Id),'BUSY');
  Application.QueueAsyncCall(@Close,PtrInt(Sender));
 end;
 procedure TModalProbe.Close(Data:PtrInt);
@@ -332,6 +343,11 @@ begin
    Error('run_tournament engine1_id=1 engine2_id=2 time=0','CONFIGURE');
    Error('run_tournament engine1_id=1 engine2_id=2 concurrent=0','CONFIGURE');
    Error('query_tournament id=999','UNKNOWN_TOURNAMENT');
+   Error('stop_tournament id=999','UNKNOWN_TOURNAMENT');
+   Error('stop_tournament','BAD_ARGUMENT');
+   Error('stop_tournament id=-1','BAD_ARGUMENT');
+   Error('stop_tournament id=0','UNKNOWN_TOURNAMENT');
+   Error('stop_tournament id=1 extra=true','BAD_ARGUMENT');
    Check(Main.TournamentHost.Count=0,'Invalid fresh setups leave no tabs');
    LocaleSettings;RelativeBallot;RegistryChecks;Check(Main.TournamentHost.Count=0,'Registry errors create no tabs');
    Match(Chess,'CLI Chess 0','CLI Chess 1');Match(Draughts,'CLI Draughts 2','CLI Draughts 3');
@@ -340,7 +356,7 @@ begin
    J:=Response('list_engines','OK');J.Free;
    GuiTestConfirmationResult:=mrNo;
    Check(Main.TournamentHost.PrepareCloseAll and Main.TournamentHost.FinishCloseAll,'Normal GUI close policy still works');
-   Error('query_tournament id=1','UNKNOWN_TOURNAMENT');
+   Error('query_tournament id=1','UNKNOWN_TOURNAMENT');Error('stop_tournament id=1','UNKNOWN_TOURNAMENT');
    NewButton:=nil;for I:=0 to Main.TournamentHost.ComponentCount-1 do
      if (Main.TournamentHost.Components[I] is TButton) and
        (TButton(Main.TournamentHost.Components[I]).Caption='New tournament') then NewButton:=TButton(Main.TournamentHost.Components[I]);

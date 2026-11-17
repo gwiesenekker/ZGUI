@@ -147,6 +147,17 @@ notices appear in the existing analysis log without a blocking popup. Ordinary
 GUI sessions keep their engine-problem dialogs. Background games never switch
 the selected board automatically.
 
+`stop_tournament id=N` requests the same asynchronous Stop action as the GUI
+button for that CLI-created tournament. The `OK` JSON acknowledgement contains
+`command` and `tournament`; it does not wait for engines to finish. Poll
+`query_tournament id=N` until `games_active` reaches zero and the state is no
+longer `stopping`. Stopped active games use **Referee stopped tournament** and
+remain unresolved for referee action; completed results and unplayed rows are
+preserved. The tab stays open. Stopping a queued tournament removes its waiting
+request without launching its games. Repeated stops are harmless. Other
+tournaments continue. Unknown, closed or replaced tournament IDs are refused,
+and an open modal dialog returns `BUSY`, just as for other commands.
+
 Each nonblank command receives one physical UTF-8 line: `OK ` or `ERROR ` followed
 by JSON. Lists are JSON arrays in that one response. Prompts go to stderr only
 when input and output are terminals. Ordinary RTL/Lazarus stdout is redirected
@@ -167,7 +178,7 @@ are escapes; other backslashes remain literal. Single quotes preserve all
 backslashes, useful for UNC paths: `ballot='\\server\share\my ballot.fen'`.
 Commands are single-line, at most 64 KiB, with LF or CRLF endings. Invalid UTF-8,
 NUL bytes, malformed quoting and oversized lines are rejected; processing resumes
-at the next line. There is no shell execution, completion/history, CLI quit/stop
+at the next line. There is no shell execution, completion/history, CLI quit
 command or SPRT in this version.
 
 Stable error codes: `BAD_ARGUMENT`, `UNKNOWN_ENGINE`, `AMBIGUOUS_ENGINE`,
@@ -189,6 +200,7 @@ on Windows or `./zgui --cli` on Linux. The same commands work through pipes.
 | `list_engines` | None | List registered engines, their session IDs, keys, names, protocols, game and executable availability. Does not launch engines. |
 | `run_tournament` | Two engine selectors; optional settings below | Create and start a two-engine match in a normal tournament tab. Returns immediately with a tournament ID. |
 | `query_tournament` | Required `id=N` | Read the current state of the CLI-created tournament with that returned ID. Repeat to monitor progress. |
+| `stop_tournament` | Required `id=N` | Request the GUI Stop action for that tournament; return immediately and keep its tab/results. Query to monitor shutdown. |
 
 Parameters for `run_tournament` use `name=value` syntax. Quote values containing
 spaces. Supply exactly one selector for each engine:
@@ -247,8 +259,8 @@ the interactive prompt, are:
 
 Use `./zgui` instead of `zgui.exe` on Linux. Do not combine startup modes. The
 interactive run_tournament command creates a match; its startup namesake takes
-only a saved file. There are no interactive stop, quit, engine-registration or
-SPRT commands; use the GUI to stop tournaments and close ZGUI.
+only a saved file. There are no interactive quit, engine-registration or SPRT commands. Use
+stop_tournament or the GUI to stop tournaments; close ZGUI through its GUI.
 
 #### Testing the interactive CLI on Windows
 
@@ -312,7 +324,10 @@ before testing. Register two available engines for the same game through
 6. Check interaction with the live GUI:
 
    - Click a tournament game row to watch its board, moves and PV.
-   - Click **Stop**, then query again. Active games should drain to zero.
+   - Enter `stop_tournament id=N`, substituting the returned ID, then query again.
+     Active games should drain to zero; the tab and results remain available.
+     Repeat the stop to check that it is harmless. Test the GUI **Stop** button
+     with another match as well.
    - Open Preferences and issue a command. Expect `ERROR` with code `BUSY`;
      close Preferences and retry successfully.
    - Press **Ctrl+Z**, then Enter in the CLI console. Input should end while

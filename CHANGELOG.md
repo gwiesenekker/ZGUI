@@ -4,6 +4,25 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Add interactive stop_tournament — 2026-11-17
+
+Commit: pending.
+
+- User waiver: “Implement now; waive prior review”. Scope: stop_tournament id=N
+  for both games, using the existing GUI Stop action, retaining tabs/results and
+  query-based shutdown progress. Record it in chatgpt/CLI_STOP_TOURNAMENT_NOTES.md.
+- Share one StopTournament method between the existing button and CLI. Return
+  immediately; keep engine shutdown, queue withdrawal, referee reasons and
+  persistence on the existing path. Repeated stops are harmless; other events
+  continue. Validate session tab/event identity and retain modal BUSY protection.
+- Add live/queued and both-game command tests, including unknown, closed,
+  replaced and malformed IDs, preserved results/files and real-executable pipes.
+  Update built-in help, the manual and Windows checklist. GUI layout and normal
+  GUI Stop behavior are unchanged for chess and draughts.
+- Validation: GTK2 build, all 24 GUI suites (133 CLI GUI and 93 integrated
+  application checks), full regression, both tournament suites, lifecycle and
+  local TCP DXP checks pass. Native Windows QA remains outstanding.
+
 ### Record Claude's verification of the CLI fixes — 2026-11-16
 
 Commit: `e880527`.

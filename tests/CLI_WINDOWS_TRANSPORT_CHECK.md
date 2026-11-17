@@ -38,3 +38,9 @@ at least five tournaments. Keep stderr separate. Every stdout line must be one
 complete `OK ` / `ERROR ` JSON response, including after closing the GUI; no
 Lazarus messages, partial lines or heap reports may appear there. Repeat with
 stdout redirected to a regular file (preserving its write/append position).
+
+Test `stop_tournament id=N` against both chess and draughts matches: expect an
+immediate OK acknowledgement, then query until the engines drain. The tab and
+results must remain, with the same Referee stopped tournament reason as GUI Stop.
+Also test repeated Stop, a tournament waiting for busy engines, unknown/closed/
+replaced IDs, BUSY during a modal dialog and another tournament continuing.

@@ -114,7 +114,7 @@ begin
    Name:=LowerCase(Tokens[0]);Spec:=TCommandDefinition.Create(Name);
    if Name='run_tournament' then AddParams(['engine1','engine2','engine1_id','engine2_id','engine1_key','engine2_key',
       'name','ballot','time','moves','increment','concurrent','allow_shared_executable'])
-   else if Name='query_tournament' then Spec.Arguments.Add(TParameterDefinition.Create('id',True))
+   else if (Name='query_tournament') or (Name='stop_tournament') then Spec.Arguments.Add(TParameterDefinition.Create('id',True))
    else if Name<>'list_engines' then Fail('BAD_ARGUMENT','Unknown interactive command: '+Name);
    Binder:=TCommandBinder.Create(Spec,bmExecution);
    for I:=1 to Tokens.Count-1 do Binder.Feed(Tokens[I]);Binder.FinishTokens;
@@ -130,14 +130,20 @@ begin
        if A.Kind=eekUci then Item.Add('game','chess') else Item.Add('game','draughts');
        Msg:=EngineExecutableProblem(A);Item.Add('available',Msg='');Item.Add('error',Msg);
      end;
-   end else if Name='query_tournament' then begin
+   end else if (Name='query_tournament') or (Name='stop_tournament') then begin
      Id:=IntegerValue('id');if (Id<1) or (Id>Length(FBindings)) then Fail('UNKNOWN_TOURNAMENT','Unknown tournament ID');
      BindIndex:=Id-1;D:=FHost.DialogById(FBindings[BindIndex].TabId);
      if D=nil then Fail('UNKNOWN_TOURNAMENT','Tournament tab is closed');
      if D.TournamentIdentity<>FBindings[BindIndex].Uuid then Fail('TOURNAMENT_REPLACED','Tournament tab contains a different event');
-     try Item:=D.MatchSnapshot(FBindings[BindIndex].Engine1,FBindings[BindIndex].Engine2);
-     except on E:Exception do Fail('MATCH_CHANGED',E.Message);end;
-     J.Free;J:=Item;J.Add('command',Name);J.Add('tournament',Id);
+     if Name='stop_tournament' then begin
+       // Stopping needs the same live tab/event, not an unchanged match shape.
+       // The GUI button and CLI share the entire existing asynchronous stop path.
+       D.StopTournament;J.Add('tournament',Id);
+     end else begin
+       try Item:=D.MatchSnapshot(FBindings[BindIndex].Engine1,FBindings[BindIndex].Engine2);
+       except on E:Exception do Fail('MATCH_CHANGED',E.Message);end;
+       J.Free;J:=Item;J.Add('command',Name);J.Add('tournament',Id);
+     end;
    end else begin
      Engines:=TExternalEngineList.Create;LoadExternalEngines(EnginesJsonFileName,Engines);
      A:=Resolve('engine1');B:=Resolve('engine2');

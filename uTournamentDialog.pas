@@ -165,6 +165,7 @@ type
     function CreatePairing(out AMessage:string;CommandMode:Boolean=False):Boolean;
     function MatchSnapshot(const Engine1Key,Engine2Key:string):TJSONObject;
     function AbandonUnpublished:Boolean;
+    procedure StopTournament;
     function StartTournament(out AMessage:string;CommandMode:Boolean=False;
       AllowShared:Boolean=False):TTournamentStartResult;
     procedure RefreshLayout; override;
@@ -2496,6 +2497,11 @@ begin
 end;
 
 procedure TTournamentDialog.RefereeStopClick(Sender:TObject);
+begin
+  StopTournament;
+end;
+
+procedure TTournamentDialog.StopTournament;
 begin
   if FRefereeStopPending or ((not FRunning) and (ActiveRunningGameCount=0)) then Exit;
   FRunning:=False;FCloseStopped:=False;FRefereeStopPending:=True;
