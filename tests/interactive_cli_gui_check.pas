@@ -4,7 +4,7 @@ uses {$IFDEF UNIX}cthreads,{$ENDIF} uCliProtocolOutput,Interfaces,Forms,Classes,
  ExtCtrls,Grids,Dialogs,FPJSON,JSONParser,uMainForm,uTournamentDialog,uTournamentHostForm,
  uTournamentStorage,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
  uEngineRegistry,uEngineParamsJson,uGameSetupTypes,uDraughtsHubEngine,uChessUciEngine,uGuiDialogs,
- uStartupCommand,uRunningGame,uGameTree,uAtomicFile,FileUtil;
+ uStartupCommand,uRunningGame,uGameTree,uAtomicFile,FileUtil,uTournamentGridModel,uTournamentBallot;
 var Chess,Draughts:TGameVariant;Checks:Integer=0;Directory:string;Main:TMainForm;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
@@ -158,8 +158,64 @@ begin
   J:=Response('run_tournament engine1_key="'+Key+'" engine2_id=2 time=0','ERROR','CONFIGURE');J.Free;
  finally Engines.Free;end;
 end;
+function PairEntry(J:TJSONObject;Index:Integer):TJSONObject;
+begin Result:=TJSONArray(J.Find('pairs')).Objects[Index];end;
+function PairScores(J:TJSONObject;Index:Integer):TJSONArray;
+begin Result:=TJSONArray(PairEntry(J,Index).Find('results'));end;
+procedure PairDetails(Id:Integer;D:TTournamentDialog;V:TGameVariant;const Engine1:string);
+var J,Plain,Disabled:TJSONObject;Entries:TJSONArray;I:Integer;Grid:TStringGrid;Setup:TGameSetup;
+ Base,Round2,Round4,OpeningFen:string;
+ procedure SetLoss(Row:Integer);
+ begin
+  Grid.Row:=Row;D.GameSetupForRow(Row,Setup);
+  if Setup.WhiteEngine.IdText=Engine1 then D.SetSelectedResult(V.ResultText(goBlackWins))
+  else D.SetSelectedResult(V.ResultText(goWhiteWins));
+ end;
+begin
+ Grid:=TStringGrid(D.FindComponent('TournamentPairings'));OpeningFen:=NormalizeBallotFEN(V,V.DefaultStartingFEN);
+ Plain:=Response('query_tournament id='+IntToStr(Id),'OK');
+ Disabled:=Response('query_tournament id='+IntToStr(Id)+' pairs=false','OK');
+ try
+  Check((Plain.Find('pairs')=nil) and (Plain.AsJSON=Disabled.AsJSON),'Omitted/false pairs preserve the existing response');
+ finally Disabled.Free;Plain.Free;end;
+ J:=Response('query_tournament id='+IntToStr(Id)+' pairs=TRUE','OK');
+ try
+  Entries:=TJSONArray(J.Find('pairs'));Check(Entries.Count=13,'All opening occurrences, including duplicate FENs and incomplete pairs');
+  for I:=0 to Entries.Count-1 do begin
+   Check((Entries.Objects[I].Get('pair',0)=I+1) and (Entries.Objects[I].Get('fen','')=OpeningFen),'Pair number and normalized opening FEN');
+   Check((TJSONArray(Entries.Objects[I].Find('games')).Integers[0]=2*I+1) and
+     (TJSONArray(Entries.Objects[I].Find('games')).Integers[1]=2*I+2),'Scheduled game numbers accompany both scores');
+  end;
+  Check((PairScores(J,0).Floats[0]=1) and (PairScores(J,0).Floats[1]=0),'Both colours use engine1 perspective');
+  Check((PairScores(J,1).Floats[0]=0.5) and (PairScores(J,1).Floats[1]=0.5),'Draw scores normalized to half a point for both games');
+  Check((PairScores(J,12).Floats[0]=0.5) and (PairScores(J,12).Items[1].JSONType=jtNull),'Unfinished/unresolved score is JSON null');
+  Base:=TJSONArray(J.Find('pairs')).AsJSON;
+ finally J.Free;end;
+ // W,L / D,D and W,D / D,L have identical aggregate WDL, but distinct pairs.
+ Grid.Row:=2;D.SetSelectedResult(V.ResultText(goDraw));SetLoss(4);
+ J:=Response('query_tournament id='+IntToStr(Id)+' pairs=true','OK');
+ try
+  Check((J.Get('wins',0)=1) and (J.Get('draws',0)=23) and (J.Get('losses',0)=1),'Alternative grouping keeps aggregate WDL');
+  Check((PairScores(J,0).Floats[0]=1) and (PairScores(J,0).Floats[1]=0.5) and
+    (PairScores(J,1).Floats[0]=0.5) and (PairScores(J,1).Floats[1]=0),'Pair evidence distinguishes equal aggregate WDL');
+  Check(TJSONArray(J.Find('pairs')).AsJSON<>Base,'Pair snapshot changes when aggregate does not');
+ finally J.Free;end;
+ SetLoss(2);Grid.Row:=4;D.SetSelectedResult(V.ResultText(goDraw));
+ // A valid interleaved schedule: pair 1 has rows 1/4; pair 2 rows 2/3.
+ Round2:=Grid.Cells[TournamentColRound,2];Round4:=Grid.Cells[TournamentColRound,4];
+ try
+  Grid.Cells[TournamentColRound,2]:=Round4;Grid.Cells[TournamentColRound,4]:=Round2;
+  J:=Response('query_tournament id='+IntToStr(Id)+' pairs=true','OK');
+  try
+   Check((TJSONArray(PairEntry(J,0).Find('games')).Integers[1]=4) and
+     (TJSONArray(PairEntry(J,1).Find('games')).Integers[0]=2),'Saved opening number defines membership, not adjacency or equal FEN');
+  finally J.Free;end;
+ finally Grid.Cells[TournamentColRound,2]:=Round2;Grid.Cells[TournamentColRound,4]:=Round4;end;
+ J:=Response('query_tournament id='+IntToStr(Id)+' pairs=true','OK');
+ try Check(TJSONArray(J.Find('pairs')).AsJSON=Base,'Restored schedule has identical full snapshot');finally J.Free;end;
+end;
 procedure Match(V:TGameVariant;const A,B:string);
-var J,Listed,Obj,Doc:TJSONObject;D:TTournamentDialog;Args,FenFile,Text,Before,Name:string;
+var J,Listed,Obj,Doc:TJSONObject;D:TTournamentDialog;Args,FenFile,Text,Before,Name,PairText:string;
  L:TStringList;I,Id,Count:Integer;Setup:TGameSetup;Grid:TStringGrid;Fens:TStringList;
 begin
  Fens:=TStringList.Create;
@@ -200,9 +256,22 @@ begin
    L.LoadFromFile(Name);Check(L.Text=Before,'Query does not save/change document');
    J:=Response('stop_tournament id='+IntToStr(Id),'OK');J.Free;
    L.LoadFromFile(Name);Check(L.Text=Before,'Repeated Stop leaves stopped results and file unchanged');
+   PairDetails(Id,D,V,A);
    Grid.Row:=1;D.RescheduleSelectedGame(nil);
    J:=Response('query_tournament id='+IntToStr(Id),'OK');
    try Check((J.Get('games_completed',0)=24) and (J.Get('pairs_completed',0)=11),'Counts decrease after GUI reschedule');finally J.Free;end;
+   L.LoadFromFile(Name);Before:=L.Text;
+   J:=Response('query_tournament id='+IntToStr(Id)+' pairs=true','OK');
+   try
+    Check((PairScores(J,0).Items[0].JSONType=jtNull) and
+      (PairScores(J,1).Items[0].JSONType<>jtNull) and (PairEntry(J,1).Get('pair',0)=2),
+      'Earlier incomplete pairs stay ahead of later completed pairs');
+    PairText:=TJSONArray(J.Find('pairs')).AsJSON;
+   finally J.Free;end;
+   L.LoadFromFile(Name);Check(L.Text=Before,'Detailed query does not save/change file');
+   D.LoadTournamentFromFile(Name);
+   J:=Response('query_tournament id='+IntToStr(Id)+' pairs=true','OK');
+   try Check(TJSONArray(J.Find('pairs')).AsJSON=PairText,'Reloading the same saved event reconstructs pair results');finally J.Free;end;
    Doc:=ReadTournamentDocument(Name,GameGuiProfileFor(V).FileFormat);
    try
     Obj:=TJSONObject(TJSONArray(Doc.Find('games')).Objects[0].Find('record'));
@@ -217,6 +286,7 @@ begin
      Obj.Strings['black_engine_key']:=Obj.Get('white_engine_key','');L.Text:=Doc.AsJSON;L.SaveToFile(Name);
    finally Doc.Free;end;
    D.LoadTournamentFromFile(Name);Error('query_tournament id='+IntToStr(Id),'MATCH_CHANGED');
+   Error('query_tournament id='+IntToStr(Id)+' pairs=true','MATCH_CHANGED');
    J:=Response('stop_tournament id='+IntToStr(Id),'OK');J.Free;
    D.ResetForVariant(V);Error('query_tournament id='+IntToStr(Id),'TOURNAMENT_REPLACED');
    Error('stop_tournament id='+IntToStr(Id),'TOURNAMENT_REPLACED');
@@ -343,6 +413,10 @@ begin
    Error('run_tournament engine1_id=1 engine2_id=2 time=0','CONFIGURE');
    Error('run_tournament engine1_id=1 engine2_id=2 concurrent=0','CONFIGURE');
    Error('query_tournament id=999','UNKNOWN_TOURNAMENT');
+   Error('query_tournament id=999 pairs=maybe','BAD_ARGUMENT');
+   Error('query_tournament id=999 pairs=','BAD_ARGUMENT');
+   Error('query_tournament id=999 pairs=true','UNKNOWN_TOURNAMENT');
+   Error('stop_tournament id=999 pairs=true','BAD_ARGUMENT');
    Error('stop_tournament id=999','UNKNOWN_TOURNAMENT');
    Error('stop_tournament','BAD_ARGUMENT');
    Error('stop_tournament id=-1','BAD_ARGUMENT');

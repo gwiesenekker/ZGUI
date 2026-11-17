@@ -137,6 +137,53 @@ Referee overrides count; archived replay attempts do not. Rescheduling or correc
 results can reduce these counts. IDs are valid for the current session; closed,
 replaced or structurally changed events are reported explicitly.
 
+Add `pairs=true` to request the complete pair snapshot:
+
+```text
+query_tournament id=1 pairs=true
+```
+
+Omitting pairs, or setting `pairs=false`, keeps the existing aggregate-only
+response. The option accepts true or false. The extra `pairs` array contains
+**every scheduled opening occurrence**, including incomplete pairs, ordered by
+its saved opening number. For example, the added field can contain:
+
+```json
+{"pairs":[{"pair":1,"fen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","games":[1,2],"results":[1,0.5]},{"pair":2,"fen":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","games":[3,4],"results":[null,0]}]}
+```
+
+This is an excerpt; the full response also contains the usual aggregate fields.
+FENs use the stored starting-position spelling; ballot positions are normalized
+when loaded. Each entry has:
+
+| Pair field | Meaning |
+| --- | --- |
+| `pair` | One-based scheduled opening number. Duplicate FEN entries retain distinct pair numbers. |
+| `fen` | Stored starting FEN shared by both games. |
+| `games` | Two game numbers, in their stored scheduled row order. |
+| `results` | Two corresponding scores from engine1's perspective: 1 for win, 0.5 for draw, 0 for loss, null for unfinished or unresolved. The scale is the same for chess and draughts. |
+
+The current two-engine ballot generator schedules games 1/2, 3/4 and so on,
+but pair membership is read from the saved opening number and validated against
+the FEN and reversed engine colours. Completion order does not change it. Equal
+FENs remain separate scheduled occurrences; no grouping or sorting by FEN is used.
+Without a ballot, the two colour-reversed games form one pair.
+
+Scores reflect the current effective results, including referee overrides;
+rescheduling clears the affected score to null. Archived replay attempts are not
+included. Each query rebuilds the snapshot from the existing tournament state,
+and reloading the same saved event reconstructs its pair results. Session IDs
+retain their existing lifetime; automatic reconnect or binding a saved event
+after a ZGUI restart is separate functionality.
+
+An external paired-SPRT runner should consume the **contiguous completed prefix**:
+process pairs in pair-number order and wait when either result is null, even if
+later pairs are complete. Keep the statistical hypotheses, pair-count categories,
+likelihood calculation and stopping decision in that runner. At its first boundary
+crossing, record the deciding pair and call `stop_tournament`; any later finished
+games remain in ZGUI's match record outside that decision sample. ZGUI does not
+perform SPRT or freeze results at an external decision boundary.
+
 Query states are `error`, `stopping`, `completed`, `running`, `waiting`, `attention`
 or `stopped`, with that precedence. The response includes total/completed/active/
 pending/unresolved games, complete pairs, wins/draws/losses, referee-result count and
@@ -199,7 +246,7 @@ on Windows or `./zgui --cli` on Linux. The same commands work through pipes.
 | --- | --- | --- |
 | `list_engines` | None | List registered engines, their session IDs, keys, names, protocols, game and executable availability. Does not launch engines. |
 | `run_tournament` | Two engine selectors; optional settings below | Create and start a two-engine match in a normal tournament tab. Returns immediately with a tournament ID. |
-| `query_tournament` | Required `id=N` | Read the current state of the CLI-created tournament with that returned ID. Repeat to monitor progress. |
+| `query_tournament` | Required `id=N`; optional `pairs=true` (default false) | Read the current state of the CLI-created tournament with that returned ID. Repeat to monitor progress. |
 | `stop_tournament` | Required `id=N` | Request the GUI Stop action for that tournament; return immediately and keep its tab/results. Query to monitor shutdown. |
 
 Parameters for `run_tournament` use `name=value` syntax. Quote values containing
@@ -243,6 +290,7 @@ Query response fields are:
 | `pairs_total`, `pairs_completed` | Total opening pairs and pairs with both results known. |
 | `wins`, `draws`, `losses` | Results from engine1's perspective, regardless of colour. |
 | `referee_results` | Number of games with an effective referee result override. |
+| `pairs` | Present only with pairs=true: all scheduled pairs with opening number/FEN, game numbers and normalized engine1 scores. |
 
 Each response is one `OK ` or `ERROR ` line followed by JSON. Engine and tournament
 IDs belong to the current ZGUI session; a new process starts a new session.

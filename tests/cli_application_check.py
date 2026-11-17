@@ -62,6 +62,11 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   check(r['main_visible'] and r['host_visible'] and r['games']==2,'GUI stays live and rows select both running boards')
   for match in [a,b]:
    q=c.command('query_tournament id='+str(match['tournament']));check(q['games_total']==2,'query actual ordinary match')
+   check('pairs' not in q,'default query keeps its existing shape')
+   detailed=c.command('query_tournament id='+str(match['tournament'])+' pairs=true')
+   check(len(detailed['pairs'])==1 and detailed['pairs'][0]['pair']==1 and
+         detailed['pairs'][0]['games']==[1,2] and len(detailed['pairs'][0]['results'])==2,
+         'both games expose a full pair without a ballot')
   pathlib.Path(str(state)+'.modal').touch()
   end=time.monotonic()+4
   while not pathlib.Path(str(state)+'.modal.ready').exists() and time.monotonic()<end:time.sleep(.05)
@@ -86,7 +91,8 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   check(q['games_total']==2,'queued engine notices do not block read-only CLI')
   queued=extras[-1]['tournament']
   ack=c.command('stop_tournament id='+str(queued));check(ack['tournament']==queued,'stop acknowledges queued tournament')
-  q=c.command('query_tournament id='+str(queued))
+  q=c.command('query_tournament id='+str(queued)+' pairs=true')
+  check(q['pairs'][0]['results']==[None,None],'unplayed results are explicit nulls')
   check(q['state']=='stopped' and q['games_active']==0 and q['games_pending']==2,'queued stop releases waiting request without starting games')
   for match in [a,b]:
    ack=c.command('stop_tournament id='+str(match['tournament']))
@@ -129,17 +135,25 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   try:
    data=c.command('list_engines');check(len(data['engines'])==4,'actual zgui --cli reaches the GUI dispatcher')
    matches=[]
+   ballot=folder/'79.fen'
+   ballot.write_text(('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\n')*79)
    for i in range(5):
-    match=c.command(f'run_tournament engine1_id=1 engine2_id=2 name="Real {i}" time=120 allow_shared_executable=true')
+    opening=f' ballot="{ballot}"' if i==0 else ''
+    match=c.command(f'run_tournament engine1_id=1 engine2_id=2 name="Real {i}" time=120 allow_shared_executable=true'+opening)
     matches.append(match)
-    q=c.command('query_tournament id='+str(match['tournament']))
-    check(q['games_total']==2,'real binary creates and queries five tournaments')
+    q=c.command('query_tournament id='+str(match['tournament'])+' pairs=true')
+    expected_pairs=79 if i==0 else 1
+    check(q['games_total']==2*expected_pairs and len(q['pairs'])==expected_pairs,
+          'real binary creates five tournaments and returns the full 79-pair ballot')
+    check([p['pair'] for p in q['pairs']]==list(range(1,expected_pairs+1)),
+          'real pair response uses scheduled opening order')
    for match in [matches[0],matches[-1]]:
     ack=c.command('stop_tournament id='+str(match['tournament']))
     check(ack['tournament']==match['tournament'],'actual binary accepts Stop for active/queued tournaments')
     c.command('query_tournament id='+str(match['tournament']))
    c.command('query_tournament id=999','ERROR')
    bad=c.command('stop_tournament id=999','ERROR');check(bad['code']=='UNKNOWN_TOURNAMENT','actual Stop rejects unknown ID')
+   bad=c.command('query_tournament id=1 pairs=invalid','ERROR');check(bad['code']=='BAD_ARGUMENT','actual query rejects invalid pairs boolean')
    c.p.stdin.close();time.sleep(.2);check(c.p.poll() is None,'actual executable keeps GUI alive at EOF')
    windows=[];end=time.monotonic()+3
    while not windows and time.monotonic()<end:

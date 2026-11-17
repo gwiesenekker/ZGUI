@@ -44,3 +44,9 @@ immediate OK acknowledgement, then query until the engines drain. The tab and
 results must remain, with the same Referee stopped tournament reason as GUI Stop.
 Also test repeated Stop, a tournament waiting for busy engines, unknown/closed/
 replaced IDs, BUSY during a modal dialog and another tournament continuing.
+
+Test `query_tournament id=N pairs=true` for both games and a 79-position ballot:
+expect one complete JSON response with all 79 pair entries in scheduled order,
+including null scores for unfinished/unresolved games. Duplicate FEN entries
+remain separate. Default and pairs=false queries omit the pairs array. Check
+referee-result changes, rescheduling, and stopping while pair queries are active.

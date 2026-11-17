@@ -56,7 +56,7 @@ function TInteractiveCommands.Execute(const Line:string):string;
 var Tokens:TStringList;Spec:TCommandDefinition;Binder:TCommandBinder;Cmd:TCliCommand;
  Engines:TExternalEngineList;J,Item:TJSONObject;Items:TJSONArray;Name,Msg,Key,Phase:string;
  D:TTournamentDialog;Settings:TTournamentMatchSettings;A,B:TExternalEngineDefinition;
- I,N,Id,BindIndex:Integer;Started:TTournamentStartResult;AllowShared:Boolean;V:TGameVariant;
+ I,N,Id,BindIndex:Integer;Started:TTournamentStartResult;AllowShared,IncludePairs:Boolean;V:TGameVariant;
  function Number(const Param:string):Double;
  var FS:TFormatSettings;
  begin
@@ -114,13 +114,22 @@ begin
    Name:=LowerCase(Tokens[0]);Spec:=TCommandDefinition.Create(Name);
    if Name='run_tournament' then AddParams(['engine1','engine2','engine1_id','engine2_id','engine1_key','engine2_key',
       'name','ballot','time','moves','increment','concurrent','allow_shared_executable'])
-   else if (Name='query_tournament') or (Name='stop_tournament') then Spec.Arguments.Add(TParameterDefinition.Create('id',True))
+   else if (Name='query_tournament') or (Name='stop_tournament') then begin
+     Spec.Arguments.Add(TParameterDefinition.Create('id',True));
+     if Name='query_tournament' then AddParams(['pairs']);
+   end
    else if Name<>'list_engines' then Fail('BAD_ARGUMENT','Unknown interactive command: '+Name);
    Binder:=TCommandBinder.Create(Spec,bmExecution);
    for I:=1 to Tokens.Count-1 do Binder.Feed(Tokens[I]);Binder.FinishTokens;
    for I:=0 to Binder.Count-1 do if not Binder.Supplied[I] and Binder.ParameterAt(I).Required then
      Fail('BAD_ARGUMENT','Missing required argument '+Binder.ParameterAt(I).Name);
    Cmd:=Binder.CreateCommand;J:=TJSONObject.Create;J.Add('command',Name);
+   IncludePairs:=False;
+   if (Name='query_tournament') and Cmd.HasArgument('pairs') then begin
+     Msg:=LowerCase(Cmd['pairs']);
+     if (Msg<>'true') and (Msg<>'false') then Fail('BAD_ARGUMENT','pairs requires true or false');
+     IncludePairs:=Msg='true';
+   end;
    if Name='list_engines' then begin
      Engines:=TExternalEngineList.Create;LoadExternalEngines(EnginesJsonFileName,Engines);
      Items:=TJSONArray.Create;J.Add('engines',Items);
@@ -140,7 +149,7 @@ begin
        // The GUI button and CLI share the entire existing asynchronous stop path.
        D.StopTournament;J.Add('tournament',Id);
      end else begin
-       try Item:=D.MatchSnapshot(FBindings[BindIndex].Engine1,FBindings[BindIndex].Engine2);
+       try Item:=D.MatchSnapshot(FBindings[BindIndex].Engine1,FBindings[BindIndex].Engine2,IncludePairs);
        except on E:Exception do Fail('MATCH_CHANGED',E.Message);end;
        J.Free;J:=Item;J.Add('command',Name);J.Add('tournament',Id);
      end;

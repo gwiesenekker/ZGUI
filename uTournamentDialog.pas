@@ -163,7 +163,7 @@ type
     function ConfirmSharedExecutables(CommandMode:Boolean=False;AllowShared:Boolean=False):Boolean;
     procedure ConfigureNewTournament(const Settings:TTournamentMatchSettings);
     function CreatePairing(out AMessage:string;CommandMode:Boolean=False):Boolean;
-    function MatchSnapshot(const Engine1Key,Engine2Key:string):TJSONObject;
+    function MatchSnapshot(const Engine1Key,Engine2Key:string;IncludePairs:Boolean=False):TJSONObject;
     function AbandonUnpublished:Boolean;
     procedure StopTournament;
     function StartTournament(out AMessage:string;CommandMode:Boolean=False;
@@ -1555,16 +1555,20 @@ begin
   if Result then FLoadingTournament:=True; // destructor must not autosave an abandoned setup
 end;
 
-function TTournamentDialog.MatchSnapshot(const Engine1Key,Engine2Key:string):TJSONObject;
+function TTournamentDialog.MatchSnapshot(const Engine1Key,Engine2Key:string;IncludePairs:Boolean):TJSONObject;
 var Row,Total,Done,ActiveCount,Pending,Unresolved,Wins,Draws,Losses,Manual,Pairs,I,P,N:Integer;
   R:TTournamentGameRecord;Outcome:TTournamentResult;FirstReason,AttentionReason,Reason,State,Err:string;
   PairCounts:array of Integer;PairKnown:array of Integer;PairFen,PairWhite:array of string;
+  PairGames:array of array[0..1] of Integer;
+  PairScores:array of array[0..1] of Double;
+  Entries,Games,Scores:TJSONArray;Entry:TJSONObject;Slot:Integer;Score:Double;
   WhiteIsOne,Known:Boolean;
 begin
   Total:=FGrid.RowCount-1;N:=FBallotPositions.Count;if N=0 then N:=1;
   if (Engine1Key=Engine2Key) or (Total<>2*N) or (FGameRecords.Count<Total) then
     raise EInvalidOperation.Create('MATCH_CHANGED');
   SetLength(PairCounts,N);SetLength(PairKnown,N);SetLength(PairFen,N);SetLength(PairWhite,N);
+  if IncludePairs then begin SetLength(PairGames,N);SetLength(PairScores,N);end;
   Done:=0;ActiveCount:=0;Pending:=0;Unresolved:=0;Wins:=0;Draws:=0;Losses:=0;Manual:=0;Pairs:=0;
   FirstReason:='';AttentionReason:='';Err:=FStorageError;
   for Row:=1 to Total do begin
@@ -1578,15 +1582,20 @@ begin
     if PairCounts[P]=1 then begin PairFen[P]:=StartingFENForRow(Row);PairWhite[P]:=R.WhiteEngineKey;end
     else if (PairCounts[P]>2) or (PairFen[P]<>StartingFENForRow(Row)) or
       (PairWhite[P]=R.WhiteEngineKey) then raise EInvalidOperation.Create('MATCH_CHANGED');
-    Outcome:=ParseTournamentResult(R.EffectiveResult,FProfile.FileFormat);Known:=TournamentResultIsKnown(Outcome);
+    Outcome:=ParseTournamentResult(R.EffectiveResult,FProfile.FileFormat);Known:=TournamentResultIsKnown(Outcome);Score:=-1;
     Reason:=Trim(FGrid.Cells[TournamentColReason,Row]);
     if (FirstReason='') and (Reason<>'') then FirstReason:=Reason;
     if (Err='') and (R.CaptureError<>'') then Err:=R.CaptureError;
     if Known then begin
       Inc(Done);Inc(PairKnown[P]);if R.ManualResult<>'' then Inc(Manual);
-      if Outcome=trDraw then Inc(Draws)
-      else if ((Outcome=trWhiteWin) and WhiteIsOne) or ((Outcome=trBlackWin) and not WhiteIsOne) then Inc(Wins)
-      else Inc(Losses);
+      if Outcome=trDraw then begin Inc(Draws);Score:=0.5;end
+      else if ((Outcome=trWhiteWin) and WhiteIsOne) or ((Outcome=trBlackWin) and not WhiteIsOne) then begin Inc(Wins);Score:=1;end
+      else begin Inc(Losses);Score:=0;end;
+    end;
+    if IncludePairs then begin
+      Slot:=PairCounts[P]-1;
+      PairGames[P][Slot]:=StrToIntDef(FGrid.Cells[TournamentColGame,Row],Row);
+      PairScores[P][Slot]:=Score;
     end;
     if IsRowRunning(Row) then Inc(ActiveCount)
     else if not Known then
@@ -1612,6 +1621,21 @@ begin
   Result.Add('games_completed',Done);Result.Add('games_active',ActiveCount);Result.Add('games_pending',Pending);
   Result.Add('unresolved_games',Unresolved);Result.Add('wins',Wins);Result.Add('draws',Draws);Result.Add('losses',Losses);
   Result.Add('referee_results',Manual);Result.Add('pairs_total',N);Result.Add('pairs_completed',Pairs);
+  if IncludePairs then begin
+    Entries:=TJSONArray.Create;Result.Add('pairs',Entries);
+    // Opening occurrence, not FEN equality or completion order, identifies a pair.
+    for I:=0 to N-1 do begin
+      Entry:=TJSONObject.Create;Entries.Add(Entry);
+      Entry.Add('pair',I+1);Entry.Add('fen',PairFen[I]);
+      Games:=TJSONArray.Create;Entry.Add('games',Games);
+      Scores:=TJSONArray.Create;Entry.Add('results',Scores);
+      for Slot:=0 to 1 do begin
+        Games.Add(PairGames[I][Slot]);
+        if PairScores[I][Slot]<0 then Scores.Add(TJSONNull.Create)
+        else Scores.Add(PairScores[I][Slot]);
+      end;
+    end;
+  end;
 end;
 
 procedure TTournamentDialog.CreatePairingClick(Sender:TObject);

@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Expose opening-pair results in CLI tournament queries — 2026-11-17
+
+Commit: pending.
+
+- User waiver: “Implement now; waive prior review”. Scope: optional pairs=true
+  on query_tournament for both games, using existing snapshots; keep SPRT in the
+  external runner. Details: chatgpt/CLI_PAIR_SNAPSHOT_NOTES.md.
+- Return all scheduled pairs with their opening number, stored FEN, game
+  numbers and engine1 scores (1/0.5/0; null for unfinished/unresolved). Reuse the
+  existing format-aware effective-result pass and saved opening validation.
+- Preserve duplicate FEN entries as separate pairs and order by scheduled
+  opening number. Default/pairs=false response shape is unchanged. Referee edits,
+  rescheduling and saved-event reloads are reflected without a second cache or
+  storage schema change. No GUI layout or game execution changes for either game.
+- Add tests for colour/format normalization, equal aggregate WDL with different
+  pair evidence, saved membership versus adjacency/FEN, later pairs completing
+  first, rescheduling/reload, unchanged files and a real 79-pair pipe response.
+  Update the manual and Windows checklist; native Windows QA remains outstanding.
+- Validation: GTK2 build, all 24 GUI suites (239 CLI GUI and 105 integrated
+  application assertions), full regression and both tournament suites pass.
+
 ### Add interactive stop_tournament — 2026-11-17
 
 Commit: `cb32a86`.
