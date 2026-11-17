@@ -20,7 +20,7 @@ type
   FUserHeight,FMeasuredHeight:Integer;
   FHeading:TButton;FBody:TScrollBox;FSelectors,FInfo,FData:TPanel;
   FReport:TSprtReport;
-  FCandidate,FBaseline:TComboBox;FCandidateLabel,FBaselineLabel,FInfoText,FStatus,FHeadline:TLabel;
+  FCandidate,FBaseline:TComboBox;FCandidateLabel,FBaselineLabel,FInfoText,FStatus:TLabel;
   FSwap,FSettings:TButton;FCounts:TStringGrid;FGraph:TSprtGraph;
   FOnChanged:TNotifyEvent;
   procedure Toggle(Sender:TObject);procedure SelectionChanged(Sender:TObject);
@@ -31,7 +31,7 @@ type
   procedure SetParticipants(Names,Keys:TStrings);
   procedure SetConfig(const C:TSprtConfig);
   procedure ApplyConfig(const C:TSprtConfig);
-  procedure ShowReport(const R:TSprtReport;Amended:Boolean;const ErrorText:string);
+  procedure ShowReport(const R:TSprtReport;const ErrorText:string;Running:Boolean);
   procedure RefreshMeasurements;
   property Config:TSprtConfig read FConfig;
   property OnChanged:TNotifyEvent read FOnChanged write FOnChanged;
@@ -40,6 +40,15 @@ type
  end;
 implementation
 uses Math,Dialogs,uGuiDialogs,LCLIntf,LCLType;
+type
+ TSprtStatusLabel=class(TLabel)
+ protected procedure DoDrawText(var ARect:TRect;Flags:Longint);override;
+ end;
+procedure TSprtStatusLabel.DoDrawText(var ARect:TRect;Flags:Longint);
+begin
+ if (Flags and DT_CALCRECT)=0 then Flags:=Flags or DT_END_ELLIPSIS or DT_SINGLELINE;
+ inherited DoDrawText(ARect,Flags);
+end;
 procedure TSprtGraph.SetReport(const R:TSprtReport);
 var I:Integer;Same:Boolean;
 begin
@@ -126,8 +135,8 @@ begin
  FSwap:=TButton.Create(Self);FSwap.Parent:=FSelectors;FSwap.Name:='SprtSwap';FSwap.Caption:='Swap';FSwap.OnClick:=@Swap;
  FSettings:=TButton.Create(Self);FSettings.Parent:=FInfo;FSettings.Caption:='SPRT settings...';FSettings.Name:='SprtSettings';FSettings.OnClick:=@Settings;
  FInfoText:=TLabel.Create(Self);FInfoText.Parent:=FInfo;FInfoText.AutoSize:=False;FInfoText.ShowHint:=True;
- FHeadline:=TLabel.Create(Self);FHeadline.Parent:=FBody;FHeadline.AutoSize:=False;
- FStatus:=TLabel.Create(Self);FStatus.Parent:=FBody;FStatus.AutoSize:=False;FStatus.WordWrap:=True;FStatus.ShowHint:=True;
+ FStatus:=TSprtStatusLabel.Create(Self);FStatus.Parent:=FBody;FStatus.Name:='SprtStatus';
+ FStatus.AutoSize:=False;FStatus.WordWrap:=False;FStatus.ShowAccelChar:=False;FStatus.ShowHint:=False;FStatus.ParentShowHint:=False;
  FCounts:=TStringGrid.Create(Self);FCounts.Parent:=FData;FCounts.Name:='SprtCounts';FCounts.ColCount:=2;FCounts.RowCount:=6;
  FCounts.FixedCols:=0;FCounts.FixedRows:=1;FCounts.ScrollBars:=ssNone;FCounts.Options:=FCounts.Options-[goEditing,goRowSelect];
  FCounts.Cells[0,0]:='Pair score';FCounts.Cells[1,0]:='Count';
@@ -171,10 +180,8 @@ begin
   FInfo.SetBounds(0,FSelectors.Height,W,ToggleH+Gap);
   SettingsW:=MeasureGuiText('SPRT settings...',Font).cx+24;FSettings.SetBounds(Gap,0,SettingsW,ToggleH);
   FInfoText.SetBounds(SettingsW+2*Gap,Gap,Max(1,W-SettingsW-3*Gap),H+4);
-  FHeadline.Font.Name:=Font.Name;FHeadline.Font.Size:=Font.Size;FHeadline.Font.Color:=Font.Color;FHeadline.Font.Style:=Font.Style+[fsBold];
-  FHeadline.SetBounds(Gap,FInfo.Top+FInfo.Height,Max(1,W-2*Gap),H+4);
-  FStatus.SetBounds(Gap,FHeadline.Top+FHeadline.Height,Max(1,W-2*Gap),FStatus.Height);
-  FStatus.GetPreferredSize(PrefW,StatusH);StatusH:=Max(2*H,StatusH)+Gap;FStatus.Height:=StatusH;
+  StatusH:=H+4;
+  FStatus.SetBounds(Gap,FInfo.Top+FInfo.Height,Max(1,W-2*Gap),StatusH);
   FCounts.Canvas.Font.Assign(Font);FCounts.DefaultRowHeight:=H+8;
   LabelW:=MeasureGuiText('1 (DD/WL/LW)',Font).cx+20;CountW:=MeasureGuiText('999999',Font).cx+20;
   LeftW:=LabelW+CountW+4;FCounts.ColWidths[0]:=LabelW;FCounts.ColWidths[1]:=CountW;
@@ -269,25 +276,31 @@ begin
   until False;
  finally Dialog.Free;end;
 end;
-procedure TSprtPanel.ShowReport(const R:TSprtReport;Amended:Boolean;const ErrorText:string);
-var I:Integer;Mode,StatusText:string;
+procedure TSprtPanel.ShowReport(const R:TSprtReport;const ErrorText:string;Running:Boolean);
+var I:Integer;StatusText,EloText:string;Elo:Double;
+ function PairsWord(N:Integer):string;
+ begin if N=1 then Result:='opening pair' else Result:='opening pairs';end;
 begin
  FReport:=R;FGraph.Visible:=ErrorText='';
- Mode:='Exploratory';if FConfig.BeforePlay then Mode:='Configured before play';if Amended then Mode:='Amended results';
  FInfoText.Caption:='H0: '+FloatToStr(FConfig.Elo0)+' Elo    H1: '+FloatToStr(FConfig.Elo1)+
   ' Elo    Alpha: '+FloatToStr(FConfig.Alpha*100)+'%    Beta: '+FloatToStr(FConfig.Beta*100)+'%';
  FInfoText.Hint:=FInfoText.Caption+LineEnding+'Paired logistic-Elo GSPRT. Alpha and beta are nominal error targets.';
- if ErrorText<>'' then begin
-  FHeadline.Caption:='Comparison unavailable';StatusText:=Mode+'. '+ErrorText;
- end else begin
-  FHeadline.Caption:='Continue collecting evidence';
-  if R.Decision<>'continue' then FHeadline.Caption:=UpperCase(R.Decision)+' reached at opening '+IntToStr(R.DecisionPair);
-  StatusText:=Mode+'. Display only; games continue.'+LineEnding+
-    Format('%d of %d pairs included; %d complete.',[R.Included,R.Total,R.Complete]);
-  if (R.Decision='continue') and (R.WaitingAt>0) then StatusText+=' Waiting for opening '+IntToStr(R.WaitingAt)+'.'
-  else if R.Complete>R.Included then StatusText+=' '+IntToStr(R.Complete-R.Included)+' complete pairs outside the decision sample.';
- end;
- FStatus.Caption:=StatusText;FStatus.Hint:=StatusText;
+ if ErrorText<>'' then StatusText:='SPRT unavailable — '+ErrorText
+ else if R.Decision<>'continue' then begin
+  Elo:=FConfig.Elo0;if R.Decision='h1' then Elo:=FConfig.Elo1;
+  EloText:=FloatToStr(Elo);if Elo>0 then EloText:='+'+EloText;
+  StatusText:=Format('SPRT favours %s (%s Elo) — boundary reached after %d %s.',
+   [UpperCase(R.Decision),EloText,R.Included,PairsWord(R.Included)]);
+ end else if (R.Total>0) and (R.Included=R.Total) then begin
+  if R.Total=1 then StatusText:='SPRT inconclusive — the opening pair is complete.'
+  else StatusText:=Format('SPRT inconclusive — all %d opening pairs included.',[R.Total]);
+ end else if not Running then
+  StatusText:=Format('SPRT incomplete — %d of %d %s included.',[R.Included,R.Total,PairsWord(R.Total)])
+ else if (R.WaitingAt>0) and (R.Complete>R.PrefixComplete) then
+  StatusText:=Format('SPRT waiting for opening pair %d — %d of %d pairs included.',[R.WaitingAt,R.Included,R.Total])
+ else StatusText:=Format('SPRT inconclusive so far — %d of %d %s included.',[R.Included,R.Total,PairsWord(R.Total)]);
+ StatusText:=StringReplace(StringReplace(StatusText,#13,' ',[rfReplaceAll]),#10,' ',[rfReplaceAll]);
+ FStatus.Caption:=StatusText;
  FCandidate.ShowHint:=True;FCandidate.Hint:=FCandidate.Text;FBaseline.ShowHint:=True;FBaseline.Hint:=FBaseline.Text;
  for I:=0 to 4 do FCounts.Cells[1,I+1]:=IntToStr(R.Counts[I]);
  FGraph.SetReport(R);RefreshMeasurements;

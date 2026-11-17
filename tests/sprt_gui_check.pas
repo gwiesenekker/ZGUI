@@ -27,7 +27,7 @@ end;
 procedure VariantCheck(V:TGameVariant);
 var D,Loaded:TTournamentDialog;P,LoadedPanel:TSprtPanel;C,Old:TSprtConfig;Defs:TExternalEngineList;G:TStringGrid;
  S:TGameSetup;MessageText,Name,Before,GamesText,Identity:string;
- Lines,Ballot:TStringList;J,Doc:TJSONObject;I,AIndex,BIndex,FontSize:Integer;Failed:Boolean;Graph:TSprtGraph;Preview:TSprtReport;Y,PointIndex:Integer;Image:TBitmap;Png:TPortableNetworkGraphic;
+ Lines,Ballot:TStringList;J,Doc:TJSONObject;I,AIndex,BIndex,FontSize:Integer;Failed:Boolean;Graph:TSprtGraph;Preview:TSprtReport;Y,PointIndex:Integer;Image:TBitmap;Png:TPortableNetworkGraphic;Status:TLabel;
  procedure WinRow(Row:Integer);
  begin
   G.Row:=Row;Check(D.GameSetupForRow(Row,S),'Existing row setup');
@@ -41,6 +41,7 @@ begin
  try
   D.Show;Application.ProcessMessages;
   P:=TSprtPanel(D.FindComponent('TournamentSprt'));Check((P<>nil) and not P.Expanded,'SPRT starts collapsed');
+  Status:=TLabel(P.FindComponent('SprtStatus'));Check((Status<>nil) and not Status.WordWrap and not Status.ShowHint and not Status.ParentShowHint,'SPRT has a single-line status without hover text');
   LoadExternalEngines(EnginesJsonFileName,Defs);if V=Chess then AIndex:=0 else AIndex:=3;BIndex:=AIndex+1;
   C:=DefaultSprtConfig;C.CandidateKey:=EngineIdentityKey(Defs[AIndex]);C.BaselineKey:=EngineIdentityKey(Defs[BIndex]);C.Elo1:=400;
   P.ApplyConfig(C);C:=P.Config;Check(C.BeforePlay and C.Stored and not C.HasStarted,'Explicit pre-play settings recorded');
@@ -57,6 +58,14 @@ begin
      if StrToInt(G.Cells[TournamentColRound,I])>1 then WinRow(I);
   end;
   Query;Check((J.Get('pairs_complete',0)=5) and (J.Get('pairs_included',-1)=0) and (J.Get('waiting_at_pair',0)=1),'Wait for earliest missing pair');
+  Check(Pos('SPRT incomplete',Status.Caption)=1,'Idle incomplete tournament is not described as still collecting');
+  P.ShowReport(P.Report,'',True);
+  Check(Pos('SPRT waiting for opening pair 1',Status.Caption)=1,'Running comparison identifies an out-of-order blocking pair');
+  Preview:=P.Report;Preview.Complete:=0;Preview.PrefixComplete:=0;
+  P.ShowReport(Preview,'',True);
+  Check(Pos('SPRT inconclusive so far',Status.Caption)=1,'Running without a blocked completed pair shows progress');
+  Query;
+
   for I:=1 to G.RowCount-1 do begin
    D.GameSetupForRow(I,S);
    if (((EngineIdentityKey(S.WhiteEngine)=C.CandidateKey) and (EngineIdentityKey(S.BlackEngine)=C.BaselineKey)) or
@@ -66,6 +75,7 @@ begin
   Query;Check((J.Get('decision','')='h1') and (J.Get('decision_pair',0)=5) and
     (J.Get('pairs_included',0)=5) and (J.Get('later_complete',0)=1),'First crossing frozen during full fixed match');
   Check(J.Get('mode','')='amended','Referee results distinguished from untouched planned evidence');
+  Check((Pos('SPRT favours H1 (+400 Elo)',Status.Caption)=1) and (Pos('after 5 opening pairs',Status.Caption)>0),'Boundary status names the hypothesis, Elo and evidence sample');
   Check(Abs(J.Get('llr',0.0)-P.Report.LLR)<1e-12,'GUI and CLI use exactly the same report');
   Old:=P.Config;P.ApplyConfig(Old);Check(P.Config.BeforePlay=Old.BeforePlay,'Unchanged Apply preserves declaration');
   C:=P.Config;C.Elo1:=500;P.ApplyConfig(C);Check(not P.Config.BeforePlay,'Changing hypotheses after play is exploratory');
@@ -89,6 +99,11 @@ begin
     (Pos('First H0 crossing',Graph.Hint)>0) and (Pos('Estimated Elo: -infinity',Graph.Hint)>0),'Graph points expose pair, value and first crossing');
   Preview:=Default(TSprtReport);SetLength(Preview.Trace,1);Preview.Trace[0].Opening:=1;Preview.Trace[0].MeanScore:=0.75;Preview.Included:=1;
   Graph.SetReport(Preview);Check(Pos('Estimated Elo: +190.8',Graph.PointHint(0))>0,'Finite prefix score converts to logistic Elo');Graph.SetReport(P.Report);
+  Preview:=Default(TSprtReport);Preview.Decision:='continue';Preview.Total:=79;Preview.Complete:=79;Preview.Included:=79;Preview.PrefixComplete:=79;
+  P.ShowReport(Preview,'',False);
+  Check(Status.Caption='SPRT inconclusive — all 79 opening pairs included.','Finished complete match does not ask for more evidence');
+  Check((Pos(LineEnding,Status.Caption)=0) and not Status.WordWrap,'Descriptive status stays on one physical line');
+  Query;
 
   for FontSize:=10 to 16 do if FontSize in [10,16] then begin
    D.Font.Size:=FontSize;D.SetBounds(0,0,1250,900);D.RefreshLayout;Application.ProcessMessages;
@@ -144,6 +159,7 @@ begin
    Check((TComboBox(P.FindComponent('SprtCandidate')).ItemIndex>=0) and
     (TComboBox(P.FindComponent('SprtBaseline')).ItemIndex>=0),'Displayed selections match underlying legacy design');
    Check((P.Report.Total=1) and (P.Report.Included=1) and (P.Report.Counts[2]=1),'Initial/repeated legacy load immediately shows paired draw evidence');
+   Check(TLabel(P.FindComponent('SprtStatus')).Caption='SPRT inconclusive — the opening pair is complete.','Finished draw-only event has a clear final inconclusive status');
    Application.ProcessMessages;
    Check(not P.Config.Stored and not P.Config.BeforePlay,'Automatic legacy selection stays exploratory after native events');
   end;

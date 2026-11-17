@@ -1579,19 +1579,50 @@ the first crossing. All-win/all-loss samples have an infinite Elo estimate; this
 is an empirical estimate, not an H0/H1 setting or a confidence bound. Positive evidence favours H1; negative evidence favours H0. Pairs enter in
 scheduled opening order. If pair 8 finishes before pair 7, it waits. The view
 replays this sequence and freezes its evidence sample at the **first crossing**.
-The status shows Continue, H0 reached or H1 reached and the deciding pair number.
-Complete pairs outside that sample are reported separately; no game results are
-removed. A missing or corrected result causes the view to reconstruct the current
-sample and crossing from the saved effective results.
+The comparison uses one descriptive status line:
 
-**Display only; games continue.** This display never stops a tournament. A fixed match can
+- **Running:** “SPRT inconclusive so far — 42 of 79 opening pairs included.”
+- **Waiting for an earlier result:** “SPRT waiting for opening pair 43 — 42 of 79 pairs included.”
+- **All selected opening pairs complete, no crossing:** “SPRT inconclusive — all 79 opening pairs included.”
+- **Stopped with missing results:** “SPRT incomplete — 42 of 79 opening pairs included.”
+- **Boundary reached:** “SPRT favours H1 (+5 Elo) — boundary reached after 57 opening pairs.” H0 shows its own Elo hypothesis.
+
+The line stays on one row; narrow views shorten its drawing with an ellipsis,
+without a status hover hint. For a finished tournament, the view
+replays saved pairs using the current settings: it asks whether and when that
+sequential test would have reached a boundary. An inconclusive result does not
+establish that the engines are equal. Complete pairs outside the evidence sample
+remain in the records. A missing or corrected result causes the view to
+reconstruct the current sample and crossing from the saved effective results.
+
+This display never stops a tournament. A fixed match can
 continue after crossing, and an external runner can query `sprt=true` and issue
 `stop_tournament` using the same calculation.
 
-Explicitly applying a complete design before any play marks it **Configured before
-play**. Defaults and designs chosen or changed after play are **Exploratory**.
-Referee result changes or replayed attempts mark the comparison **Amended results**.
-These labels describe the stored history, not independent proof of experimental
+**Example: stopping early versus finishing the tournament.** Before playing,
+choose H0 = 0 Elo, H1 = +5 Elo, alpha = 5% and beta = 5%. Under the test's
+assumptions, alpha is the approximate long-run chance of favouring H1 when the
+candidate is actually 0 Elo stronger; beta is the approximate long-run chance
+of favouring H0 when it is actually +5 Elo stronger. These are error rates over
+repeated tests, not a 95% probability that a particular conclusion is correct.
+
+| Tournament behaviour | Example | SPRT interpretation |
+| --- | --- | --- |
+| Stop early | First H1 crossing at opening pair 42; stop playing. | H1 favoured at pair 42. |
+| Finish all 79 pairs | First H1 crossing at pair 42; play the remaining pairs anyway. | The same SPRT decision at pair 42; all games remain in the full-match results. |
+| Finish without crossing | Neither boundary reached after all 79 pairs. | Inconclusive; this does not establish equal strength. |
+
+The error-rate interpretation is the same for the first two cases: continuing
+play does not change the recorded first-crossing decision. A finished tournament
+can replay the same specified test. Changing settings recalculates the analysis;
+trying settings after seeing results until one gives a favourable answer does
+not preserve the same 5% error claim. Running versus finished is not the relevant
+statistical distinction; keeping the test fixed is.
+
+The underlying saved/CLI provenance remains **configured_before_play** for a
+complete design explicitly applied before play, **exploratory** for defaults or
+settings chosen/changed afterward, and **amended** for referee changes or replayed
+attempts. This records history; it is not independent proof of experimental
 pre-registration. The alpha/beta rates are nominal, asymptotic GSPRT targets, not
 exact finite-sample guarantees. Choosing hypotheses after seeing results does not
 support the same error-rate claim as a preplanned test. A fixed, curated ballot

@@ -1717,7 +1717,7 @@ begin
    if Key<>FSprtKey then begin FSprtReport:=EvaluateSprt(C,Pairs);FSprtKey:=Key;end;
    FSprtError:='';
   except on E:Exception do begin FSprtError:=E.Message;FSprtReport:=Default(TSprtReport);FSprtKey:='';end;end;
-  FSprt.ShowReport(FSprtReport,FSprtAmended,FSprtError);
+  FSprt.ShowReport(FSprtReport,FSprtError,IsRunning);
  finally Keys.Free;Names.Free;end;
 end;
 function TTournamentDialog.SprtSnapshot:TJSONObject;

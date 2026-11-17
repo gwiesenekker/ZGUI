@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Describe SPRT progress and result in one line — 2026-11-17
+
+Commit: pending.
+
+- User approved the one-line status proposal with “Please proceed!”, within the
+  live-SPRT scope previously authorized with “Implement now; waive prior review”.
+  User subsequently requested “I would remove the hover text.” Remove the status
+  hint; retain graph point hints. Notes: chatgpt/SPRT_SINGLE_LINE_STATUS_NOTES.md.
+- Replace the heading/paragraph block with one descriptive line for running,
+  blocked, completed-inconclusive, stopped-incomplete and boundary-crossed
+  comparisons. Read the existing tournament running state and show the current
+  Elo hypothesis when H0/H1 is favoured. Apply to chess and draughts.
+- Keep provenance explanations in the manual; preserve existing saved/CLI
+  provenance and statistical calculations. Add the requested 0/+5 Elo, 5% error
+  example comparing an early stop at pair 42 with a full 79-pair tournament.
+- Use standard label drawing with end ellipsis at narrow widths, with status
+  hints disabled. Update the manual and both-game status checks.
+- Validation: GTK2 build, all 27 GUI suites (140 focused SPRT assertions), full
+  regression and both tournament checks passed. Reviewed normal/enlarged-font
+  captures. Native Windows execution remains outstanding.
+
 ### Arrange tournament settings in six aligned rows — 2026-11-17
 
 Commit: `7e080b8`.
