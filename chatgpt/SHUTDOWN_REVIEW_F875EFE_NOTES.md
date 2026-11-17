@@ -1,6 +1,6 @@
 # Shutdown review: C14, F6, F7; F8 deferred
 
-Date: 2026-11-17.
+Date: 2026-11-17. Implementation commit: `e4d55b0`.
 
 Authorization: the user requested “Could you review Claude's latest review of the
 opening-pair shuffling changes, update the comment column, and address the findings

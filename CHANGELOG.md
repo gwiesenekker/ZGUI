@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Release finished-game engine workers and stop CLI transport once — 2026-11-17
 
-Commit: pending.
+Commit: `e4d55b0`.
 
 - Authorization: “address the findings you agree with” and “Please update
   CHANGELOG.md, compile, test, and commit.”
