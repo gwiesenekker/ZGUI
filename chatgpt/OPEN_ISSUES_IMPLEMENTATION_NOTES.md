@@ -27,7 +27,7 @@ Do not touch user engine directories, Claude outputs, or /tmp2/gwies/GWDGUI.
 Implementation/validation/commit records will follow here.
 ## Implementation
 
-Implementation commit: pending.
+Implementation commit: `043134f`.
 
 ### D6: UCI options per registration
 

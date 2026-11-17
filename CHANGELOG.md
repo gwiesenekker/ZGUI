@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Address the remaining agreed open review findings — 2026-11-17
 
-Commit: pending.
+Commit: `043134f`.
 
 - Authorization: “Could you now review ISSUES.md and address all open issues you
   agree with. You do not need to ask for approval from Claude.” Scope: C14, C11,
