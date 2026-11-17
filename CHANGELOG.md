@@ -4,6 +4,36 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Address the remaining agreed open review findings — 2026-11-17
+
+Commit: pending.
+
+- Authorization: “Could you now review ISSUES.md and address all open issues you
+  agree with. You do not need to ask for approval from Claude.” Scope: C14, C11,
+  F6, F7, U26, D6, U21 and F8. Notes:
+  chatgpt/OPEN_ISSUES_IMPLEMENTATION_NOTES.md.
+- Save UCI options inside each engine registration, so registrations sharing an
+  executable can have independent settings. Existing registrations keep reading
+  the legacy executable-side file until saved in the editor; that file is left
+  unchanged. Retain the shared-file warning for legacy registrations (D6).
+- Add confirmed, inclusive “Delete from here...” to the existing Game Tree popup
+  for both chess and draughts. Reuse actor/tree removal and normal refresh paths;
+  retain sibling variations, earlier annotations and the result. Disable deletion
+  during play and PV preview; reject stale commands/search replies and prevent
+  finished-runner snapshots from restoring an edited history tree (U21).
+- Capture tournament history removal and persist it once, rather than saving for
+  both GameStopped and GameRemoved. Ordinary immediate saves are unchanged (F8).
+- Strengthen both-game Inter-font laptop sizing checks. The current layout passes
+  the reported cases; no speculative layout change is made (U26). C14/F6 and the
+  reported F7 close delay remain covered by e4d55b0 and its recorded measurements.
+- Validation: full regression, lifecycle, DXP and both tournament checks passed;
+  74 new tree-deletion checks, 102 UCI adapter checks, 54 deletion GUI checks and
+  314 end-reason/save checks. All 28 GUI suites and the GTK2 application build passed.
+  Wine build.bat checks pass; native Windows interactive CLI verification remains
+  outstanding (C11), and Win64 cross checks lack the required compiler units.
+- Manual updated for private UCI options and tree deletion. Older ZGUI builds do
+  not read private registration options: rebuild both platform versions together.
+
 ### Correct shared choice-dialog button labels — 2026-11-17
 
 Commit: `3875399`.

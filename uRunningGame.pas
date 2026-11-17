@@ -58,6 +58,7 @@ type
     FGameTree: TGameTree;
     FReservationKeys: TStringList;
     FReleasingRunner: Boolean;
+    FTreeEdited:Boolean;
     FRunner: TGameRunnerThread;
     FLifecycle: TRunningGameLifecycle;
     FShowStdout: Boolean;
@@ -112,6 +113,8 @@ type
     procedure AssignRunnerSnapshot(ASnapshot: TGameRunnerSnapshot);
     procedure AssignSetupTo(out ASetup: TGameSetup);
     procedure AddReservationKeysTo(AKeys: TStrings);
+    procedure MarkTreeEdited;
+    property TreeEdited:Boolean read FTreeEdited;
     procedure MarkFinished;
     procedure MarkRunningIfStarting;
     procedure MarkSnapshotStopped(const AReason: string);
@@ -492,6 +495,12 @@ end;
 procedure TRunningGame.RememberSnapshotSyncSignature(const ASignature: string);
 begin
   FLastSnapshotTreeSyncSignature := ASignature;
+end;
+
+procedure TRunningGame.MarkTreeEdited;
+begin
+  if FLifecycle<>rglFinished then raise EInvalidOperation.Create('Game is not finished');
+  FTreeEdited:=True;
 end;
 
 procedure TRunningGame.MarkFinished;

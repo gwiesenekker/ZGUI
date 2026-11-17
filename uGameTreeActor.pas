@@ -33,7 +33,8 @@ type
     gtcRebuildFromInputs,
     gtcSetHeader,
     gtcRestoreNodeData,
-    gtcImportPdnTree
+    gtcImportPdnTree,
+    gtcDeleteFromHere
   );
 
   TGameTreeSearchState = (
@@ -70,6 +71,7 @@ type
     GameTreeId: Int64;
     NodeId: Int64;
     SearchId: Int64;
+    ExpectedParentId,ExpectedRevision:Int64;
     MoveText: string;
     AnnotationText: string;
     ImportMoves: TGameTreeImportMoves;
@@ -183,6 +185,7 @@ type
     function CreateStoreMoveVariationCommand(ANodeId: Int64;
       const AMoveText: string; ASource: TGameTreeMoveSource): TGameTreeCommand;
     function CreateClearBranchesCommand: TGameTreeCommand;
+    function CreateDeleteFromHereCommand(NodeId:Int64):TGameTreeCommand;
     function CreateRebuildFromInputsCommand(
       const AHeader: TGameTreeHeaderInput;
       const AMainline: TGameTreeMainlineInput;
@@ -255,7 +258,8 @@ const
     'game-tree-rebuild-from-inputs',
     'game-tree-set-header',
     'game-tree-restore-node-data',
-    'game-tree-import-pdn-tree'
+    'game-tree-import-pdn-tree',
+    'game-tree-delete-from-here'
   );
 begin
   inherited Create(CommandNames[AKind]);
@@ -382,7 +386,7 @@ begin
     AInvalidateRebuildSignature := True;
   if ACommand.CommandKind in [gtcAddMainlineMove,gtcAppendMainlineMove,
     gtcAppendMainlineSnapshotMove,gtcImportBranch,gtcImportNode,gtcImportPdnTree,
-    gtcStoreMoveVariation,gtcClearBranches,gtcRebuildFromInputs,gtcSetHeader] then begin
+    gtcStoreMoveVariation,gtcClearBranches,gtcDeleteFromHere,gtcRebuildFromInputs,gtcSetHeader] then begin
     Inc(FTopologyVersion); FreeAndNil(FValidationCache); FCacheNodeId:=0;
     if (FValidatedPosition<>nil) and (ACommand.CreatedNodeId<>0) and
       (ACommand.CommandKind in [gtcAddMainlineMove,gtcAppendMainlineMove,
@@ -612,6 +616,14 @@ begin
   Result.NodeId := ANodeId;
   Result.MoveText := Trim(AMoveText);
   Result.MoveSource := ASource;
+end;
+
+function TGameTreeActor.CreateDeleteFromHereCommand(NodeId:Int64):TGameTreeCommand;
+var Node:TGameTreePlyNode;
+begin
+  Result:=CreateCommand(gtcDeleteFromHere);Result.NodeId:=NodeId;
+  Result.ExpectedRevision:=FRevision;Node:=FGameTree.FindNodeById(NodeId);
+  if (Node<>nil) and (Node.Parent<>nil) then Result.ExpectedParentId:=Node.Parent.NodeId;
 end;
 
 function TGameTreeActor.CreateClearBranchesCommand: TGameTreeCommand;
@@ -1365,6 +1377,18 @@ begin
         end;
         ExecuteStoreMoveVariationCommand(ACommand, Node, ACommand.MoveText,
           InvalidateRebuildSignature);
+      end;
+    gtcDeleteFromHere:
+      begin
+        Node:=FGameTree.FindNodeById(ACommand.NodeId);
+        if (Node=nil) or (Node.Parent=nil) or (ACommand.ExpectedRevision<>FRevision) then
+        begin Reject(ACommand,'Delete target is missing, root or stale');Exit;end;
+        if Node.Parent.NodeId<>ACommand.ExpectedParentId then
+        begin Reject(ACommand,'Delete parent changed');Exit;end;
+        ACommand.CreatedNodeId:=Node.Parent.NodeId;
+        if FGameTree.IsMainlineNode(Node) then FGameTree.TrimMainlineToCount(Node.PlyNumber-1)
+        else FGameTree.RemoveBranch(Node);
+        AcceptTreeMutation(ACommand,InvalidateRebuildSignature);
       end;
     gtcClearBranches:
       begin

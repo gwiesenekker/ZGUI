@@ -95,6 +95,40 @@ begin
     Check((EngineIdentityKey(B[0])=HubKey) and (EngineIdentityKey(B[1])=DxpKey),'Hub and DXP identity round trip unchanged');
   finally A.Free; B.Free; DeleteFile(Name); end;
 end;
+procedure RegistrationOptions;
+var A,B,Legacy:TExternalEngineDefinition;Params,Loaded:TEngineParamArray;
+    List,Restored:TExternalEngineList;E:TUciEngine;Text:TStringList;FileName,RegistryName,Before:string;
+    I:Integer;
+begin
+ A:=TExternalEngineDefinition.Create;B:=TExternalEngineDefinition.Create;Legacy:=TExternalEngineDefinition.Create;
+ List:=TExternalEngineList.Create;Restored:=TExternalEngineList.Create;Text:=TStringList.Create;
+ FileName:=EngineParamsFileName(ExpandFileName(ParamStr(0)));RegistryName:=FileName+'.registrations';
+ try
+  A.Kind:=eekUci;A.UciId:='A';A.ExePath:=ExpandFileName(ParamStr(0));A.Arguments:='--fake-uci normal';
+  B.Assign(A);B.UciId:='B';Legacy.Assign(A);
+  Params:=nil;AddOrUpdateParam(Params,'hash','spin','16',False);SaveEngineParamsToJson(FileName,'uci',Params);
+  Text.LoadFromFile(FileName);Before:=Text.Text;
+  AddOrUpdateParam(Params,'hash','spin','32',False);SaveEngineDefinitionParams(A,Params);
+  AddOrUpdateParam(Params,'hash','spin','64',False);SaveEngineDefinitionParams(B,Params);
+  Text.LoadFromFile(FileName);Check(Text.Text=Before,'Saving private registration does not modify legacy executable options');
+  LoadEngineDefinitionParams(A,'uci',Loaded);Check(EngineParamValue(Loaded,'hash','')='32','Registration A keeps private options');
+  LoadEngineDefinitionParams(B,'uci',Loaded);Check(EngineParamValue(Loaded,'hash','')='64','Registration B keeps independent options');
+  LoadEngineDefinitionParams(Legacy,'uci',Loaded);Check(EngineParamValue(Loaded,'hash','')='16','Legacy registrations keep file fallback');
+  List.Add(A);A:=nil;List.Add(B);B:=nil;SaveExternalEngines(RegistryName,List);LoadExternalEngines(RegistryName,Restored);
+  for I:=0 to 1 do begin
+   E:=TUciEngine.Create(Restored[I]);
+   try
+    Check(E.LaunchAndInit,'Private registration handshake');
+    Check(Pos('setoption name hAsH value '+IntToStr(32*(I+1)),E.StateLog.Text)>0,'Engine receives its own registration option on the wire');
+   finally E.Free;end;
+  end;
+  AddOrUpdateParam(Params,'hash','spin','128',False);SaveEngineDefinitionParams(Restored[0],Params);
+  LoadEngineDefinitionParams(Restored[1],'uci',Loaded);Check(EngineParamValue(Loaded,'hash','')='64','Editing one registration leaves its peer unchanged');
+  Legacy.Assign(Restored[0]);Check(Legacy.UciOptionsJson=Restored[0].UciOptionsJson,'Runtime definition cloning retains private options');
+  Legacy.UciOptionsJson:='[]';LoadEngineDefinitionParams(Legacy,'uci',Loaded);Check(EngineParamValue(Loaded,'hash','absent')='absent','Explicit empty private options do not inherit a legacy file');
+ finally Text.Free;Restored.Free;List.Free;Legacy.Free;B.Free;A.Free;DeleteFile(RegistryName);DeleteFile(FileName);end;
+end;
+
 procedure Tests;
 var E,E2: TUciEngine; Options,Params: TEngineParamArray; P: TEngineParam; C: TProcessEngineCommand;
   PV,Score,Depth,TimeText,FileName: string; Info: TUciInfo; Moves: TStringList; I: Integer; Raised: Boolean; Tick: QWord;
@@ -276,7 +310,7 @@ end;
 var E: TUciEngine; D: TExternalEngineDefinition; PV,Score,Depth,T: string; I: Integer;
 begin
   if ParamStr(1)='--fake-uci' then begin Fake; Halt; end;
-  RegistryTests; Tests;BookPolicyTests;TimedAnalysisTests;AnalysisBudgetTests;
+  RegistryTests; RegistrationOptions; Tests;BookPolicyTests;TimedAnalysisTests;AnalysisBudgetTests;
   if ParamStr(1)<>'' then begin
     D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=ExpandFileName(ParamStr(1));
     E:=TUciEngine.Create(D);

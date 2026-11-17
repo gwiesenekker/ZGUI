@@ -40,7 +40,9 @@ begin
  RegisterGame(TChessVariant.Create,ChessGuiProfile);RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
  RegisterDefaultGameVariant(RegisteredGame(0));Main:=nil;
  try
-  Main:=TMainForm.Create(nil);Main.Show;Pump;CheckMctsRows(Main);
+  Main:=TMainForm.Create(nil);
+  if GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT')<>'' then Main.Font.Name:=GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT');
+  Main.Show;Pump;CheckMctsRows(Main);
   Fen:=TEdit(Main.FindComponent('MainFenEdit'));Moves:=TGameNotationView(Main.FindComponent('GameMoveMemo'));
   Check((Fen<>nil) and (Moves<>nil),'Existing FEN and notation controls present');
   for J:=0 to 1 do begin
@@ -57,6 +59,7 @@ begin
      Check(Fen.Width>=Required,'Full FEN fits with a margin');
      if Mode=1 then Check(Moves.LinesInWindow>=10,'Notation shows ten lines when space permits')
      else Check(Moves.LinesInWindow>=3,'Notation retains a usable three-line minimum');
+     if (Mode=0) and (Size=0) then WriteLn('U26 ',RegisteredGame(J).Name,': height=',Main.Height,' minimum=',Main.Constraints.MinHeight);
      if (Mode=0) and (Size=0) then Check(Main.Height<=700,'U26 normal-font main window can shrink below laptop height');
      Check((Moves.Top>=0) and (Moves.Top+Moves.Height<=Moves.Parent.ClientHeight),'Notation fits its parent');
      Check((Pos('*',Moves.Lines.Text)>0) and (Moves.TopLine=1),'Standalone game result remains in notation');

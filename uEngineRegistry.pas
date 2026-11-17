@@ -23,6 +23,7 @@ type
     FExePath: string;
     FHubId: string;
     FUciId: string;
+    FUciOptionsJson:string;
     FIniContent: string;
     FIniFileName: string;
     FInitText: string;
@@ -44,6 +45,7 @@ type
     property ExecutableName: string read FExecutableName write FExecutableName;
     property ExePath: string read FExePath write SetExePath;
     property UciId: string read FUciId write FUciId;
+    property UciOptionsJson:string read FUciOptionsJson write FUciOptionsJson;
     property HubId: string read FHubId write FHubId;
     property IniContent: string read FIniContent write FIniContent;
     property IniFileName: string read FIniFileName write FIniFileName;
@@ -114,6 +116,7 @@ begin
   FExePath := Source.ExePath;
   FHubId := Source.HubId;
   FUciId := Source.UciId;
+  FUciOptionsJson:=Source.UciOptionsJson;
   FIniContent := Source.IniContent;
   FIniFileName := Source.IniFileName;
   FInitText := Source.InitText;
@@ -423,6 +426,12 @@ begin
   if Result.ExecutableName = '' then
     Result.ExecutableName := ExtractFileName(Result.ExePath);
 
+  if AObject.Find('uci_options')<>nil then begin
+    if AObject.Find('uci_options').JSONType<>jtArray then begin
+      Result.Free;raise EConvertError.Create('Invalid registration UCI options');
+    end;
+    Result.UciOptionsJson:=AObject.Find('uci_options').AsJSON;
+  end;
   Result.HubId := AObject.Get('hub_id', '');
   Result.DxpId := AObject.Get('dxp_id', '');
   Result.Arguments := AObject.Get('arguments', '');
@@ -457,7 +466,10 @@ begin
   Result.Add('path', ExtractFilePath(AEngine.ExePath));
   Result.Add('hub_id', AEngine.HubId);
   Result.Add('dxp_id', AEngine.DxpId);
-  if AEngine.Kind=eekUci then Result.Add('uci_id',AEngine.UciId);
+  if AEngine.Kind=eekUci then begin
+    Result.Add('uci_id',AEngine.UciId);
+    if AEngine.UciOptionsJson<>'' then Result.Add('uci_options',GetJSON(AEngine.UciOptionsJson));
+  end;
   Result.Add('kind', LowerCase(AEngine.KindText));
   Result.Add('arguments', AEngine.Arguments);
   if AEngine.IniFileName <> '' then Result.Add('ini_file_name', AEngine.IniFileName);

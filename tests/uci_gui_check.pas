@@ -16,6 +16,12 @@ type TGameAccept=class
 end;
 procedure TGameAccept.Accept(Sender: TObject; const Setup: TGameSetup);
 begin Game:=Main.StartGameFromSetup(Setup); end;
+type TEditorAccept=class
+  Definition:TExternalEngineDefinition;
+  procedure Accept(Sender:TObject;Engine:TExternalEngineDefinition;var Accepted:Boolean);
+end;
+procedure TEditorAccept.Accept(Sender:TObject;Engine:TExternalEngineDefinition;var Accepted:Boolean);
+begin Definition.Assign(Engine);Accepted:=True;end;
 var Checks: Integer=0;
 procedure TErrors.Report(Sender: TObject; E: Exception);
 begin WriteLn('FAIL: ',E.Message); DumpExceptionBackTrace(Output); Flush(Output); Halt(1); end;
@@ -127,7 +133,7 @@ begin
 end;
 procedure Editor(const Exe: string);
 var F: TEngineEditForm; D: TExternalEngineDefinition; P,Q: TEngineParamArray;
-  G: TStringGrid; Tick: QWord; Name,IniName: string; Lines: TStringList;Index:Integer;Failed:Boolean;
+  Capture:TEditorAccept;BeforeLegacy:string;G: TStringGrid; Tick: QWord; Name,IniName: string; Lines: TStringList;Index:Integer;Failed:Boolean;
 begin
   Name:=EngineParamsFileName(Exe); IniName:=ChangeFileExt(Exe,'.uci-test.ini');
   P:=nil; AddOrUpdateParam(P,'hash','spin','64',False);
@@ -138,6 +144,8 @@ begin
   D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=Exe; D.Arguments:='--fake-uci';
   D.UciId:='Saved GUI UCI'; D.IniFileName:=IniName; D.IniContent:='retained=ini';
   F:=TEngineEditForm.Create(nil,DefaultGameVariant); Lines:=TStringList.Create;
+  Capture:=TEditorAccept.Create;Capture.Definition:=D;F.OnAccepted:=@Capture.Accept;
+  Lines.LoadFromFile(Name);BeforeLegacy:=Lines.Text;
   try
     F.LoadEngine(D); G:=GridOf(F); Tick:=GetTickCount64; Button(F,'Launch engine').Click;
     Check(GetTickCount64-Tick<200,'Discovery returns immediately');
@@ -149,7 +157,8 @@ begin
     Check(FileExists(IniName),'Existing INI preparation reused');
     G.Col:=2; G.Row:=Row(G,'Clear Hash'); G.OnDblClick(G); for Tick:=1 to 10 do Pump;
     Button(F,'Launched correctly').Click;
-    LoadEngineParamsFromJson(Name,'uci',Q);
+    LoadEngineDefinitionParams(D,'uci',Q);
+    Lines.LoadFromFile(Name);Check(Lines.Text=BeforeLegacy,'Editor saves private options without rewriting the legacy file');
     Check(EngineParamValue(Q,'hash','')='64','UCI values saved');
     Check(EngineParamValue(Q,'Ponder','false')='true','Editor saves the user ponder choice, not managed runtime false');
     Check(EngineParamValue(Q,'gui-uci-id','')='Saved GUI UCI','Discovery preserves custom identity');
@@ -165,7 +174,7 @@ begin
     GuiTestConfirmationResult:=mrOk;
     try Button(F,'Launched correctly').Click; finally GuiTestConfirmationResult:=0; end;
     Check(Pos('hAsH',GuiTestLastConfirmationText)>0,'Invalid spin is reported');
-    LoadEngineParamsFromJson(Name,'uci',P); Check(EngineParamValue(P,'hash','')='64','Invalid spin cannot overwrite saved configuration');
+    LoadEngineDefinitionParams(D,'uci',P); Check(EngineParamValue(P,'hash','')='64','Invalid spin cannot overwrite saved configuration');
     DeleteFile(Name);D.Arguments:='--fake-uci exit-init';F.LoadEngine(D);Button(F,'Launch engine').Click;
     Tick:=GetTickCount64;Failed:=False;
     repeat
@@ -182,7 +191,7 @@ begin
     D.Arguments:='--fake-uci hang'; DeleteFile(Name); F.LoadEngine(D); Button(F,'Launch engine').Click;
     Pump; Tick:=GetTickCount64; Button(F,'Cancel').Click;
     Check(GetTickCount64-Tick<2500,'Cancel interrupts pending discovery promptly');
-  finally F.Free; D.Free; Lines.Free; DeleteFile(Name); DeleteFile(IniName); end;
+  finally Capture.Free;F.Free; D.Free; Lines.Free; DeleteFile(Name); DeleteFile(IniName); end;
 end;
 procedure Analysis(const Exe: string);
 var F: TMainForm; Engines: TExternalEngineList; D: TExternalEngineDefinition;

@@ -154,7 +154,7 @@ begin
  Check(Host.CloseTournament(D),'The completed test tab closes normally');
 end;
 procedure CheckHiddenHost;
-var H:TTournamentHostForm;D:TTournamentDialog;W,Ht:Integer;
+var H:TTournamentHostForm;D:TTournamentDialog;W,Ht,I:Integer;
 begin
  H:=TTournamentHostForm.Create(Main);
  W:=H.Width;Ht:=H.Height;
@@ -172,6 +172,15 @@ begin
    Format('Opening the host keeps normal size: %dx%d became %dx%d',[W,Ht,H.Width,H.Height]));
   H.NewTournament(Chess);Pump;
   Check((H.Width=W) and (H.Height=Ht),'Adding a tab preserves the current window size');
+  H.Font.Name:='Inter';H.Font.Size:=10;
+  for I:=0 to H.Count-1 do begin
+   H.Pages.ActivePageIndex:=I;D:=H.Dialogs[I];D.Font.Name:='Inter';D.Font.Size:=10;
+   D.RefreshLayout;Pump;H.Height:=720;Pump;
+   WriteLn('U26 Inter tournament tab ',I,': height=',H.Height,' minimum=',H.Constraints.MinHeight);
+   Check(H.Height<=720,Format('U26 Inter-font tournament host fits laptop work area: height=%d minimum=%d',[H.Height,H.Constraints.MinHeight]));
+   CheckTabReady(H,D);
+  end;
+
  finally H.Free;end;
 end;
 procedure ChangeGame(D:TTournamentDialog;Variant:TGameVariant);

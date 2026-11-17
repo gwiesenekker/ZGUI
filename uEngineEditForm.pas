@@ -25,6 +25,7 @@ type
     FAllowHubIdAutoUpdate: Boolean;
     FBrowseDialog: TOpenDialog;
     FAcceptingClose: Boolean;
+    FRegistrationUciOptions:string;
     FCapturedParams: TEngineParamArray;
     FDirectoryDialog: TSelectDirectoryDialog;
     FDxpArgsEdit: TEdit;
@@ -478,6 +479,8 @@ begin
   CloseRunningEngine;
   FStdoutMemo.Clear;
   FTextBuffer := '';
+  FRegistrationUciOptions:='';
+  if AEngine<>nil then FRegistrationUciOptions:=AEngine.UciOptionsJson;
   SetLength(FCapturedParams, 0);
 
   if AEngine = nil then
@@ -564,6 +567,8 @@ begin
         Exit;
       end;
     end;
+  // UCI options are part of the registration saved by the acceptance callback.
+  if FAcceptedEngine.Kind=eekUci then SaveEngineDefinitionParams(FAcceptedEngine,FCapturedParams);
   Accepted := True;
   if Assigned(FOnAccepted) then
     FOnAccepted(Self, FAcceptedEngine, Accepted);
@@ -571,7 +576,8 @@ begin
     Exit;
 
   SaveEngineDefinitionParams(FAcceptedEngine, FCapturedParams);
-  Log('[saved parameters to ' + EngineParamsFileName(FAcceptedEngine.ExePath) + ']');
+  if FAcceptedEngine.Kind=eekUci then Log('[saved UCI parameters in engine registration]')
+  else Log('[saved parameters to ' + EngineParamsFileName(FAcceptedEngine.ExePath) + ']');
   FAcceptingClose := True;
   CloseRunningEngine;
   Close;
@@ -681,6 +687,7 @@ end;
 function TEngineEditForm.CurrentEngineDefinition: TExternalEngineDefinition;
 begin
   Result := TExternalEngineDefinition.Create;
+  Result.UciOptionsJson:=FRegistrationUciOptions;
   Result.ExePath := Trim(FExeEdit.Text);
   Result.ExecutableName := ExtractFileName(Result.ExePath);
   if FKindCombo.ItemIndex=2 then Result.Kind:=eekUci
@@ -962,9 +969,11 @@ begin
     Exit;
 
   if FKindCombo.ItemIndex=2 then begin
-    FCapturedParams:=nil; LoadEngineParamsFromJson(ParamsFileName,'uci',FCapturedParams);
+    Engine:=CurrentEngineDefinition;
+    try LoadEngineDefinitionParams(Engine,'uci',FCapturedParams);finally Engine.Free;end;
     UpdateFieldsFromParams;
-    Engine:=CurrentEngineDefinition; try SeedDefaultGuiParams(FCapturedParams,Engine); finally Engine.Free; end;
+    Engine:=CurrentEngineDefinition;
+    try SeedDefaultGuiParams(FCapturedParams,Engine);finally Engine.Free;end;
     Exit;
   end;
   if FKindCombo.ItemIndex = 1 then

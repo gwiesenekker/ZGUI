@@ -299,7 +299,7 @@ spaces. Supply exactly one selector for each engine:
 | `moves=75` | Nonnegative integer moves per period; 0 means sudden death. Omitted: selected game's GUI default. |
 | `increment=3` | Nonnegative finite increment in seconds; decimal values such as 0.5 are accepted. Omitted: selected game's GUI default. |
 | `concurrent=1` | Positive integer maximum simultaneous games. Default: 1. Engine reservations can limit actual concurrency. |
-| `allow_shared_executable=true` | Explicitly accept two UCI registrations sharing an executable and its saved options. Accepts true or false; default: false. |
+| `allow_shared_executable=true` | Accept legacy UCI registrations that still inherit one executable-side options file. Accepts true or false; default: false. Registrations saved with private options do not need this confirmation. |
 
 Both registrations must be distinct and belong to the same game: UCI means chess;
 Hub and DXP mean draughts. A ballot creates two colour-reversed games per position.
@@ -923,6 +923,23 @@ the chosen branch. Press `Escape` to resume following the current game. If a
 selected branch is removed, selection returns to its nearest surviving ancestor.
 The tree window's context menu can copy the tree in its PGN or PDN format.
 
+### 4.3 Delete from here
+
+Open **Show game tree**, select a real move and use **Delete from here...** in
+its popup menu. Confirm to delete that move and every continuation beneath it,
+including nested variations. The parent becomes selected. Other siblings and
+all earlier moves, comments, clocks, evaluations and the header result remain.
+The result is not automatically changed after this edit. Save the edited game
+through the existing PGN/PDN save action when wanted.
+
+The root cannot be deleted. The action is available for standalone games and
+fully finished game runners, never while playing or stopping or viewing a
+virtual PV. Auto Play and active analysis are stopped before confirmation;
+annotation resumes for the retained position. Cancel leaves the moves intact.
+There is no undo for a confirmed deletion. Old runner snapshots cannot restore
+removed moves when switching away and back in Game History. Editing the history
+tree does not rewrite an already archived tournament game automatically.
+
 ## 5. Analysis
 
 ### 5.1 Loading an annotator
@@ -1426,11 +1443,14 @@ which are not a claim of compliance with FIDE Swiss regulations. Finish or
 resolve the current Swiss round before creating the next one.
 
 Tournament games force Ponder off at runtime, even when an engine has it saved
-as true. Saved options and ordinary games keep their own choice. UCI options
-are currently shared by all registrations using the same executable; different
-IDs do not give them different Threads, Hash or strength settings. Start warns
-about shared executable paths. Use separate executable paths when comparing
-different configurations; per-registration options are a separate future change.
+as true. Saved options and ordinary games keep their own choice. Saving a UCI
+registration stores its options with that registration in `engines.json`; two
+named registrations can use the same executable with different Threads, Hash or
+strength settings. Existing registrations without private options still read
+the old executable-side `.params.json` file until saved in the engine editor.
+Older ZGUI versions ignore the new registration options; rebuild both platform
+versions before using them. The legacy file is left unchanged. Start warns only when participants still
+share those legacy settings. Hub/DXP parameter files are unchanged.
 
 Concurrency respects existing engine reservations: five participants permit at
 most two games at once. Rows waiting for a busy engine say so. Concurrent active

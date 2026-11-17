@@ -44,6 +44,7 @@ CHECKS=(
   pdn_batch_import_check.pas
   pdn_tree_check.pas
   game_tree_pdn_filter_check.pas
+  game_tree_delete_check.pas
   game_tree_actor_check.pas
   game_tree_validation_check.pas
   game_runner_history_check.pas

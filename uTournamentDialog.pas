@@ -111,6 +111,7 @@ type
     FOnStartGame: TTournamentStartGameEvent;
     FPdnWriteLock: TCriticalSection;
     FRoundRobinGroup: TRadioGroup;
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}FTestSnapshotWrites:Integer;{$ENDIF}
     FRunning: Boolean;
     FRunningGames: TList;
     FGameRecords: TObjectList;
@@ -216,7 +217,8 @@ type
     constructor Create(AOwner:TComponent;AVariant:TGameVariant); reintroduce;
     property Variant:TGameVariant read FVariant;
     destructor Destroy; override;
-    procedure GameStopped(AGame: TObject);
+    {$IFDEF GWDGUI_NONINTERACTIVE_TEST}property TestSnapshotWrites:Integer read FTestSnapshotWrites;{$ENDIF}
+    procedure GameStopped(AGame: TObject;SaveNow:Boolean=True);
     procedure GameRemoved(AGame: TObject);
     procedure RegisterRunningGame(ARow: Integer; AGame: TObject);
     procedure AcceptInitialSettings;
@@ -1131,6 +1133,7 @@ var Seen,Keys:TStringList;Row:Integer;HasPairing,Conflict:Boolean;
  var Path,Key:string;
  begin
   Result:=True;if D=nil then Exit;
+  if D.UciOptionsJson<>'' then Exit; // Private registration settings do not share a file.
   Key:=EngineIdentityKey(D);if Keys.IndexOf(Key)>=0 then Exit;
   Keys.Add(Key);Path:=ExpandFileName(D.ExePath);
   if Seen.IndexOf(Path)>=0 then Exit(False);
@@ -2267,6 +2270,7 @@ var
   NextPdnFileName: string;
   Clock:TTimeControl;
 begin
+  {$IFDEF GWDGUI_NONINTERACTIVE_TEST}Inc(FTestSnapshotWrites);{$ENDIF}
   Clock:=ReadSettings;
   NextPdnFileName := FPdnFileName;
   if NextPdnFileName = '' then
@@ -2806,6 +2810,8 @@ procedure TTournamentDialog.GameRemoved(AGame: TObject);
 var I: Integer; Running: TTournamentRunningGame;
 begin
   if not (AGame is TRunningGame) then Exit;
+  // Capture/update first; this removal persists both notifications once.
+  GameStopped(AGame,False);
   for I := FRunningGames.Count - 1 downto 0 do
   begin
     Running := TTournamentRunningGame(FRunningGames[I]);
@@ -2817,7 +2823,7 @@ begin
   AutoSaveTournament;
 end;
 
-procedure TTournamentDialog.GameStopped(AGame: TObject);
+procedure TTournamentDialog.GameStopped(AGame: TObject;SaveNow:Boolean);
 var
   I: Integer;
   RunningGame: TTournamentRunningGame;
@@ -2883,7 +2889,7 @@ begin
     UpdateCrossTable;
     UpdateButtons;
   end;
-  AutoSaveTournament;
+  if SaveNow then AutoSaveTournament;
 end;
 
 procedure TTournamentDialog.RegisterRunningGame(ARow: Integer; AGame: TObject);

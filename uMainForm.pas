@@ -140,6 +140,7 @@ type
     FGameTreeView: TTreeView;
     FGameTreeViewLayout: TGameTreeViewLayout;
     FGameTreeNestedMenuItem: TMenuItem;
+    FDeleteFromHereMenuItem:TMenuItem;
     FGameTreeViewTreeId: Int64;
     FDisplayedAnnotationsSignature: string;
     FDisplayedMovesSignature: string;
@@ -417,6 +418,9 @@ type
     procedure GameMovePopupPopup(Sender: TObject);
     procedure GameTreeFormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure GameTreeViewClick(Sender: TObject);
+    procedure GameTreePopupPopup(Sender:TObject);
+    procedure DeleteFromHereClick(Sender:TObject);
+    function DeleteFromHereAllowed:Boolean;
     procedure GameTreeViewKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
     procedure HideMoveAnnotationsClick(Sender: TObject);
@@ -4503,7 +4507,7 @@ var
       AGame.RememberSnapshotPvSignature(LPvSignature);
   end;
 begin
-  if AGame = nil then
+  if (AGame = nil) or AGame.TreeEdited then
     Exit;
   LInput := RunningSnapshotTreeInput(AGame, ASnapshot, AEventName);
 
@@ -5230,6 +5234,54 @@ begin
   SyncGameTreeViewSelection;
 end;
 
+function TMainForm.DeleteFromHereAllowed:Boolean;
+var Tree:TGameTree;Node:TGameTreePlyNode;Game:TRunningGame;
+begin
+  Result:=False;Tree:=ActiveGameTree;
+  if (Tree=nil) or (Tree.GameTreeId<>FGameTreeViewTreeId) or not CanExploreVariation then Exit;
+  Node:=Tree.FindNodeById(SelectedGameTreeNodeId(FGameTreeView));
+  if (Node=nil) or (Node.Parent=nil) then Exit;
+  Game:=SelectedDisplayedGame;
+  if (Game<>nil) and (Game.Runner<>nil) and not Game.Runner.Finished then Exit;
+  Result:=True;
+end;
+
+procedure TMainForm.GameTreePopupPopup(Sender:TObject);
+begin FDeleteFromHereMenuItem.Enabled:=DeleteFromHereAllowed;end;
+
+procedure TMainForm.DeleteFromHereClick(Sender:TObject);
+var Tree:TGameTree;Node:TGameTreePlyNode;Actor:TGameTreeActor;Command:TGameTreeCommand;
+    Game:TRunningGame;ErrorText:string;Id,ParentId:Int64;
+  function Count(N:TGameTreePlyNode):Integer;
+  var I:Integer;
+  begin Result:=1;for I:=0 to N.ChildCount-1 do Inc(Result,Count(N.Children[I]));end;
+begin
+  if not DeleteFromHereAllowed then Exit;
+  StopAutoPlay;CancelAnalyzerSearch;
+  if FAnalyzerRunner<>nil then FAnalyzerRunner.PostStopSearch;
+  if FMctsRunner<>nil then FMctsRunner.PostStopSearch;
+  InvalidateAnalyzerPositionSignature;InvalidateMctsPositionSignature;
+  Tree:=ActiveGameTree;Id:=Tree.GameTreeId;Actor:=ActorForGameTree(Tree);
+  Node:=Tree.FindNodeById(SelectedGameTreeNodeId(FGameTreeView));ParentId:=Node.Parent.NodeId;
+  Command:=Actor.CreateDeleteFromHereCommand(Node.NodeId);
+  try
+    if ShowGuiConfirmationDialog(Self,'Delete from here',
+      Format('Delete %s and its continuation (%d moves, including variations)? This cannot be undone.',[Node.MoveText,Count(Node)]),
+      'Delete','',mrCancel)<>mrYes then Exit;
+    if (ActiveGameTree=nil) or (ActiveGameTree.GameTreeId<>Id) or not DeleteFromHereAllowed then Exit;
+    Game:=SelectedDisplayedGame;
+    if ExecuteAndApplyGameTreeCommand(Actor,Tree,Command,False,ErrorText) then begin
+      if Game<>nil then Game.MarkTreeEdited;
+      ClearVariationExploration;ClearHumanMoveSelection;
+      FGameTreeBrowseMode:=True;FDisplayedPosition.Cursor.Select(Tree,Tree.FindNodeById(ParentId));
+      FNotation.InvalidateSignature;
+      RefreshDisplayFromGameTree(Tree,False);UpdateGameTreeView(Tree);SyncGameTreeViewSelection;
+    end else ShowGuiOkDialog(Self,'Delete from here',ErrorText);
+  finally
+    Command.Free;RestartAnalyzer(ActiveGameTree);RestartMctsAnnotator(ActiveGameTree);
+  end;
+end;
+
 procedure TMainForm.CopyGameTreePdnClick(Sender: TObject);
 var
   LGameTree: TGameTree;
@@ -5286,6 +5338,11 @@ begin
     FGameTreeNestedMenuItem.Checked := FGameTreeViewLayout = gtvNested;
     FGameTreeNestedMenuItem.OnClick := @GameTreeLayoutClick;
     LPopup.Items.Add(FGameTreeNestedMenuItem);
+    FDeleteFromHereMenuItem:=TMenuItem.Create(FGameTreeForm);
+    FDeleteFromHereMenuItem.Name:='DeleteFromHere';
+    FDeleteFromHereMenuItem.Caption:='Delete from here...';
+    FDeleteFromHereMenuItem.OnClick:=@DeleteFromHereClick;LPopup.Items.Add(FDeleteFromHereMenuItem);
+    LPopup.OnPopup:=@GameTreePopupPopup;
     FGameTreeView.PopupMenu := LPopup;
   end;
 
@@ -6462,7 +6519,7 @@ begin
 
   LIndex := FGamesListBox.Items.IndexOfObject(AGame);
   if TournamentOwnerFor(AGame)<>nil then begin
-    TournamentOwnerFor(AGame).GameStopped(AGame);TournamentOwnerFor(AGame).GameRemoved(AGame);
+    TournamentOwnerFor(AGame).GameRemoved(AGame);
   end;
   FGames.Remove(AGame);
   if LIndex >= 0 then

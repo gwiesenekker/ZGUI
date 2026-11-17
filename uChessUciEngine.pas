@@ -93,7 +93,7 @@ begin
   inherited Create(EnginePickerDisplayName(Definition,0));
   FDefinition:=TExternalEngineDefinition.Create; FDefinition.Assign(Definition);
   FPendingMoves:=TStringList.Create; FPosition:=TChessPosition.Create; FDurationMs:=1000; FStopMs:=1500;
-  LoadEngineParamsFromJson(EngineParamsFileName(Definition.ExePath),'uci',FParams);
+  LoadEngineDefinitionParams(Definition,'uci',FParams);
   FStopMs:=StrToIntDef(EngineParamValue(FParams,'gui-stop-timeout-ms','1500'),1500);
   FStopMs:=Max(100,Min(10000,FStopMs));
   FWorker:=TProcessEngineWorker.Create(@ExecuteWorkerCommand,@Log,@WorkerStopping,'UCI',@Idle);

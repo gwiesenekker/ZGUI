@@ -31,6 +31,7 @@ function HubParamQuote(const AValue: string): string;
 procedure ValidateHubParams(const AParams: TEngineParamArray);
 procedure LoadEngineParamsFromJson(const AFileName, ASection: string;
   var AParams: TEngineParamArray);
+procedure LoadEngineDefinitionParams(AEngine:TExternalEngineDefinition;const Section:string;var AParams:TEngineParamArray);
 procedure SeedDefaultGuiParams(var AParams: TEngineParamArray;
   AEngine: TExternalEngineDefinition);
 procedure SortEngineParams(var AParams: TEngineParamArray);
@@ -297,6 +298,35 @@ begin
   end;
 end;
 
+procedure RemoveUciRegistrationFields(var Params:TEngineParamArray);
+var I,N:Integer;
+begin
+  N:=0;
+  for I:=0 to High(Params) do
+    if not (SameText(Params[I].Name,'gui-engine-type') or SameText(Params[I].Name,'gui-uci-id') or
+      SameText(Params[I].Name,'gui-uci-init') or SameText(Params[I].Name,'gui-uci-launch-arguments') or
+      SameText(Params[I].Name,'gui-ini-file') or SameText(Params[I].Name,'gui-ini-content')) then begin
+      Params[N]:=Params[I];Inc(N);
+    end;
+  SetLength(Params,N);
+end;
+
+procedure LoadEngineDefinitionParams(AEngine:TExternalEngineDefinition;const Section:string;var AParams:TEngineParamArray);
+var Data:TJSONData;
+begin
+  AParams:=nil;if AEngine=nil then Exit;
+  if (AEngine.Kind=eekUci) and (AEngine.UciOptionsJson<>'') then begin
+    Data:=GetJSON(AEngine.UciOptionsJson);
+    try
+      if Data.JSONType<>jtArray then raise EConvertError.Create('Invalid registration UCI options');
+      JsonToParamsArray(TJSONArray(Data),AParams);
+      // Registration metadata is authoritative, not a stale copy in options.
+      RemoveUciRegistrationFields(AParams);
+      SeedDefaultGuiParams(AParams,AEngine);
+    finally Data.Free;end;
+  end else LoadEngineParamsFromJson(EngineParamsFileName(AEngine.ExePath),Section,AParams);
+end;
+
 procedure SeedDefaultGuiParams(var AParams: TEngineParamArray;
   AEngine: TExternalEngineDefinition);
 var
@@ -479,6 +509,7 @@ var
   Params: TEngineParamArray;
   Section: string;
   I,N:Integer;
+  Json:TJSONArray;
 begin
   if AEngine = nil then
     Exit;
@@ -492,7 +523,10 @@ begin
   SeedDefaultGuiParams(Params, AEngine);
   SortEngineParams(Params);
   if AEngine.Kind=eekUci then begin
-    Section:='uci';
+    // Keep identity, arguments and INI fields in the registry's existing fields.
+    RemoveUciRegistrationFields(Params);Json:=ParamsArrayToJson(Params);
+    try AEngine.UciOptionsJson:=Json.AsJSON;finally Json.Free;end;
+    Exit;
   end
   else if AEngine.Kind = eekDxp then
   begin

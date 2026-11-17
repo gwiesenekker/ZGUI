@@ -55,7 +55,7 @@ procedure RunCase(V:TGameVariant;Kind:TExternalEngineKind;
  const Reason,ResultText,ExpectedRowReason,FileName:string;ErrorOverride:Boolean=False;Side:TGameSide=gsWhite;const Code:string='';const RegisteredName:string='Claim fixture');
 var D:TExternalEngineDefinition;Setup:TGameSetup;O:TObserver;R:TGameRunnerThread;
  S:TGameRunnerSnapshot;G:TRunningGame;T,Reloaded:TTournamentDialog;Grid:TStringGrid;
- C:TGameTreeCommand;State:TGameOrchestratorState;Status,ManualReason:string;
+ WritesBefore:Integer;C:TGameTreeCommand;State:TGameOrchestratorState;Status,ManualReason:string;
 begin
  D:=TExternalEngineDefinition.Create;O:=TObserver.Create;R:=nil;G:=nil;T:=nil;Reloaded:=nil;
  S:=TGameRunnerSnapshot.Create;
@@ -126,6 +126,9 @@ begin
    'legacy operator suffix loads as a referee declaration without losing the cause');
   T.SetSelectedResult('*');
   Check(Grid.Cells[TournamentColReason,1]=ExpectedRowReason,'clearing override restores original cause');
+  WritesBefore:=T.TestSnapshotWrites;T.GameRemoved(G);
+  Check(T.TestSnapshotWrites=WritesBefore+1,'History removal captures and saves once');
+  Check(Grid.Cells[TournamentColReason,1]=ExpectedRowReason,'Coalesced history removal preserves final reason');
  finally Reloaded.Free;T.Free;G.Free;if R<>nil then begin R.PostStop;R.WaitFor;R.Free;end;
   S.Free;O.Free;D.Free;end;
 end;
