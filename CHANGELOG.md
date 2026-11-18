@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+## 1.1 — 2026-11-18
+
+### Refresh the manual and prepare release 1.1 — 2026-11-18
+
+Commit: pending.
+
+- Reviewed the manual against current GUI/CLI, engine storage, database context
+  selection and recent changes. Correct stale shared-UCI-settings descriptions,
+  Auto Play deletion instructions, chess opening-ballot support, engine identity
+  guidance, selector placement, and the three/ten-line notation sizing policy.
+- Complete the CLI table with all 19 run_tournament parameters. Document private
+  UCI option migration and the fact that tournament identities do not freeze
+  option values; clarify optional DXP stdout scores.
+- Document SQLite runtime loading: 64-bit sqlite3.dll for Windows databases and
+  the libsqlite3.so loader name on Linux, including Windows troubleshooting.
+- Update README and release notes for 1.1. Per request, remove chatgpt/ work notes
+  from Git tracking while retaining local copies; earlier commits are preserved.
+- Validation: manual rendering at 40/80/140 columns, all CLI parameters present,
+  and built-in Help/menu/search checks passed. The application source retains
+  its passing full regression and 29 GUI suites. No game/engine code changes.
+
 ### Align laptop test conditions and diagnose layout stalls — 2026-11-18
 
 Commit: `55e173c`.

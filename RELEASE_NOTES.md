@@ -1,40 +1,63 @@
-# ZGUI 1.0 — 1 November 2026
+# ZGUI 1.1 — 18 November 2026
 
-The first ZGUI release brings chess and international draughts together in the
-existing GWDGUI interface and shared game, analysis, tournament and database
-infrastructure.
+ZGUI runs chess and international draughts side by side, reusing GWDGUI's game,
+analysis, tournament and database infrastructure.
 
-- UCI chess engines and Hub/DXP draughts engines, clocked games, analysis,
-  PV browsing, hints, score history and Auto Play.
-- PGN/PDN collections with comments and variations, FEN position setup,
-  configurable appearance and SQLite game databases.
-- Tabbed round-robin and Swiss tournaments, concurrent games of both types,
-  shared engine reservations and oldest-waiting-first allocation.
-- Per-engine compatibility flags: `no-pondering`, `no-ponder-hit` and `dxp-pv`.
-- An offline Help manual and a status-bar count of engine sessions in use.
+## Changes since 1.0
 
-## Downloads
+- Interactive `--cli` in the normal GUI: list engines, start two-engine matches,
+  query results and opening pairs, and stop tournaments. Started tournaments are
+  visible live in their normal tabs. Terminal input and pipes use the same commands.
+- Opening ballots for both games, with two colour-reversed games per position,
+  optional opening-pair shuffling and a saved order for reproducible replay.
+- A live paired GSPRT pane with independent candidate/baseline selection, graph
+  tooltips and the same calculation available through `query_tournament sprt=true`.
+  Automatic stopping is left to the user or an external runner.
+- Optional time-forfeit adjudication by a compatible Hub/UCI engine, with explicit
+  evaluation comparisons in the Reason column. The default remains rules-based.
+- Private saved UCI options per registration, even when sharing an executable.
+- Confirmed **Delete from here...** in the Game Tree for stopped documents,
+  retaining earlier data and sibling variations.
+- Clearer tournament controls and reasons, saved-game history selection,
+  conditional following of new games, and numerous layout and engine fixes.
+- Finished games release engine workers promptly; long matches no longer retain
+  hundreds of polling threads or make shutdown wait for them one at a time.
+- Refreshed offline manual covering the GUI, CLI, storage and runtime libraries.
 
-Use the Linux or Windows **x86_64 portable archive**, or download the executable
-separately. Archives include the manual, license, changelog and build information.
-No engines, engine data, local settings or external piece font are bundled.
-Linux requires GTK2 and SQLite3 runtime libraries.
+## Downloads and dependencies
 
-**SHA1SUMS** and **SHA256SUMS** cover the standalone executables and archives.
-Build provenance is included in **BUILD-INFO.txt**. The Windows executable was
-built and tested by the maintainer; it contains embedded Help but no verifiable Git
-commit ID. The portable archive also includes the refreshed `MANUAL.md`.
+Choose the Linux or Windows x86_64 portable archive. Archives include the manual,
+license, changelog and build information. The Windows archive also includes
+64-bit `sqlite3.dll` for database operations. Keep it beside `zgui.exe`; source
+builds do not copy it automatically. The standalone Windows executable needs
+that DLL separately for database features.
 
-## Validation
+Linux requires GTK2 and SQLite3 loadable as `libsqlite3.so`. Engines, networks,
+books and tablebases are installed separately. No external piece font is needed.
 
-The application passed chess and draughts regression checks, DXP protocol checks,
-all 20 GUI suites and both tournament suites. The Linux status-bar correction
-passed 10,426 layout checks and was visually confirmed by the maintainer. Native
-Windows build and visual testing were supplied by the maintainer. Release checks
-also cover manual rendering, build identity generation and Windows build-script
-replacement/recovery under Wine. Cross-compilation is skipped when the host lacks
-FPC's Win64 units.
+**SHA1SUMS** and **SHA256SUMS** cover the standalone executables and archives;
+**BUILD-INFO.txt** records provenance and the bundled SQLite version.
 
-ZGUI is based on GWDGUI 3.4 and distributed under GPLv3. See the README, manual
-and CHANGELOG for installation, protocol configuration, supported rules and
-known operational limits.
+## Validation and known limits
+
+The current application source passed the full chess/draughts regression suite and
+all 29 GUI suites, including concurrent game contexts, tournaments, CLI, engine
+lifecycle and layout checks. The refreshed manual passed rendering and built-in
+Help checks. Native Windows testing is limited; comprehensive interactive
+console/pipe verification remains outstanding.
+
+Existing UCI registrations without private options keep reading their legacy
+parameter file until saved in the engine editor. Older ZGUI versions ignore the
+private options, so update both platform builds together. Engines that write
+logs or learning files beside their executable may still need separate folders.
+Saved tournament identities do not freeze UCI option values: keep the tested
+engine configuration when resuming or replaying a comparison.
+
+SPRT settings should be fixed before inspecting results if interpreting their
+nominal error rates. No finite set of tests proves support for all chess dead
+positions; the manual describes the implemented material checks. A historical
+commit range still awaits Claude's full review; this is a tested release, not a
+claim that every commit has completed independent review.
+
+Based on GWDGUI 3.4; distributed under GPLv3. SQLite is public-domain software;
+see the SQLite notice in the Windows portable archive.

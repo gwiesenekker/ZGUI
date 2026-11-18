@@ -1,6 +1,6 @@
 # ZGUI User Manual
 
-Updated 15 November 2026.
+Updated 18 November 2026.
 
 ZGUI plays, analyses and stores orthodox chess and international 10×10 draughts.
 Chess uses UCI engines and PGN files; draughts uses Hub/DXP engines and PDN files.
@@ -9,7 +9,7 @@ Choose the game through Game History or the Game choice in the game dialogs.
 
 ## Chess and draughts in one window
 
-Use the Chess board and International Polish Draughts board entries in Game History
+Use the Chess board and International draughts board entries in Game History
 to select the independent standalone documents. New Game also has a Game choice.
 Running games retain their own rules, clocks and engines while another game is
 shown. UCI registrations belong to chess; Hub and DXP registrations belong to
@@ -31,7 +31,8 @@ Ponder option and protocol-specific handling.
 
 The Tournaments window holds named tabs, each with its own settings, pairings
 and standings. Several chess and draughts tournaments can run at once. The Game
-choice beside the starting FEN changes the current tab after protecting its existing data. Set concurrency and engine thread counts with available CPU and memory
+choice beside the tournament name changes the current tab after protecting its
+existing data. Set concurrency and engine thread counts with available CPU and memory
 in mind: games, annotators and tournaments can all be active together.
 
 Open accepts PGN and PDN. When a file's game is ambiguous, choose it explicitly.
@@ -107,9 +108,10 @@ query_tournament id=1
 game/protocol and executable availability. It does not launch engines. Names must
 be unambiguous. Instead of `engine1`/`engine2`, you can use `engine1_id`/`engine2_id`
 or `engine1_key`/`engine2_key`; supply exactly one selector per participant. IDs are
-not reused for changed registrations; refresh the list after changing an engine's
-configuration. Identity keys can be stored in scripts, but configuration changes
-can invalidate them too.
+not reused for a new identity; refresh the list after changing an engine's path,
+protocol ID, arguments or INI configuration. Identity keys can be stored in
+scripts, but those changes can invalidate them too. Saved UCI option values do
+not change the key or its session ID; a key is not a snapshot of engine settings.
 
 `run_tournament` creates a two-engine match in a normal visible tournament tab and
 returns its tournament ID when the existing start action accepts it. It does not
@@ -122,7 +124,7 @@ Optional settings: `name`, `ballot`, `shuffle_opening_pairs`, `time` (seconds pe
 sudden death), `increment` (fractional seconds allowed) and `concurrent`. Omitted
 clock settings use the selected game's existing GUI defaults. Use a decimal point
 in commands even if GUI edits use a decimal comma. Relative paths use the launch
-directory. To explicitly accept the existing UCI shared-executable warning, add
+directory. To explicitly accept the legacy UCI shared-options-file warning, add
 `allow_shared_executable=true`; no other warning is automatically accepted.
 This check runs before pairing: a refusal leaves no tournament tab or files.
 
@@ -300,6 +302,11 @@ spaces. Supply exactly one selector for each engine:
 | `increment=3` | Nonnegative finite increment in seconds; decimal values such as 0.5 are accepted. Omitted: selected game's GUI default. |
 | `concurrent=1` | Positive integer maximum simultaneous games. Default: 1. Engine reservations can limit actual concurrency. |
 | `allow_shared_executable=true` | Accept legacy UCI registrations that still inherit one executable-side options file. Accepts true or false; default: false. Registrations saved with private options do not need this confirmation. |
+| `time_forfeit=loss` | Default rules-based timeout policy, including chess timeout draws. Alternatively, use a unique compatible Hub/UCI engine name for symmetric evaluation adjudication. |
+| `time_forfeit_id=3` | Select the adjudicator by session ID instead of its name; supply only one time-forfeit selector. |
+| `time_forfeit_key="..."` | Select the adjudicator by identity key instead of its name or ID. |
+| `adjudication_time=1.0` | Positive finite analysis time in seconds, at most 3600; default 1.0 when an adjudicator is selected. Requires an engine policy. |
+| `adjudication_threshold=200` | Positive finite evaluation threshold in cp, at most 1000000000; default 200 when an adjudicator is selected. Requires an engine policy. |
 
 Both registrations must be distinct and belong to the same game: UCI means chess;
 Hub and DXP mean draughts. A ballot creates two colour-reversed games per position.
@@ -384,7 +391,7 @@ before testing. Register two available engines for the same game through
    This creates two colour-reversed games, each with 30 seconds per player and
    no increment. Expect a normal tournament tab and an immediate `OK` response
    containing `"tournament":N`; the command does not wait for completion.
-   If two UCI registrations share one executable, retry with
+   If legacy UCI registrations share one options file, retry with
    `allow_shared_executable=true` appended to explicitly accept that configuration.
    The refused attempt should leave no extra tab or pairing files.
 
@@ -522,8 +529,9 @@ local port at the same time.
 
 Engine executables may live outside the ZGUI directory. ZGUI launches the
 registered path, with the engine's own directory as its working directory.
-Separate registrations of one executable share its parameter file; use separate
-executable paths for independent saved configurations.
+UCI registrations saved by the current editor have independent option values,
+even when they use the same executable. Hub/DXP settings and unmigrated UCI
+registrations still use the executable-side parameter file; see section 2.6.
 
 ### 2.1 UCI engines (chess)
 
@@ -556,7 +564,8 @@ off for games when advertised. Other saved options match
 names without case sensitivity, while commands use the engine's spelling.
 Unknown saved options are retained but not sent. Initialization accepts only
 empty lines, `debug on`, `debug off` or `register later`; use the grid for options.
-Hub, DXP and UCI settings remain in separate JSON sections.
+Saved UCI options belong to their engine registration. Hub/DXP options and
+legacy UCI files retain their separate JSON protocol sections (section 2.6).
 
 Pondering in ordinary games is described in section 5.7. Tournament policy is
 covered in section 7.
@@ -643,8 +652,9 @@ argument or generated configuration file.
 
 Hub and UCI options appear in the parameter grid after a successful launch.
 Values are applied through the selected engine protocol. Names beginning with
-`gui-` belong to ZGUI and are never sent as engine options. Hub, DXP and UCI
-settings are stored in separate protocol sections of the parameter file.
+`gui-` belong to ZGUI and are never sent as engine options. Current UCI options
+are saved per registration; Hub/DXP and legacy UCI parameter files keep separate
+protocol sections, as described in section 2.6.
 
 Important GUI parameters include:
 
@@ -718,12 +728,25 @@ as `dxp-pv` when accepted in the checkbox editor. All flags default to off.
 
 ### 2.6 Where engine settings are stored
 
-ZGUI stores the engine registry in `engines.json` beside the ZGUI
-executable. Parameter values for an engine are stored beside that engine, using
-the engine executable name with the extension `.params.json`.
+ZGUI stores the engine registry in `engines.json` beside the ZGUI executable.
 
-Keep copies of these files when moving an installation or maintaining several
-engine configurations.
+- **UCI:** after accepting the engine editor, option values are saved in that
+  registration's `uci_options` array in `engines.json`. Two registrations of one
+  executable can use different Hash, Threads or strength settings. Identity,
+  launch arguments and INI text remain in the registration's existing fields.
+- **Existing UCI registrations:** if `uci_options` is absent, ZGUI reads the old
+  executable-side `.params.json` file's `uci` section. Saving that registration
+  in the editor migrates only its values; the legacy file is left unchanged.
+  An explicitly empty private array uses defaults rather than inheriting the file.
+- **Hub and DXP:** parameters remain beside the engine executable, using its
+  name with extension `.params.json` and separate `hub` and `dxp` sections.
+  Registrations sharing that file also share those saved settings.
+
+Back up `engines.json`, any legacy/Hub/DXP parameter files and external INI files
+when moving an installation. Older ZGUI builds ignore private UCI options, so
+update the Windows and Linux executables together. Private options do not isolate
+files an engine writes beside its executable; use separate directories if that
+engine's logs or learning files cannot safely be shared.
 Engine paths in `engines.json` belong to one operating system; a copy from
 another system has to be re-registered (see section 11).
 
@@ -972,7 +995,7 @@ During UCI annotation and Auto Play, an engine's advertised `OwnBook` check
 option is temporarily disabled so it searches and reports a scored PV. Some
 engines, such as Arasan, otherwise return an opening-book move without analysis.
 Clocked games restore the saved book setting (or the engine's advertised default);
-the saved option file is unchanged.
+the saved option values are unchanged.
 
 ### 5.3 Engine and annotator PVs
 
@@ -1035,11 +1058,13 @@ replies cannot add further moves. Navigating away from the node being extended
 also stops Auto Play. Leave virtual PV browsing with Escape before starting;
 starting from a real variation is supported.
 
-Auto Play changes the game, so the existing save/discard prompts apply. There is
-currently no user-facing undo, delete-variation or truncate-mainline command.
-To discard an unwanted continuation, reload a previously saved game and decline
-to save the changed copy. Save a copy before Auto Play if you need to retain the
-original. Auto Play never changes the game result or creates clock records.
+Auto Play changes the game, so the existing save/discard prompts apply. To remove
+an unwanted continuation after stopping Auto Play, open **Show game tree**, select
+its first unwanted move and choose **Delete from here...** (section 4.3). This
+removes that move and its descendants after confirmation; there is no undo.
+Save a copy first if you need the original. Reloading a previously saved game
+and declining to save the changed copy is another way to discard changes.
+Auto Play never changes the game result or creates clock records.
 
 For chess, Auto Play checks the existing rules before the first search and after
 each accepted move, with the real root-to-start history (including variations).
@@ -1402,9 +1427,9 @@ score.
 - The tournament PGN/PDN is created beside the JSON when first saved outside recovery.
   Move the JSON and its linked PGN/PDN together.
 - An older or externally changed PGN/PDN is preserved rather than overwritten.
-- Engine definitions must match the saved identities. Renaming an engine is safe;
-  changing its executable, protocol ID, arguments or INI contents can leave old
-  rows without a matching engine. See the details below.
+- Engine definitions must match the saved identities. Renaming the tournament
+  is safe; changing an engine's executable, registered protocol ID/name, arguments
+  or INI contents can leave old rows without a matching engine. See below.
 
 Before a file is chosen, recovery files live in the per-user application
 configuration directory. Save errors appear in the tournament title and pause
@@ -1432,8 +1457,9 @@ Chess engine tournaments use **Tournament...**. Select
 registered UCI engines, a starting FEN, time control, pairing type and concurrent
 game count, then use **Create pairing** and **Play**. The default is 5+3 sudden
 death. Single and double round-robin and the existing Swiss pairing heuristic
-are available. Every game uses the one supplied FEN; opening files and paired
-opening variety are a separate future feature.
+are available. With no ballot, every game uses the supplied starting FEN.
+Alternatively, load an opening ballot to play every position with colours
+reversed; optional shuffling keeps each two-game opening pair together (section 7.1).
 
 Chess standings show one point for a win and half a point for a draw. The
 existing tie-break order is points, wins, Sonneborn-Berger, then name. A Swiss
@@ -1490,9 +1516,15 @@ settings, selected engine names, pairings, results, reasons, and concurrency
 limit. Use **Load** to open it later in its own tab, then **Play** to resume.
 Engines are matched by saved identity keys based on
 the executable, protocol ID, arguments, initialization text, INI path/contents
-and DXP connection settings. A display-name change is
-harmless. Changing those settings can leave older rows showing **Missing engine**;
+and DXP connection settings. The registered protocol ID is also the name shown
+in engine selection; changing it can change the identity. Renaming the tournament
+does not. Changing identity fields can leave older rows showing **Missing engine**;
 restore the earlier engine configuration to resume those rows.
+
+Saved UCI option values do not form part of these identity keys and are not frozen
+in each tournament record. Resumed or replayed games use the matching
+registration's current options. Keep a copy of the engine configuration used for
+a comparison, and avoid changing it during a fixed match or SPRT experiment.
 
 The JSON also contains each played game, its comments and variations, any manual
 result override, and earlier attempts of rescheduled pairings. Manual corrections
@@ -1838,9 +1870,13 @@ ZGUI uses SQLite databases for collections of chess PGN or draughts PDN games
 and position search. The window layout, filters and import controls are shared.
 New chess databases use schema 8, with explicit variant, key-format and game-identity
 metadata. Existing schema-7 chess databases remain readable and writable without
-automatic migration. Chess and draughts databases are separate: opening the other format is rejected. A chess
-database must be created through **Create database**, rather than by opening an
-empty file.
+automatic migration. Chess and draughts databases are separate files; one file
+does not mix the games. **Open database** detects and validates the file's game,
+then selects that game context. Each game retains its own database window;
+opening another database for that game replaces its existing window after
+validation. Unsupported or invalid files are rejected without replacing the
+current window. Create a new database through **Create database**, rather than
+opening an empty file.
 
 Choose **Database > Create database** for a new `.sqlite` or `.db` file, or
 **Database > Open database** for an existing one.
@@ -1946,8 +1982,9 @@ Windows and dialogs adapt their rows, labels and minimum sizes to the active fon
 Resize or maximize them to give boards, lists and text areas more room. Toolbars
 and database filters wrap when needed; preferences pages scroll when their content
 needs more space. The main FEN field fits a full chess FEN and expands for longer
-displayed positions. The game-moves pane reserves at least ten lines at its active
-notation font. Existing splitters still let you adjust the main panes.
+displayed positions. The game-moves pane prefers ten lines at its active
+notation font when space permits, with a usable three-line minimum in smaller
+windows. Existing splitters still let you adjust the main panes.
 
 In tables, the mouse wheel scrolls the view without changing the selected row.
 Use a click or the arrow keys to change selection. Dragging a horizontal or
@@ -2037,8 +2074,10 @@ White's perspective.
 
 ### The score history is empty
 
-For chess, use a UCI engine that reports a scored legal PV. DXP games do not
-provide the analysis score stream used by this display. For Hub engines, confirm
+For chess, use a UCI engine that reports a scored legal PV. The DXP socket does
+not carry analysis scores; an engine that writes Hub-format analysis to stdout
+can supply them with the **dxp-pv** feature flag (section 2.5). Other DXP engines
+need a separate compatible annotator for an analysis score. For Hub engines, confirm
 that the engine reports score information and
 that `gui-score-perspective` matches its output. Loading a Hub annotator can
 provide a separate annotator score.
@@ -2061,11 +2100,37 @@ by available engine instances and DXP port conflicts.
 **Save PGN** and **Save PDN** append. Select a new file when you do not want to add the current
 game to an existing collection.
 
+### A database will not open on Windows
+
+The database features require **64-bit `sqlite3.dll`** for the x86_64 ZGUI build.
+Place it beside `zgui.exe` so ZGUI can find it without relying on another program's
+installation or PATH. Building ZGUI does not copy this library into the folder.
+The SQLite command-line program `sqlite3.exe` is not a replacement for the DLL.
+
+ZGUI loads SQLite when a database operation needs it. Starting the GUI or playing
+a game without an error does not prove that SQLite is available. Test **Create
+database** or **Open database** on Windows before distributing an installation.
+If it already works with no DLL in the ZGUI folder, the library is being found
+elsewhere on that computer. With a database open, PowerShell can show its location:
+
+```powershell
+(Get-Process zgui).Modules |
+  Where-Object ModuleName -eq 'sqlite3.dll' |
+  Select-Object FileName
+```
+
 ## 12. Installation and developer notes
 
 ZGUI is an Object Pascal application built with Lazarus/LCL 3.0 or later (GTK2
 on Linux), its bundled SynEdit package, and Free Pascal 3.2.2 or later. The
 boards draw their pieces directly; no external piece font is required.
+
+**Runtime libraries:** Linux needs GTK2 and SQLite3. This build's SQLite loader
+looks for `libsqlite3.so`; having only `libsqlite3.so.0` without the expected
+library name may be insufficient.
+Windows database features need the matching 64-bit `sqlite3.dll`; include it beside
+`zgui.exe` in a portable release. SQLite is loaded on demand, not compiled into
+ZGUI. Engines and their networks, books or tablebases are installed separately.
 
 A typical source build is:
 
@@ -2112,8 +2177,9 @@ distribution includes `protocol.txt` for its Hub handshake and commands.
 ### 12.1 File locations and portability
 
 - `engines.json` and `prefs.json` live beside the ZGUI executable. Keep that
-  directory writable. Per-engine `.params.json` files live beside the engine
-  executable they describe; launch/INI paths remain part of engine configuration.
+  directory writable. Private UCI options are in `engines.json`. Hub/DXP and legacy
+  UCI `.params.json` files live beside the engine executable (section 2.6);
+  launch/INI paths remain part of engine configuration.
 - PGN/PDN, database and saved tournament files live where you choose them. Import logs
   use the imported game file's filename with the `.import.log` extension beside it.
 - Unsaved tournament recovery is the exception to portable storage: it uses the

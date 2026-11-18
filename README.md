@@ -1,4 +1,4 @@
-# ZGUI 1.0
+# ZGUI 1.1
 
 ZGUI is a desktop GUI for **chess and international draughts**, with both games
 available side by side. It builds on GWDGUI 3.4 and preserves its shared game,
@@ -19,7 +19,9 @@ analysis, tournament and database infrastructure.
 - Tabbed round-robin and Swiss tournaments, concurrent games, shared engine
   reservations and oldest-waiting-first allocation across tournaments.
 - Opening ballot files for either game: every engine pair plays each FEN twice
-  with colours reversed, with positions retained in tournament saves.
+  with colours reversed, optional opening-pair shuffling, and saved scheduled order.
+- Live paired GSPRT comparisons, optional time-forfeit adjudication, and an
+  interactive `--cli` in the normal GUI for creating, querying and stopping matches.
 - SQLite game databases, import and duplicate detection, player/event filters,
   position searches and move-based navigation.
 - Separate chess/draughts preferences where appropriate, a global engine-use
@@ -39,7 +41,10 @@ chmod +x zgui
 ./zgui
 ```
 
-The Linux x86_64 build requires GTK2 and SQLite3 runtime libraries. No external
+The Linux x86_64 build requires GTK2 and SQLite3 available as `libsqlite3.so`.
+The Windows portable package includes 64-bit `sqlite3.dll` for database features;
+keep it beside `zgui.exe`. A source build does not copy that DLL automatically.
+No external
 piece font is required: both boards draw their pieces directly. Engines and
 engine data files are not bundled; install engines separately. Human-versus-human
 play and game browsing do not require an engine.
