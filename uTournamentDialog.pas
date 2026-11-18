@@ -811,7 +811,8 @@ begin
   D:=TOpenDialog.Create(Self);
   try
     D.Title:='Select opening ballot (one FEN per line)';
-    D.Filter:='FEN files (*.fen)|*.fen|All files (*)|*';
+    if FProfile.FileFormat=gffPgn then D.Filter:='Opening positions (*.fen;*.epd)|*.fen;*.epd|FEN files (*.fen)|*.fen|EPD files (*.epd)|*.epd|All files (*)|*'
+    else D.Filter:='FEN files (*.fen)|*.fen|All files (*)|*';
     D.Options:=D.Options+[ofFileMustExist];
     if ExecuteGuiFileDialog(D) then
       try LoadBallotFromFile(D.FileName);
@@ -2402,13 +2403,13 @@ begin
     Ballot:=TJSONObject(Data.Find('opening_ballot'));
     if Ballot<>nil then begin
       Positions:=TJSONArray(Ballot.Find('positions'));
-      for I:=0 to Positions.Count-1 do NormalizeBallotFEN(FVariant,Positions.Strings[I]);
+      for I:=0 to Positions.Count-1 do NormalizeBallotFEN(FVariant,Positions.Strings[I],False);
     end;
     Games:=Data.Find('games');
     if Games<>nil then for I:=0 to Games.Count-1 do begin
       RecordData:=TJSONObject(TJSONObject(Games.Items[I]).Find('record'));
       if (RecordData<>nil) and (RecordData.Get('starting_fen','')<>'') then
-        NormalizeBallotFEN(FVariant,RecordData.Get('starting_fen',''));
+        NormalizeBallotFEN(FVariant,RecordData.Get('starting_fen',''),False);
     end;
     Publication:=Data.Get('pdn_file_name','');
     if (Publication<>'') and not LoadReadOnly then begin
@@ -2426,7 +2427,7 @@ begin
     FBallotPositions.Clear;FBallotFileName:='';FShuffleOpeningPairs.Checked:=False;
     if Ballot<>nil then begin
       Positions:=TJSONArray(Ballot.Find('positions'));
-      for I:=0 to Positions.Count-1 do FBallotPositions.Add(NormalizeBallotFEN(FVariant,Positions.Strings[I]));
+      for I:=0 to Positions.Count-1 do FBallotPositions.Add(NormalizeBallotFEN(FVariant,Positions.Strings[I],False));
       FBallotFileName:=Ballot.Get('file_name','');
       FShuffleOpeningPairs.Checked:=Ballot.Get('shuffle_opening_pairs',False);
     end;
@@ -2988,7 +2989,7 @@ begin
       if not FRunning then Break;
       if not Eligible(Row) or not IsRowStartable(Row, BusyEngineKeys) then Continue;
       Blocker := nil;
-      if Queue <> nil then Blocker := Queue.BlockingOwner(Self, Row);
+      if Queue <> nil then Blocker := Queue.BlockingOwner(Self, Row, BusyEngineKeys);
       if Blocker <> nil then begin
         FGrid.Cells[TournamentColReason, Row] := 'Waiting for engine allocation';
         if Blocker is TTournamentDialog then
@@ -3004,6 +3005,7 @@ begin
       if not (GameObject is TRunningGame) then begin
         StartFailure(Row, 'Game start was rejected'); Continue;
       end;
+      if Queue<>nil then Queue.GameStarted(Self,Row,BusyEngineKeys);
       RegisterRunningGame(Row, GameObject);
       FGrid.Invalidate;
       HighlightRow(Row);

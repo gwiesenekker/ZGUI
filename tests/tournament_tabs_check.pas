@@ -483,6 +483,55 @@ begin
  finally GuiTestConfirmationResult:=0;end;
  Check(Host.Count=0,'Closed host has no hidden tournament sessions');
 end;
+procedure CheckBackfill(V:TGameVariant);
+var Event:array[0..3] of TTournamentDialog;Base,K,N:Integer;Def:TExternalEngineDefinition;
+ ChecksList:TCheckListBox;WantedA,WantedB:string;
+ procedure MakeEvent(Index,A,B:Integer);
+ var Radio:TRadioGroup;N:Integer;
+ begin
+  Event[Index]:=Host.NewTournament(V);Event[Index].TournamentName:='Backfill '+IntToStr(Index);
+  ChecksList:=TCheckListBox(Event[Index].FindComponent('TournamentEngines'));
+  WantedA:=Defs[A].IdText;WantedB:=Defs[B].IdText;
+  for N:=0 to ChecksList.Items.Count-1 do begin
+   Def:=TExternalEngineDefinition(ChecksList.Items.Objects[N]);
+   ChecksList.Checked[N]:=(Def.IdText=WantedA) or (Def.IdText=WantedB);
+  end;
+  for N:=0 to Event[Index].ComponentCount-1 do
+   if Event[Index].Components[N] is TRadioGroup then begin
+    Radio:=TRadioGroup(Event[Index].Components[N]);Radio.ItemIndex:=1;
+   end;
+  Button(Event[Index],'Create pairing').Click;
+  Check(Grid(Event[Index]).RowCount=3,'Backfill fixture has two colour-reversed games');
+  Button(Event[Index],'Play').Click;
+ end;
+begin
+ LayoutWatch.Step('bounded backfill '+V.Name);RegisterEngines(True);
+ if V=Chess then Base:=0 else Base:=2;
+ for K:=0 to 1 do begin
+  Def:=TExternalEngineDefinition.Create;Def.Assign(Defs[Base]);
+  if V=Chess then Def.UciId:='Backfill chess '+IntToStr(K)
+  else Def.HubId:='Backfill draughts '+IntToStr(K);
+  Defs.Add(Def);
+ end;
+ SaveExternalEngines(EnginesJsonFileName,Defs);
+ GuiTestConfirmationResult:=mrYes;
+ try
+  MakeEvent(0,Base,Base+1);WaitStarted(Event[0]);
+  MakeEvent(1,Base+1,4);Pump;
+  Check(RunningGame(Event[1])=nil,'Older request waits for the occupied engine');
+  MakeEvent(2,4,5);WaitStarted(Event[2]);
+  Check(RunningGame(Event[1])=nil,'Backfill does not start the blocked older match');
+  Event[2].StopTournament;
+  Started:=GetTickCount64;
+  repeat Pump;until not Event[2].IsRunning or (GetTickCount64-Started>8000);
+  MakeEvent(3,4,5);
+  Started:=GetTickCount64;repeat Pump;until GetTickCount64-Started>800;
+  Check(RunningGame(Event[3])=nil,'A second shared-key backfill cannot bypass the same waiting turn');
+  Event[0].StopTournament;WaitStarted(Event[1]);
+  Check(RunningGame(Event[3])=nil,'Older waiter takes priority when its missing engine is released');
+ finally GuiTestConfirmationResult:=0;DiscardAll;RegisterEngines(False);end;
+end;
+
 begin
  if ParamStr(1)='--peer' then begin
   Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
@@ -497,7 +546,7 @@ begin
   LayoutWatch.Step('deliberate '+ParamStr(1));
   if ParamStr(1)='--watchdog-bounds-test' then
    for I:=0 to 20000 do ProbePanel.Left:=I mod 2
-  else Sleep(5000);
+  else repeat Application.ProcessMessages until False;
   Halt(1);
  end;
  LayoutWatch:=TGuiLayoutTestWatch.Create;
@@ -547,6 +596,7 @@ begin
   Check(Main.ActiveGameTree=Root,'Background starts and completions preserve main document');
   DiscardAll;
   CheckFairness(Chess);DiscardAll;CheckFairness(Draughts);DiscardAll;
+  CheckBackfill(Chess);CheckBackfill(Draughts);
   RegisterEngines(True);CheckRefereeStop(Chess);CheckRefereeStop(Draughts);
   NewFour;WaitStarted(Tabs[0]);WaitStarted(Tabs[2]);
   GuiTestConfirmationResult:=mrCancel;

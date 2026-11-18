@@ -23,6 +23,12 @@ type
   procedure Step(const Phase:string);
  end;
 implementation
+{$IFDEF WINDOWS}uses Windows;{$ENDIF}
+{$IFDEF UNIX}
+// libc _exit terminates the entire process without running GUI finalizers on
+// the watchdog thread (Halt can deadlock when GTK is already stuck).
+procedure ExitWithoutFinalization(Status:LongInt);cdecl;external 'c' name '_exit';
+{$ENDIF}
 type
  TWatchThread=class(TThread)
   Owner:TGuiLayoutTestWatch;
@@ -97,7 +103,8 @@ begin
   WriteLn(StdErr,'LAYOUT WATCHDOG: ',Reason);
   WriteLn(StdErr,'phase=',FPhase,' bounds_changes=',FChanges,' last_control=',FLastControl);Flush(StdErr);
   // Do not unwind GTK or join the blocked GUI thread; terminate this test process.
-  Halt(3);
+  {$IFDEF UNIX}ExitWithoutFinalization(3);{$ELSE}
+  {$IFDEF WINDOWS}Windows.ExitProcess(3);{$ELSE}Halt(3);{$ENDIF}{$ENDIF}
  finally FLock.Release;end;
 end;
 end.

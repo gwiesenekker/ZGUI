@@ -6,7 +6,7 @@ Requires Xephyr and an existing parent X display (DISPLAY, default :1).
 The parent window is never mapped. There is intentionally no desktop fallback.
 Test children and the nested server are retired even on failure/interruption.
 """
-import ctypes, os, signal, shutil, subprocess, sys, time
+import ctypes, os, re, signal, shutil, subprocess, sys, time
 
 if len(sys.argv) < 2:
     sys.exit(__doc__)
@@ -14,6 +14,10 @@ xephyr = shutil.which("Xephyr")
 if not xephyr:
     sys.exit("Xephyr is required for hidden GUI checks; no desktop fallback")
 parent_display = os.environ.get("DISPLAY", ":1")
+size = os.environ.get("ZGUI_TEST_SCREEN", "1800x1300")
+if not re.fullmatch(r"[1-9][0-9]{2,4}x[1-9][0-9]{2,4}", size):
+    sys.exit("ZGUI_TEST_SCREEN must be WIDTHxHEIGHT")
+width, height = map(int, size.split("x"))
 x=ctypes.CDLL('libX11.so.6')
 x.XOpenDisplay.argtypes=[ctypes.c_char_p];x.XOpenDisplay.restype=ctypes.c_void_p
 x.XDefaultRootWindow.argtypes=[ctypes.c_void_p];x.XDefaultRootWindow.restype=ctypes.c_ulong
@@ -21,13 +25,13 @@ x.XCreateSimpleWindow.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctyp
 x.XFlush.argtypes=[ctypes.c_void_p];x.XCloseDisplay.argtypes=[ctypes.c_void_p]
 d=x.XOpenDisplay(parent_display.encode())
 if not d: raise RuntimeError('Cannot open parent display')
-w=x.XCreateSimpleWindow(d,x.XDefaultRootWindow(d),0,0,1800,1300,0,0,0);x.XFlush(d)
+w=x.XCreateSimpleWindow(d,x.XDefaultRootWindow(d),0,0,width,height,0,0,0);x.XFlush(d)
 # The parent is never mapped: the nested server and its tests stay off the desktop.
 number=next(n for n in range(90,120) if not os.path.exists('/tmp/.X11-unix/X%d'%n))
 server=None;child=None
 try:
     with open('/tmp/zgui-hidden-display-%d.log'%number,'w') as log:
-        server=subprocess.Popen([xephyr,':%d'%number,'-parent',str(w),'-screen','1800x1300','-ac','-noreset','-nolisten','tcp'],env=dict(os.environ,DISPLAY=parent_display),stdout=log,stderr=log)
+        server=subprocess.Popen([xephyr,':%d'%number,'-parent',str(w),'-screen',size,'-ac','-noreset','-nolisten','tcp'],env=dict(os.environ,DISPLAY=parent_display),stdout=log,stderr=log)
         for _ in range(60):
             probe=x.XOpenDisplay((':%d'%number).encode())
             if probe: x.XCloseDisplay(probe);break

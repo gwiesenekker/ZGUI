@@ -82,3 +82,7 @@ Thumbs.db
 *.json.lock
 *.pgn.lock
 *.pdn.lock
+
+# Local diagnostic dumps and copied review output
+/minidump.txt
+/Claude outputs/

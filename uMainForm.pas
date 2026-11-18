@@ -69,7 +69,10 @@ type
     FFeatureBindings:array of TFeatureBinding;
     FSwitchingContext:Boolean;
     FInitialSizeApplied:Boolean;
-    FResizingPanes:Boolean;
+    FResizingPanes,FResizePanesQueued:Boolean;
+    FLastPaneSignature:string;
+    procedure QueueResizePanes;
+    procedure ResizePanesAsync(Data:PtrInt);
     procedure ResizeSplitPanes(NewHeight:Integer);
     procedure InitializeGameContexts;
     procedure CaptureGameContext;
@@ -542,10 +545,10 @@ type
     procedure TournamentClick(Sender: TObject);
   protected
     procedure Notification(AComponent:TComponent;Operation:TOperation); override;
-    procedure ChangeBounds(ALeft,ATop,AWidth,AHeight:Integer;KeepBase:Boolean);override;
+    procedure Resize;override;
+    procedure MeasureLayout;override;
   public
     constructor Create(AOwner: TComponent); override;
-    procedure RefreshLayout; override;
     destructor Destroy; override;
     {$IFDEF GWDGUI_NONINTERACTIVE_TEST}
     procedure TestRegisterGame(AGame: TRunningGame);
@@ -1257,16 +1260,17 @@ begin
   LPvTextPanel.Align := alClient;
   LPvTextPanel.BevelOuter := bvNone;
 
-  LPvTopPanel := TPanel.Create(Self);
+  LPvTopPanel := TGuiSplitPanel.Create(Self);
   LPvTopPanel.Parent := LPvTextPanel;
   LPvTopPanel.Align := alTop;
   LPvTopPanel.Height := 94;
   LPvTopPanel.BevelOuter := bvNone;
 
-  LPvScorePanel := TPanel.Create(Self);
+  LPvScorePanel := TGuiSplitPanel.Create(Self);
   LPvScorePanel.Parent := LPvTopPanel;
   LPvScorePanel.Align := alTop;
   LPvScorePanel.Height := 66;
+  LPvScorePanel.Constraints.MinHeight:=40;
   LPvScorePanel.BevelOuter := bvNone;
 
   FScoreHistoryControl := TScoreHistoryControl.Create(Self);
@@ -1428,17 +1432,36 @@ end;
 procedure TMainForm.FenTextChanged(Sender:TObject);
 begin InvalidateLayout;end;
 
-procedure TMainForm.ChangeBounds(ALeft,ATop,AWidth,AHeight:Integer;KeepBase:Boolean);
+procedure TMainForm.Resize;
 begin
-  if not FResizingPanes then begin
-    FResizingPanes:=True;
-    try ResizeSplitPanes(AHeight);finally FResizingPanes:=False;end;
-  end;
-  inherited ChangeBounds(ALeft,ATop,AWidth,AHeight,KeepBase);
+  inherited Resize;QueueResizePanes;
+end;
+
+procedure TMainForm.QueueResizePanes;
+begin
+  if FClosing or FResizingPanes or FResizePanesQueued or (FGameMoveMemo=nil) then Exit;
+  FResizePanesQueued:=True;Application.QueueAsyncCall(@ResizePanesAsync,0);
+end;
+
+procedure TMainForm.ResizePanesAsync(Data:PtrInt);
+var Signature:string;
+begin
+  FResizePanesQueued:=False;
+  if FClosing or FResizingPanes then Exit;
+  Signature:=Format('%d,%d,%d,%d,%d,%d,%d,%d,%d',[
+    ClientWidth,ClientHeight,FGameMoveMemo.Constraints.MinHeight,FPvMemo.Constraints.MinHeight,
+    FPvInfoLabel.Constraints.MinHeight,FScoreHistoryControl.Parent.Constraints.MinHeight,
+    FAnalyzerMemo.Parent.Parent.Constraints.MinHeight,FGameLogMemo.Constraints.MinHeight,
+    FFenEdit.Parent.Parent.Height]);
+  if Signature=FLastPaneSignature then Exit;
+  FLastPaneSignature:=Signature;
+  FResizingPanes:=True;
+  try ResizeSplitPanes(Height);
+  finally FResizingPanes:=False;end;
 end;
 
 procedure TMainForm.ResizeSplitPanes(NewHeight:Integer);
-var I,WorkHeight,Edges,Available,SeparatorHeight:Integer;Side,Bottom,Analyzer:TWinControl;C:TControl;
+var I,WorkHeight,Edges,Available,SeparatorHeight:Integer;Side,Bottom,Analyzer,Pv,PvTop,Graph:TWinControl;C:TControl;
 begin
   if FClosing or (FGameMoveMemo=nil) or (FGameLogMemo=nil) or (FAnalyzerMemo=nil) then Exit;
   Side:=FGameMoveMemo.Parent;Bottom:=FGameLogMemo.Parent;Analyzer:=FAnalyzerMemo.Parent.Parent;
@@ -1458,8 +1481,20 @@ begin
     if (C<>Bottom) and (C.Align in [alTop,alBottom]) then
       Inc(Edges,C.Height+C.BorderSpacing.Top+C.BorderSpacing.Bottom+2*C.BorderSpacing.Around);
   end;
+  // The PV graph has a preferred height, not a compulsory 94-pixel top pane.
+  // Give the notation its measured minimum before compacting the bottom panes.
+  Pv:=FPvMemo.Parent.Parent;PvTop:=FPvInfoLabel.Parent;Graph:=FScoreHistoryControl.Parent;
+  Available:=Side.ClientHeight-FGameMoveMemo.Constraints.MinHeight;
+  for I:=0 to Side.ControlCount-1 do begin
+    C:=Side.Controls[I];
+    if (C<>Pv) and (C.Align in [alTop,alBottom]) then
+      Dec(Available,C.Height+C.BorderSpacing.Top+C.BorderSpacing.Bottom+2*C.BorderSpacing.Around);
+  end;
+  Pv.Height:=Max(Pv.Constraints.MinHeight,Min(Pv.Height,Available));
+  PvTop.Height:=Max(PvTop.Constraints.MinHeight,Min(PvTop.Height,Pv.ClientHeight-FPvMemo.Constraints.MinHeight));
+  Graph.Height:=Max(Graph.Constraints.MinHeight,Min(Graph.Height,PvTop.ClientHeight-FPvInfoLabel.Height));
   Available:=NewHeight-Edges-WorkHeight-Bottom.BorderSpacing.Bottom;
-  // Shrink preferred splitter panes before native window minimum negotiation.
+  // Adjust preferred panes only after native bounds negotiation has settled.
   Bottom.Height:=Max(Bottom.Constraints.MinHeight,Min(Bottom.Height,Available));
   SeparatorHeight:=0;
   for I:=0 to Bottom.ControlCount-1 do
@@ -1468,14 +1503,16 @@ begin
     Min(Analyzer.Height,Bottom.Height-FGameLogMemo.Constraints.MinHeight-SeparatorHeight));
 end;
 
-procedure TMainForm.RefreshLayout;
+procedure TMainForm.MeasureLayout;
 const ChessFenSample='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq e3 99 999';
 var I,FieldWidth,LabelWidth,Preferred,Delta:Integer;Row,Side:TWinControl;
     Area:TRect;Bottom:TControl;
 begin
-  inherited RefreshLayout;
+  inherited MeasureLayout;
   if (FFenEdit=nil) or (FGameMoveMemo=nil) then Exit;
   UpdateAnalyzerTextSizes(nil);
+  FPvInfoLabel.Constraints.MinHeight:=MeasureGuiText('Ag',FPvInfoLabel.Font).cy;
+  QueueResizePanes;
   if FEngineUsageStatusBar<>nil then begin
     FEngineUsageStatusBar.Constraints.MinWidth:=MeasureGuiText(FEngineUsageStatusBar.SimpleText,FEngineUsageStatusBar.Font).cx+
       MeasureGuiText('MM',FEngineUsageStatusBar.Font).cx+GetSystemMetrics(SM_CXVSCROLL);
@@ -1499,7 +1536,6 @@ begin
   if Side.Width<Side.Constraints.MinWidth then Side.Width:=Side.Constraints.MinWidth;
   FGameMoveMemo.Constraints.MinHeight:=3*Max(1,FGameMoveMemo.LineHeight)+
     2*GetSystemMetrics(SM_CYEDGE)+GetSystemMetrics(SM_CYHSCROLL);
-  RefreshMinimum;
   if Showing and not FInitialSizeApplied then begin
     FInitialSizeApplied:=True;
     Area:=Monitor.WorkareaRect;
@@ -2602,7 +2638,7 @@ begin
 end;
 
 procedure TMainForm.UpdateAnalyzerTextSizes(Sender:TObject);
-var HeaderHeight,PvHeight,LogHeight,MctsHeight,Edges,Padding,Required,StatsHeight:Integer;
+var HeaderHeight,PvHeight,LogHeight,LogMinimum,MctsHeight,Edges,Padding,Required,StatsHeight:Integer;
     Panel:TControl;
 begin
   if FClosing or (FAnalyzerMemo=nil) or (FAnalyzerPvMemo=nil) or (FMctsMemo=nil) then Exit;
@@ -2610,16 +2646,23 @@ begin
   Padding:=MeasureGuiText('Ag',FAnalyzerPvInfoLabel.Font).cy div 4;
   HeaderHeight:=MeasureGuiText('PV: no info',FAnalyzerPvInfoLabel.Font).cy+Padding;
   PvHeight:=MeasureGuiText('No PV'+LineEnding,FAnalyzerPvMemo.Font).cy+Edges+Padding;
+  // Respect the shared memo minimum as well as the measured text. LCL can
+  // clamp Height to that minimum, so reserve the same space for its sibling.
+  PvHeight:=Max(PvHeight,FAnalyzerPvMemo.Constraints.MinHeight);
   LogHeight:=MeasureGuiText('Annotator closed'+LineEnding,FAnalyzerMemo.Font).cy+
     Edges+Padding+GetSystemMetrics(SM_CYHSCROLL);
+  LogMinimum:=Max(PvHeight,MeasureGuiText('Annotator closed',FAnalyzerMemo.Font).cy+
+    Edges+Padding+GetSystemMetrics(SM_CYHSCROLL));
   MctsHeight:=MeasureGuiText('MCTS annotator closed'+LineEnding,FMctsMemo.Font).cy+
     Edges+Padding+GetSystemMetrics(SM_CYHSCROLL);
   FAnalyzerPvInfoLabel.Height:=HeaderHeight;
   FAnalyzerPvMemo.Height:=PvHeight;
-  FAnalyzerMemo.Constraints.MinHeight:=LogHeight;
+  FAnalyzerMemo.Constraints.MinHeight:=LogMinimum;
   FMctsMemo.Height:=MctsHeight;
   Panel:=FAnalyzerMemo.Parent.Parent;
-  Required:=HeaderHeight+PvHeight+LogHeight+MctsHeight+FMctsMemo.BorderSpacing.Top;
+  if not FInitialSizeApplied then Panel.Height:=Max(Panel.Height,
+    HeaderHeight+PvHeight+LogHeight+MctsHeight+FMctsMemo.BorderSpacing.Top);
+  Required:=HeaderHeight+PvHeight+LogMinimum+MctsHeight+FMctsMemo.BorderSpacing.Top;
   if FMctsStatsGrid<>nil then begin
     // The layout pass measures new row heights after the grid is constructed.
     // Fit the complete statistics table using those heights, not the old pixels.

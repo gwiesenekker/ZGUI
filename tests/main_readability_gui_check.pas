@@ -44,6 +44,21 @@ begin
   Main.Show;Pump;
   // Measure a fresh form before font stress, using the application's default fonts.
   for J:=0 to 1 do begin
+   Main.SelectGameVariant(RegisteredGame(J));Pump;
+   for I:=0 to 3 do begin
+    LayoutWatch.Step('U29 shrink/grow '+RegisteredGame(J).Name+' step '+IntToStr(I));
+    case I of
+     0,2:Main.SetBounds(0,0,1000,500);
+     1:Main.SetBounds(0,0,1300,800);
+     3:Main.SetBounds(0,0,1366,700);
+    end;
+    Pump;Check(Main.Visible,'U29 shrink/grow keeps the application open');CheckMctsRows(Main);
+   end;
+   for I:=0 to 2 do begin
+    if I=0 then Main.Width:=1083 else if I=1 then Main.Width:=1300 else Main.Width:=1366;
+    Main.Height:=690;Pump;
+    Check(Main.Height<=700,'U26 laptop height at normal desktop width '+IntToStr(Main.Width));
+   end;
    LayoutWatch.Step('default-font '+RegisteredGame(J).Name);
    Main.SelectGameVariant(RegisteredGame(J));Pump;Main.SetBounds(0,0,1000,650);Pump;
    WriteLn('U26 default ',RegisteredGame(J).Name,': system_font=',Screen.SystemFont.Name,' system_size=',Screen.SystemFont.Size,

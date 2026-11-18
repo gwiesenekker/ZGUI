@@ -55,9 +55,13 @@ engine configuration when resuming or replaying a comparison.
 
 SPRT settings should be fixed before inspecting results if interpreting their
 nominal error rates. No finite set of tests proves support for all chess dead
-positions; the manual describes the implemented material checks. A historical
-commit range still awaits Claude's full review; this is a tested release, not a
-claim that every commit has completed independent review.
+positions; the manual describes the implemented material checks.
+
+All commits through v1.1 have now been reviewed by Claude. The catch-up review
+identified a resize crash and laptop-sizing problems in the published 1.1 build;
+post-release fixes and other follow-ups are listed under **Unreleased** in
+CHANGELOG.md. Published 1.1 binaries are unchanged by those source updates.
+Native Windows validation remains limited.
 
 Based on GWDGUI 3.4; distributed under GPLv3. SQLite is public-domain software;
 see the SQLite notice in the Windows portable archive.

@@ -2,17 +2,29 @@ unit uTournamentBallot;
 {$mode objfpc}{$H+}
 interface
 uses Classes,uGamePosition;
-function NormalizeBallotFEN(Variant:TGameVariant;const Text:string):string;
+function NormalizeBallotFEN(Variant:TGameVariant;const Text:string;RequirePlayable:Boolean=True):string;
 procedure ShuffleOpeningPairs(Positions:TStrings);
 procedure LoadOpeningBallot(const FileName:string;Variant:TGameVariant;Positions:TStrings);
 implementation
 uses SysUtils;
-function NormalizeBallotFEN(Variant:TGameVariant;const Text:string):string;
-var P:TGamePosition;
+function NormalizeBallotFEN(Variant:TGameVariant;const Text:string;RequirePlayable:Boolean):string;
+var P:TGamePosition;Rules:TGameRules;Reason:string;
 begin
   if Trim(Text)='' then raise EConvertError.Create('Empty opening position');
   P:=Variant.CreatePosition;
-  try P.LoadFromFEN(Trim(Text));Result:=P.ToFEN;finally P.Free;end;
+  try
+    if RequirePlayable then P.LoadOpeningPosition(Trim(Text))
+    else P.LoadFromFEN(Trim(Text)); // Archived starting fields stay strict FEN.
+    if RequirePlayable then begin
+      Rules:=Variant.CreateRules;
+      try
+        Rules.Reset(P);
+        if Rules.Outcome(P,Reason)<>goOngoing then
+          raise EConvertError.Create('Opening position is already over: '+Reason);
+      finally Rules.Free;end;
+    end;
+    Result:=P.ToFEN;
+  finally P.Free;end;
 end;
 procedure ShuffleOpeningPairs(Positions:TStrings);
 var I,J:Integer;

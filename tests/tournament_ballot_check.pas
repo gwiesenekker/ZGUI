@@ -42,6 +42,51 @@ begin
   try Wrapper.Add('record',J);B.LoadFromJson(Wrapper);Check(B.StartingFEN=Second,'Per-game FEN survives saved record and attempt history');finally Wrapper.Free;end;
  finally A.Free;B.Free;P.Free;Engines.Free;Lines.Free;Fens.Free;DeleteFile(Name);end;
 end;
+procedure ValidationChecks(Chess,Draughts:TGameVariant);
+const Mate='7k/6Q1/6K1/8/8/8/8/8 b - - 0 1';
+var P:TGamePosition;Fens,Lines:TStringList;Before,Name,Four:string;Failed:Boolean;
+ procedure Reject(V:TGameVariant;const Fen,MessagePart:string);
+ begin
+  Before:=Fens.Text;Lines.Text:=V.DefaultStartingFEN+LineEnding+Fen;Lines.SaveToFile(Name);Failed:=False;
+  try LoadOpeningBallot(Name,V,Fens);except on E:EConvertError do begin
+   Failed:=True;Check((Pos('line 2',E.Message)>0) and (Pos(MessagePart,LowerCase(E.Message))>0),'Rejected ballot names line and cause: '+E.Message);
+  end;end;
+  Check(Failed and (Fens.Text=Before),'Rejected ballot leaves existing positions unchanged');
+ end;
+begin
+ Fens:=TStringList.Create;Lines:=TStringList.Create;Name:=GetTempFileName(GetTempDir,'ballot-validation');
+ try
+  Fens.Add(Chess.DefaultStartingFEN);
+  Reject(Chess,Mate,'checkmate');
+  Reject(Chess,'7k/5Q2/6K1/8/8/8/8/8 b - - 0 1','stalemate');
+  Reject(Chess,'7k/8/8/8/8/8/8/K7 w - - 0 1','material');
+  Reject(Chess,'7k/8/8/8/8/8/P7/K7 w - - 150 1','75-move');
+  Reject(Draughts,'W:W:B1-20','no legal move');
+  Reject(Draughts,'W:W1,31-49:B11-20','promotion');
+  Reject(Draughts,'B:W31-40:B46','promotion');
+  Check(NormalizeBallotFEN(Chess,Mate,False)=Mate,'Valid terminal positions in existing archives remain readable');
+  Four:=Copy(Chess.DefaultStartingFEN,1,Length(Chess.DefaultStartingFEN)-4);
+  Failed:=False;try NormalizeBallotFEN(Chess,Four,False);except on E:EConvertError do Failed:=True;end;
+  Check(Failed,'Saved tournament starting fields remain strict FEN');
+  Check(NormalizeBallotFEN(Chess,Four)=Chess.DefaultStartingFEN,'Four-field EPD receives default move counters');
+  Check(NormalizeBallotFEN(Chess,Four+' bm e4; id "opening one";')=Chess.DefaultStartingFEN,'EPD metadata is ignored, not played');
+  Check(NormalizeBallotFEN(Chess,Four+' hmvc 98; fmvn 42;')=Chess.DefaultStartingFEN,'EPD counter opcodes are explicitly ignored');
+  Check(NormalizeBallotFEN(Chess,Four+' 17 42')=Four+' 17 42','Six-field FEN retains supplied counters');
+  Reject(Chess,Four+' -1 1','halfmove');
+  P:=Chess.CreatePosition;
+  try
+   Failed:=False;try P.LoadFromFEN(Four);except on E:EConvertError do Failed:=True;end;
+   Check(Failed,'Ordinary FEN inputs remain strict');
+  finally P.Free;end;
+  P:=Draughts.CreatePosition;
+  try
+   Before:=P.ToFEN;Failed:=False;
+   try P.LoadFromFEN('B:W31-40:B46');except on E:EConvertError do Failed:=True;end;
+   Check(Failed and (P.ToFEN=Before),'Illegal draughts FEN is rejected atomically');
+   P.LoadFromFEN('W:WK1,31:BK50,20');Check(P.LegalMoveCount>0,'Kings on promotion rows remain valid');
+  finally P.Free;end;
+ finally DeleteFile(Name);Lines.Free;Fens.Free;end;
+end;
 procedure ShuffleChecks;
 var Positions,Original,Sorted,Engines:TStringList;R:TTournamentPairingRound;I:Integer;
 begin
@@ -69,7 +114,7 @@ var Chess:TChessVariant;Draughts:TDraughtsVariant;Fens,Engines:TStringList;R:TTo
 begin
  Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
  try
-  ForVariant(Chess);ForVariant(Draughts);ShuffleChecks;
+  ForVariant(Chess);ForVariant(Draughts);ValidationChecks(Chess,Draughts);ShuffleChecks;
   if ParamCount>0 then begin
    Fens:=TStringList.Create;Engines:=TStringList.Create;
    try

@@ -36,6 +36,7 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure LoadFromFEN(const AText: string); override;
+    procedure LoadOpeningPosition(const AText:string);override;
     function ToFEN: string; override;
     procedure AssignFrom(ASource: TGamePosition); override;
     function Clone: TGamePosition; override;
@@ -523,6 +524,21 @@ var State: TChessState;
 begin
   State := ParseFEN(AText);
   FState := State; FMovesValid := False;
+end;
+
+procedure TChessPosition.LoadOpeningPosition(const AText:string);
+var Fields:TStringList;I:Integer;Fen:string;
+begin
+ Fields:=TStringList.Create;
+ try
+  ExtractStrings([' ',#9,#10,#13],[],PChar(Trim(AText)),Fields);
+  if (Fields.Count=4) or ((Fields.Count>4) and (Fields[4]<>'') and
+    (Fields[4][1] in ['a'..'z','A'..'Z'])) then begin
+   Fen:='';for I:=0 to 3 do begin if I>0 then Fen+=' ';Fen+=Fields[I];end;
+   // Opening ballots use positions, not EPD test instructions. Ignore opcodes.
+   LoadFromFEN(Fen+' 0 1');
+  end else LoadFromFEN(AText);
+ finally Fields.Free;end;
 end;
 
 function TChessPosition.ToFEN: string;

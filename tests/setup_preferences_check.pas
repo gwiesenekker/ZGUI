@@ -327,7 +327,11 @@ begin
       Main.Font.Size:=8+5*J;Main.Width:=Main.Width+1;Pump;
       Bitmap.Canvas.Font.Assign(Log.Font);
       Check(Log.ClientHeight>=2*Bitmap.Canvas.TextHeight('Ag'),'Annotator log retains two readable text lines');
-      Check(Log.Height>=TMemo(Main.FindComponent('AnnotatorPvMemo')).Height,'Annotator log is at least the No PV height');
+      Check(Log.Height>=TMemo(Main.FindComponent('AnnotatorPvMemo')).Height,
+        Format('Annotator log is at least the No PV height: font=%d log=%d min=%d PV=%d panel=%d min=%d',
+          [Main.Font.Size,Log.Height,Log.Constraints.MinHeight,
+           TMemo(Main.FindComponent('AnnotatorPvMemo')).Height,
+           Log.Parent.Height,Log.Parent.Constraints.MinHeight]));
       Check(Log.Top+Log.Height<=Log.Parent.ClientHeight,'Annotator log stays inside its allocated panel');
     end;
     Definition.Kind:=eekUci;Definition.ExePath:=Name;

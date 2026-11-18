@@ -535,6 +535,10 @@ begin
     end;
   end;
 
+  for I:=1 to 5 do
+    if LBoard[I]=pkWhiteMan then raise EConvertError.CreateFmt('White man on promotion square %d',[I]);
+  for I:=46 to 50 do
+    if LBoard[I]=pkBlackMan then raise EConvertError.CreateFmt('Black man on promotion square %d',[I]);
   FSquares := LBoard;
   FSideToMove := LSideToMove;
   FStartingFEN := Trim(AFEN);

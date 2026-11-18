@@ -4,6 +4,49 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Address the catch-up review findings — 2026-11-18
+
+Commit: pending.
+
+- Request: “Could you comment on the latest review from Claude and address all
+  issues you agree with?” Prior review: claude/REVIEWS.md, review-c18a013.
+  Local work note: chatgpt/REVIEW_C18A013_RESPONSE.md (kept outside Git).
+- U29/U26: remove child-pane resizing from ChangeBounds; queue guarded adjustments
+  after viewport negotiation and use the existing guarded measurement hook.
+  Treat the PV graph's height as a preference, measure its label minimum, and
+  allow compact log space while preserving readable text, three notation lines
+  and all MCTS rows. Applies to both chess and draughts.
+- Preserve the shared memo minimum when reserving annotator space, so the status
+  log remains at least as tall as the actual No PV box after a font change.
+  Keep the existing two-readable-line checks and add measured failure details.
+- Add repeated shrink/grow GUI checks plus a real-executable native resize,
+  idle-CPU and clean-close probe for both games. Hidden tests can select a laptop
+  screen size. A watchdog failure now exits without GTK finalization on its
+  worker thread; expected-failure probes verify the diagnostics and exit code.
+- T19: keep oldest-ready precedence, while allowing one successful shared-key
+  backfill behind a turn blocked by live reservations. Polls and failed launches
+  do not spend the allowance; refreshes do not replenish it. Use the existing
+  reservations, queue and tournament start path for both games.
+- T20: reject new terminal ballots through the existing rules adapters, reporting
+  line/reason atomically. Valid terminal positions in saved archives remain
+  readable. Reject unpromoted draughts men on their own promotion rank before
+  committing a FEN load; kings on those squares remain valid.
+- T21: add ballot-only chess EPD normalization through the position interface.
+  Four-field positions get counters 0/1; trailing operations are ignored. Full
+  FEN counters and strict non-ballot FEN entry remain unchanged. Add .epd to the
+  chess ballot picker and document both formats and queue policy.
+- Stop tracking the obsolete PDF while keeping its local copy. Ignore local
+  minidump/review-output files. Update the stale full-review statement in release
+  notes; leave published v1.1 files intact. Recovery cleanup is a separate future
+  feature, not an automatic deletion of user files.
+- Validation: GTK2 build, full regression, tournament, DXP and lifecycle checks
+  passed. All 30 GUI suites passed, including 11,258 font/window/DPI assertions,
+  287 setup/preferences checks, 203 readability checks and 473 tournament-tab
+  checks. Native application resize/idle/clean-close checks passed for both games
+  on a hidden 1366x768 display, accepting 1083x600, 1300x690 and 1366x700.
+  The 79-position ballot passed the focused 250-check test. C11 still requires
+  native Windows console/pipe QA; issue statuses remain owned by Claude.
+
 ## 1.1 — 2026-11-18
 
 ### Refresh the manual and prepare release 1.1 — 2026-11-18

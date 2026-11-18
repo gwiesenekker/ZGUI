@@ -31,6 +31,9 @@ type
     { Setup and copying }
     // Raises EConvertError for invalid text; the position is unchanged then.
     procedure LoadFromFEN(const AText: string); virtual; abstract;
+    // Opening-file adapter. Default is strict FEN; chess also accepts EPD here.
+    // Other FEN entry points keep their strict LoadFromFEN contract.
+    procedure LoadOpeningPosition(const AText:string);virtual;
     function ToFEN: string; virtual; abstract;
     // ASource must be of the same concrete class.
     procedure AssignFrom(ASource: TGamePosition); virtual; abstract;
@@ -244,6 +247,9 @@ begin
     ATarget := ASource.Clone;
   end;
 end;
+
+procedure TGamePosition.LoadOpeningPosition(const AText:string);
+begin LoadFromFEN(AText);end;
 
 procedure TGamePosition.MovesBetween(AFrom, ATo: Integer; AMoves: TStrings);
 var

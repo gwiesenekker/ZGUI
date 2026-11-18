@@ -42,6 +42,13 @@ else
   FAILED+=("cli_application_check (run)")
 fi
 
+echo "==> native_main_resize_check (real application shrink/grow and idle CPU for both games)"
+if timeout 60s python3 "$ROOT_DIR/tests/native_main_resize_check.py" "$OUT_DIR/cli-application/zgui"; then
+  PASSED=$((PASSED + 1))
+else
+  FAILED+=("native_main_resize_check (run)")
+fi
+
 run_check "startup_cli_gui_check (GTK2, live CLI tournaments and cross-process file leases)" startup_cli_gui_check "/startup-cli" 60s
 
 run_check "standalone_preservation_check (GTK2, hidden main form)" standalone_preservation_check "" 60s

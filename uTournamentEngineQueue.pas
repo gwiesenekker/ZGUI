@@ -21,7 +21,8 @@ type
     procedure Request(AOwner: TObject; ARow: Integer; AKeys: TStrings);
     procedure EndUpdate(AOwner: TObject);
     procedure RemoveOwner(AOwner: TObject);
-    function BlockingOwner(AOwner: TObject; ARow: Integer): TObject;
+    function BlockingOwner(AOwner: TObject; ARow: Integer; ABusyKeys:TStrings=nil): TObject;
+    procedure GameStarted(AOwner:TObject;ARow:Integer;ABusyKeys:TStrings);
   end;
 
 implementation
@@ -31,7 +32,7 @@ type
     Owner: TObject;
     Row: Integer;
     Sequence: QWord;
-    Seen: Boolean;
+    Seen,BackfillUsed: Boolean;
     Keys: TStringList;
     constructor Create;
     destructor Destroy; override;
@@ -71,14 +72,14 @@ end;
 
 procedure TTournamentEngineQueue.Request(AOwner: TObject; ARow: Integer;
   AKeys: TStrings);
-var I: Integer; R, Existing: TEngineRequest; Ticket: QWord;
+var I: Integer; R, Existing: TEngineRequest; Ticket: QWord;Used:Boolean;
 begin
   Existing := nil;
-  Ticket := 0;
+  Ticket := 0;Used:=False;
   for I := 0 to FRequests.Count - 1 do begin
     R := TEngineRequest(FRequests[I]);
     if R.Owner <> AOwner then Continue;
-    Ticket := R.Sequence;
+    Ticket := R.Sequence;Used:=Used or R.BackfillUsed;
     if R.Row = ARow then Existing := R;
   end;
   if Existing = nil then begin
@@ -86,7 +87,7 @@ begin
     Existing := TEngineRequest.Create;
     Existing.Owner := AOwner;
     Existing.Row := ARow;
-    Existing.Sequence := Ticket;
+    Existing.Sequence := Ticket;Existing.BackfillUsed:=Used;
     FRequests.Add(Existing);
   end;
   Existing.Seen := True;
@@ -109,9 +110,23 @@ begin
     if TEngineRequest(FRequests[I]).Owner = AOwner then FRequests.Delete(I);
 end;
 
+function HasBusyKey(Request:TEngineRequest;Busy:TStrings):Boolean;
+var I:Integer;
+begin
+ Result:=False;if Busy=nil then Exit;
+ for I:=0 to Request.Keys.Count-1 do if Busy.IndexOf(Request.Keys[I])>=0 then Exit(True);
+end;
+
+function SharesKeys(A,B:TEngineRequest):Boolean;
+var I:Integer;
+begin
+ Result:=False;
+ for I:=0 to A.Keys.Count-1 do if B.Keys.IndexOf(A.Keys[I])>=0 then Exit(True);
+end;
+
 function TTournamentEngineQueue.BlockingOwner(AOwner: TObject;
-  ARow: Integer): TObject;
-var I,J: Integer; Candidate,R,Oldest: TEngineRequest;
+  ARow: Integer; ABusyKeys:TStrings): TObject;
+var I: Integer; Candidate,R,Oldest: TEngineRequest;
 begin
   Result := nil;
   Candidate := nil;
@@ -124,13 +139,30 @@ begin
   for I := 0 to FRequests.Count - 1 do begin
     R := TEngineRequest(FRequests[I]);
     if (R.Owner = AOwner) or (R.Sequence >= Candidate.Sequence) then Continue;
-    for J := 0 to Candidate.Keys.Count - 1 do
-      if R.Keys.IndexOf(Candidate.Keys[J]) >= 0 then begin
-        if (Oldest = nil) or (R.Sequence < Oldest.Sequence) then Oldest := R;
-        Break;
-      end;
+    if not SharesKeys(Candidate,R) then Continue;
+    // A blocked turn can lend its otherwise idle keys to one successful game.
+    // Once spent, preserve precedence until this older turn actually starts.
+    if HasBusyKey(R,ABusyKeys) and not R.BackfillUsed then Continue;
+    if (Oldest=nil) or (R.Sequence<Oldest.Sequence) then Oldest:=R;
   end;
   if Oldest <> nil then Result := Oldest.Owner;
+end;
+
+procedure TTournamentEngineQueue.GameStarted(AOwner:TObject;ARow:Integer;ABusyKeys:TStrings);
+var I,J:Integer;Candidate,R:TEngineRequest;
+begin
+ Candidate:=nil;
+ for I:=0 to FRequests.Count-1 do begin
+  R:=TEngineRequest(FRequests[I]);if (R.Owner=AOwner) and (R.Row=ARow) then Candidate:=R;
+ end;
+ if Candidate=nil then Exit;
+ for I:=0 to FRequests.Count-1 do begin
+  R:=TEngineRequest(FRequests[I]);
+  if R.BackfillUsed or (R.Owner=AOwner) or (R.Sequence>=Candidate.Sequence) or
+    not SharesKeys(Candidate,R) or not HasBusyKey(R,ABusyKeys) then Continue;
+  for J:=0 to FRequests.Count-1 do
+   if TEngineRequest(FRequests[J]).Sequence=R.Sequence then TEngineRequest(FRequests[J]).BackfillUsed:=True;
+ end;
 end;
 
 end.

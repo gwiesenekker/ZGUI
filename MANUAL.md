@@ -295,7 +295,7 @@ spaces. Supply exactly one selector for each engine:
 | `engine2_id=2` | Alternatively, second engine's session ID. |
 | `engine2_key="..."` | Alternatively, second engine's identity key. |
 | `name="Test match"` | Optional tournament name; generated automatically when omitted. |
-| `ballot="C:\Matches\ballot2.fen"` | Optional opening-position file. Omit for a double round-robin from the game's default starting position. Relative paths use the launch directory; an explicitly empty filename is rejected. |
+| `ballot="C:\Matches\ballot2.fen"` | Optional opening-position file (`.fen` for either game; `.epd` also accepted for chess). Omit for a double round-robin from the game's default starting position. Relative paths use the launch directory; an explicitly empty filename is rejected. |
 | `shuffle_opening_pairs=true` | Shuffle ballot entries before creating pairings, keeping both colour-reversed games together. Accepts true or false; default: false. True requires a ballot. The actual order is saved and reused on load, resume and SPRT replay. |
 | `time=300` | Positive finite number of seconds per time-control period, not minutes. Omitted: selected game's GUI default. |
 | `moves=75` | Nonnegative integer moves per period; 0 means sudden death. Omitted: selected game's GUI default. |
@@ -1247,9 +1247,14 @@ To play the same set of opening positions with both engine colours:
 
 1. Select the engines in the tournament window.
 2. Click **Ballot file...** and select a text `.fen` file with one complete FEN
-   per line, using the selected game's FEN notation. Blank lines and lines
+   per line, using the selected game's notation. Chess also accepts `.epd`
+   opening files, described below. Blank lines and lines
    beginning with `#`, `;` or `//` are ignored. A UTF-8 BOM is accepted. Invalid
-   positions report the source line; no partial ballot is installed.
+   positions report the source line; no partial ballot is installed. New ballots
+   reject positions that the existing game rules would end immediately, including
+   checkmate, stalemate and supported dead-position/move-counter draws. Draughts
+   men on their own promotion row are invalid; use kings there. Valid terminal
+   starting positions in existing saved tournament archives remain readable.
 3. Optionally check **Shuffle opening pairs** in the pairing row before creating
    the pairing. It defaults to off and is available only with a loaded ballot.
 4. Click **Create pairing**. Ballots select **Double round-robin** automatically.
@@ -1258,6 +1263,20 @@ To play the same set of opening positions with both engine colours:
    chess move counters, stays the same. Round is the entry number in the scheduled
    order.
 5. Set time controls/concurrency and click **Play** as usual.
+
+**Chess EPD input:** EPD uses the first four FEN fields (pieces, side to move,
+castling rights and en passant), followed by optional operations. The ballot
+loader supplies move counters `0 1` for a four-field EPD position and ignores
+all trailing operations, including `bm`, `id`, `hmvc` and `fmvn`. It does not run
+best-move tests. For example:
+
+```text
+rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - bm e4; id "Start";
+```
+
+Full six-field FEN lines keep their original counters. EPD support is limited
+to chess opening ballots (including the CLI `ballot` parameter); ordinary FEN
+boxes still require full FEN, and **Open game** still opens PGN/PDN.
 
 For two engines and 79 positions this creates **158 games**. By default, positions
 are used in file order, including repeated entries. With **Shuffle opening pairs**,
@@ -1314,8 +1333,13 @@ row identifies its engine and the tournament using it. Competing tournaments use
 **oldest-waiting-first** allocation: a waiting turn keeps its place through timer
 updates. Both engines must be available together. After starting one game, that
 tournament rejoins behind existing waiters for its next game. A younger turn
-cannot take an engine needed by an older waiting turn; games using unrelated
-engines can continue. Stop or Close removes the tournament's waiting turn.
+normally cannot take an engine needed by an older waiting turn. If that older
+turn cannot start because one of its engines is already in use, one younger game
+may borrow its otherwise idle shared engines. This allowance is spent only when
+a game actually starts, survives timer updates, and applies once per older turn.
+Further conflicting games wait until that older turn starts or leaves the queue.
+This bounded backfill avoids stranding all idle engines without permitting
+unlimited bypass. Games using unrelated engines can continue. Stop or Close removes the tournament's waiting turn.
 Separate engine registrations represent separate instances; DXP endpoint conflicts
 still count as shared resources.
 
@@ -1984,7 +2008,9 @@ and database filters wrap when needed; preferences pages scroll when their conte
 needs more space. The main FEN field fits a full chess FEN and expands for longer
 displayed positions. The game-moves pane prefers ten lines at its active
 notation font when space permits, with a usable three-line minimum in smaller
-windows. Existing splitters still let you adjust the main panes.
+windows. Smaller windows compact the score graph and log space while retaining
+readable PV/status text and the complete MCTS statistics table. Existing splitters
+still let you adjust the main panes.
 
 In tables, the mouse wheel scrolls the view without changing the selected row.
 Use a click or the arrow keys to change selection. Dragging a horizontal or

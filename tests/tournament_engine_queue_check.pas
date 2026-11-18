@@ -1,13 +1,13 @@
 program tournament_engine_queue_check;
 {$mode objfpc}{$H+}
 uses Classes, SysUtils, uTournamentEngineQueue;
-var Q: TTournamentEngineQueue; A,B,C: TObject; Keys: TStringList; Checks: Integer;
+var Q: TTournamentEngineQueue; A,B,C: TObject; Keys,Busy: TStringList; Checks: Integer;
 procedure Check(Value: Boolean; const Msg: string);
 begin Inc(Checks); if not Value then raise Exception.Create(Msg); end;
 procedure Request(Owner: TObject; Row: Integer; const First,Second: string);
 begin Keys.Clear; Keys.Add(First); Keys.Add(Second); Q.Request(Owner,Row,Keys); end;
 begin
-  Q:=TTournamentEngineQueue.Create; Keys:=TStringList.Create;
+  Q:=TTournamentEngineQueue.Create; Keys:=TStringList.Create;Busy:=TStringList.Create;
   A:=TObject.Create;B:=TObject.Create;C:=TObject.Create;
   try
     Request(A,1,'engine1','engine2');
@@ -41,6 +41,26 @@ begin
     Check(Q.BlockingOwner(B,1)=C,'Precedence chain has decreasing age, no deadlock cycle');
     Q.RemoveOwner(C);Q.RemoveOwner(B);
     Check(Q.BlockingOwner(A,1)=nil,'Precedence chain drains in order');
+    Q.RemoveOwner(A);Q.RemoveOwner(B);Q.RemoveOwner(C);
+    Request(A,1,'busy-player','idle-player');Request(B,1,'idle-player','other-idle');
+    Busy.Add('busy-player');
+    Check(Q.BlockingOwner(B,1,Busy)=nil,'A live reservation does not strand otherwise idle engines');
+    Check(Q.BlockingOwner(B,1,Busy)=nil,'Polling does not spend the backfill allowance');
+    Q.GameStarted(B,1,Busy);Q.RemoveOwner(B);
+    Request(C,1,'idle-player','third-idle');
+    Check(Q.BlockingOwner(C,1,Busy)=A,'Only one successful shared-key backfill per older turn');
+    Q.BeginUpdate(A);Request(A,1,'busy-player','idle-player');Request(A,2,'busy-player','third-idle');Q.EndUpdate(A);
+    Check(Q.BlockingOwner(C,1,Busy)=A,'Timer refresh and another row do not replenish allowance');
+    Busy.Clear;Busy.Add('idle-player');Request(C,2,'busy-player','third-idle');
+    Check(Q.BlockingOwner(C,2,Busy)=A,'Released keys cannot alternate backfills and starve the older turn');
+    Busy.Clear;
+    Check(Q.BlockingOwner(C,1,Busy)=A,'Older ready request immediately regains precedence');
+    Q.RemoveOwner(A);Request(A,3,'busy-player','idle-player');Busy.Add('busy-player');
+    Check(Q.BlockingOwner(A,3,Busy)=C,'Older ready younger-owner turn retains its original age');
+    Q.RemoveOwner(C);Request(C,2,'idle-player','third-idle');
+    Check(Q.BlockingOwner(C,2,Busy)=nil,'New older-owner turn gets a fresh bounded allowance');
+    Busy.Clear;
+    Check(Q.BlockingOwner(C,2,Busy)=A,'All-free engines use oldest-waiting-first');
     WriteLn('Tournament engine queue checks passed (',Checks,' checks)');
-  finally Q.Free;Keys.Free;A.Free;B.Free;C.Free;end;
+  finally Q.Free;Keys.Free;Busy.Free;A.Free;B.Free;C.Free;end;
 end.
