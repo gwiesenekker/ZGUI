@@ -79,4 +79,4 @@ unchanged for saved-tournament compatibility.
 - All GUI tests used hidden displays. No user engines, GWDGUI or Claude outputs
   were modified. Native Windows CLI verification remains outstanding.
 
-Implementation commit: pending.
+Implementation commit: `55e173c`.

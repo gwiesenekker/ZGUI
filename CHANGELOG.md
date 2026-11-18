@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Align laptop test conditions and diagnose layout stalls — 2026-11-18
 
-Commit: pending.
+Commit: `55e173c`.
 
 - Request: “review Claude's latest review, update ISSUES.md, and address the
   findings you agree with”; reviewed C15 in claude/REVIEWS.md, review-ffccb25.
