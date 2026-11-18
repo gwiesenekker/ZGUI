@@ -1,4 +1,4 @@
-# ZGUI 1.1
+# ZGUI 1.2
 
 ZGUI is a desktop GUI for **chess and international draughts**, with both games
 available side by side. It builds on GWDGUI 3.4 and preserves its shared game,
@@ -18,7 +18,7 @@ analysis, tournament and database infrastructure.
   matches; DXP remains a game protocol, not an annotator protocol.
 - Tabbed round-robin and Swiss tournaments, concurrent games, shared engine
   reservations and oldest-waiting-first allocation across tournaments.
-- Opening ballot files for either game: every engine pair plays each FEN twice
+- Opening ballot files (FEN for either game, EPD also for chess): every engine pair plays each FEN twice
   with colours reversed, optional opening-pair shuffling, and saved scheduled order.
 - Live paired GSPRT comparisons, optional time-forfeit adjudication, and an
   interactive `--cli` in the normal GUI for creating, querying and stopping matches.
