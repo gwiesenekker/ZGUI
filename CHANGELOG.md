@@ -8,7 +8,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Refresh the manual and prepare release 1.1 — 2026-11-18
 
-Commit: pending.
+Commit: `0d31973`.
 
 - Reviewed the manual against current GUI/CLI, engine storage, database context
   selection and recent changes. Correct stale shared-UCI-settings descriptions,
