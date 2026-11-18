@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Address the catch-up review findings — 2026-11-18
 
-Commit: pending.
+Commit: `ce95148`.
 
 - Request: “Could you comment on the latest review from Claude and address all
   issues you agree with?” Prior review: claude/REVIEWS.md, review-c18a013.
