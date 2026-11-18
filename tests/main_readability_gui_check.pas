@@ -1,6 +1,6 @@
 program main_readability_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,uGuiLayoutTestWatch,Forms,Classes,SysUtils,Controls,
  StdCtrls,Grids,Math,uMainForm,uGameNotationView,uGamePosition,uChessPosition,
  uDraughtsPosition,uGameGuiProfile,uGuiDialogs;
 type TErrors=class
@@ -8,12 +8,12 @@ type TErrors=class
 end;
 procedure TErrors.Report(Sender:TObject;E:Exception);
 begin WriteLn('FAIL: ',E.Message);DumpExceptionBackTrace(Output);Flush(Output);Halt(1);end;
-var Checks:Integer=0;
+var Checks:Integer=0;LayoutWatch:TGuiLayoutTestWatch;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
 procedure Pump;
 var I:Integer;
-begin for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;end;
+begin for I:=1 to 10 do begin LayoutWatch.Step('');Application.ProcessMessages;Sleep(5);end;end;
 procedure CheckMctsRows(Main:TMainForm);
 var Grid:TStringGrid;I:Integer;C:TControl;
 begin
@@ -36,11 +36,21 @@ var Main:TMainForm;Fen:TEdit;Moves:TGameNotationView;Errors:TErrors;
  I,J,Size,Mode,Required:Integer;
 begin
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
- Errors:=TErrors.Create;Application.OnException:=@Errors.Report;
+ LayoutWatch:=TGuiLayoutTestWatch.Create;Errors:=TErrors.Create;Application.OnException:=@Errors.Report;
  RegisterGame(TChessVariant.Create,ChessGuiProfile);RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
  RegisterDefaultGameVariant(RegisteredGame(0));Main:=nil;
  try
   Main:=TMainForm.Create(nil);
+  Main.Show;Pump;
+  // Measure a fresh form before font stress, using the application's default fonts.
+  for J:=0 to 1 do begin
+   LayoutWatch.Step('default-font '+RegisteredGame(J).Name);
+   Main.SelectGameVariant(RegisteredGame(J));Pump;Main.SetBounds(0,0,1000,650);Pump;
+   WriteLn('U26 default ',RegisteredGame(J).Name,': system_font=',Screen.SystemFont.Name,' system_size=',Screen.SystemFont.Size,
+    ' form_font=',Main.Font.Name,' size=',Main.Font.Size,
+    ' height=',Main.Height,' minimum=',Main.Constraints.MinHeight);Flush(Output);
+   Check(Main.Height<=700,'U26 default-font main window fits laptop work area');
+  end;
   if GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT')<>'' then Main.Font.Name:=GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT');
   Main.Show;Pump;CheckMctsRows(Main);
   Fen:=TEdit(Main.FindComponent('MainFenEdit'));Moves:=TGameNotationView(Main.FindComponent('GameMoveMemo'));
@@ -59,8 +69,6 @@ begin
      Check(Fen.Width>=Required,'Full FEN fits with a margin');
      if Mode=1 then Check(Moves.LinesInWindow>=10,'Notation shows ten lines when space permits')
      else Check(Moves.LinesInWindow>=3,'Notation retains a usable three-line minimum');
-     if (Mode=0) and (Size=0) then WriteLn('U26 ',RegisteredGame(J).Name,': height=',Main.Height,' minimum=',Main.Constraints.MinHeight);
-     if (Mode=0) and (Size=0) then Check(Main.Height<=700,'U26 normal-font main window can shrink below laptop height');
      Check((Moves.Top>=0) and (Moves.Top+Moves.Height<=Moves.Parent.ClientHeight),'Notation fits its parent');
      Check((Pos('*',Moves.Lines.Text)>0) and (Moves.TopLine=1),'Standalone game result remains in notation');
     end;
@@ -71,5 +79,5 @@ begin
   Check(Fen.Width>=MeasureGuiText(LongChessFEN,Fen.Font).cx+MeasureGuiText('MM',Fen.Font).cx,
    'Longer current FEN automatically receives enough width');
   WriteLn('Main FEN / notation readability checks passed (',Checks,' checks)');
- finally Main.Free;RegisterDefaultGameVariant(nil);ClearRegisteredGames;Application.OnException:=nil;Errors.Free;end;
+ finally Main.Free;RegisterDefaultGameVariant(nil);ClearRegisteredGames;Application.OnException:=nil;Errors.Free;LayoutWatch.Free;end;
 end.

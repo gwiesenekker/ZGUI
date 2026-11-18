@@ -4,6 +4,27 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Align laptop test conditions and diagnose layout stalls — 2026-11-18
+
+Commit: pending.
+
+- Request: “review Claude's latest review, update ISSUES.md, and address the
+  findings you agree with”; reviewed C15 in claude/REVIEWS.md, review-ffccb25.
+  Notes: chatgpt/REVIEW_FFCCB25_RESPONSE.md.
+- Measure fresh chess/draughts main windows and tournament tabs with their default
+  fonts before font stress. Keep font/DPI containment checks separate from the
+  laptop-height acceptance limit. Report actual fonts, dimensions and minima.
+- Add test-only bounds-count and independent deadline watchdogs with stage/control
+  diagnostics, plus subprocess checks for both failure paths. Product layout and
+  tournament behaviour remain unchanged for both games.
+- Clarify that private UCI options do not isolate engine-written logs/learning
+  files. The history-editing/archive distinction is already documented.
+- Validation: GTK2 application build, full regression and all 29 GUI suites passed
+  (11,258 layout checks; 125 readability checks; 447 tab checks; both watchdog
+  probes). Inter as GTK's default font also passed readability, presentation and
+  the main-only layout matrix (1,204 checks). Native Windows CLI verification
+  (C11) remains outstanding; reviewer-owned issue statuses are unchanged.
+
 ### Address the remaining agreed open review findings — 2026-11-17
 
 Commit: `043134f`.

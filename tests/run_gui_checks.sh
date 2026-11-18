@@ -69,6 +69,13 @@ run_check "tournament_ballot_gui_check (GTK2, ballot positions and colour-revers
 
 XDG_CONFIG_HOME="$OUT_DIR/tabs-recovery" run_check "tournament_tabs_check (GTK2, tab lifecycle and fair cross-tournament allocation)" tournament_tabs_check "/tournament-tabs" 100s
 
+echo "==> layout_watchdog_check (bounded resize loop and stalled native dispatch)"
+if python3 "$ROOT_DIR/tests/layout_watchdog_check.py" "$OUT_DIR/tournament-tabs/tournament_tabs_check"; then
+  PASSED=$((PASSED + 1))
+else
+  FAILED+=("layout_watchdog_check (run)")
+fi
+
 echo "GUI suites passed: $PASSED; failed: ${#FAILED[@]}"
 if ((${#FAILED[@]})); then
   printf 'FAILED: %s\n' "${FAILED[@]}"

@@ -1,6 +1,6 @@
 program gui_layout_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,uGuiLayoutTestWatch,Forms,Classes,SysUtils,Controls,StdCtrls,
  Math,ComCtrls,Graphics,ExtCtrls,LCLIntf,LCLType,uGuiLayout,uGuiDialogs,uGamePosition,uChessPosition,
  uDraughtsPosition,uGameGuiProfile,uEngineEditForm,uEnginesDialog,uGameSetupForm,
  uTournamentDialog,uPreferencesForm,uDatabaseForm,uDraughtsPositionSetupForm,uMainForm,
@@ -10,9 +10,11 @@ type TErrors=class
 end;
 procedure TErrors.Report(Sender:TObject;E:Exception);
 begin WriteLn('ERROR: ',E.Message);DumpExceptionBackTrace(Output);Flush(Output);Halt(1);end;
-var Checks,Failures:Integer;Errors:TErrors;
+var Checks,Failures:Integer;Errors:TErrors;LayoutWatch:TGuiLayoutTestWatch;
 procedure Check(B:Boolean;const Msg:string);
 begin Inc(Checks);if not B then begin Inc(Failures);WriteLn('FAIL: ',Msg);end;end;
+procedure Pump;
+begin LayoutWatch.Step('');Application.ProcessMessages;end;
 procedure Inspect(C:TWinControl;Root:TForm);
 var I,J:Integer;Child:TControl;W,H:Integer;Path:string;Choice:TComboBox;
 begin
@@ -82,9 +84,9 @@ var Size,I,Mode,Tab:Integer;Pages:TPageControl;Img:TBitmap;Png:TPortableNetworkG
 begin
  try
   if F is TPreferencesForm then TPreferencesForm(F).StartEdit(DefaultGuiPreferences);
-  if GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT')<>'' then F.Font.Name:=GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT');
+  LayoutWatch.Step('layout matrix '+F.ClassName);
   WriteLn('Testing ',F.ClassName);Flush(Output);
-  F.Show;for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
+  F.Show;for I:=1 to 10 do begin Pump;Sleep(5);end;
   if F is TTournamentDialog then begin
    Inspect(F,F);
    if ParamStr(2)='--images' then begin
@@ -92,10 +94,24 @@ begin
     try Png.Assign(Img);Png.SaveToFile('/tmp/tournament-layout-initial.png');finally Png.Free;Img.Free;end;
    end;
   end;
+  if F is TMainForm then begin
+   // Fresh application fonts: keep laptop acceptance separate from font/DPI stress.
+   for I:=0 to 1 do begin
+    TMainForm(F).SelectGameVariant(RegisteredGame(I));
+    Pump;F.SetBounds(0,0,1000,650);Pump;
+    WriteLn('U26 default ',RegisteredGame(I).Name,': system_font=',Screen.SystemFont.Name,' system_size=',Screen.SystemFont.Size,
+     ' form_font=',F.Font.Name,' size=',F.Font.Size,
+     ' height=',F.Height,' minimum=',F.Constraints.MinHeight);Flush(Output);
+    Check(F.Height<=700,'U26 default-font main window fits laptop work-area height');
+    Check(F.Width<=1366,'U26 default-font main window fits laptop work-area width');
+    Inspect(F,F);
+   end;
+  end;
+  if GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT')<>'' then F.Font.Name:=GetEnvironmentVariable('ZGUI_LAYOUT_TEST_FONT');
   for Size:=0 to 2 do begin
    if Size=1 then F.Font.Size:=16 else F.Font.Size:=10;
    F.Width:=Max(F.Constraints.MinWidth,1000);F.Height:=Max(F.Constraints.MinHeight,800);
-   for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
+   for I:=1 to 10 do begin Pump;Sleep(5);end;
    for Mode:=0 to 3 do begin
     case Mode of
      0:begin F.Width:=F.Constraints.MinWidth;F.Height:=F.Constraints.MinHeight;end;
@@ -103,50 +119,39 @@ begin
      2:begin F.Width:=Max(1500,F.Constraints.MinWidth);F.Height:=Max(950,F.Constraints.MinHeight);end;
      3:F.WindowState:=wsMaximized;
     end;
-    for I:=1 to 5 do begin Application.ProcessMessages;Sleep(5);end;
+    for I:=1 to 5 do begin Pump;Sleep(5);end;
     Inspect(F,F);
     if F is TPreferencesForm then
       for I:=0 to F.ComponentCount-1 do if F.Components[I] is TPageControl then begin
        Pages:=TPageControl(F.Components[I]);
        for Tab:=0 to Pages.PageCount-1 do begin
-        Pages.ActivePageIndex:=Tab;Application.ProcessMessages;Inspect(F,F);
+        Pages.ActivePageIndex:=Tab;Pump;Inspect(F,F);
        end;
       end;
     if Mode=3 then F.WindowState:=wsNormal;
    end;
    if (ParamStr(1)='--images') or (ParamStr(2)='--images') then begin
     // Let the native window finish restoring from maximized before capturing it.
-    for I:=1 to 5 do begin Application.ProcessMessages;Sleep(5);end;
+    for I:=1 to 5 do begin Pump;Sleep(5);end;
     Img:=F.GetFormImage;Png:=TPortableNetworkGraphic.Create;
     try Png.Assign(Img);Png.SaveToFile('/tmp/layout-'+F.ClassName+'-'+IntToStr(Size)+'.png');finally Png.Free;Img.Free;end;
-   end;
-  end;
-  if F is TMainForm then begin
-   F.Font.Size:=10;F.WindowState:=wsNormal;
-   // Simulated laptop work areas; do not change the user's desktop resolution.
-   for I:=0 to 1 do begin
-    if I=0 then F.SetBounds(0,0,1366,700) else F.SetBounds(0,0,1280,740);
-    Application.ProcessMessages;TMainForm(F).RefreshLayout;Application.ProcessMessages;
-    Check(F.Height<=700+40*I,'U26 main window fits laptop work-area height');
-    Check(F.Width<=1366-86*I,'U26 main window fits laptop work-area width');
-    Inspect(F,F);
    end;
   end;
   if F is TTournamentDialog then begin
    TEdit(F.FindComponent('TournamentStartingFEN')).Text:=
      TEdit(F.FindComponent('TournamentStartingFEN')).Text+' 12345678901234567890';
-   for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;
+   for I:=1 to 10 do begin Pump;Sleep(5);end;
    Inspect(F,F);
   end;
   F.AutoAdjustLayout(lapAutoAdjustForDPI,96,144,F.Width,Round(F.Width*1.5));
-  for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;Inspect(F,F);
+  for I:=1 to 10 do begin Pump;Sleep(5);end;Inspect(F,F);
   F.AutoAdjustLayout(lapAutoAdjustForDPI,144,96,F.Width,Round(F.Width/1.5));
-  for I:=1 to 10 do begin Application.ProcessMessages;Sleep(5);end;Inspect(F,F);
+  for I:=1 to 10 do begin Pump;Sleep(5);end;Inspect(F,F);
  finally F.Free;end;
 end;
 var Chess,Draughts:TGameVariant;I:Integer;
 begin
- Errors:=TErrors.Create;Application.OnException:=@Errors.Report;
+ LayoutWatch:=TGuiLayoutTestWatch.Create;Errors:=TErrors.Create;Application.OnException:=@Errors.Report;
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
  Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
  RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);
@@ -169,7 +174,7 @@ begin
   Test(TGameSetupForm.Create(nil,Draughts));
   Test(TMainForm.Create(nil));
   end;
- finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;Application.OnException:=nil;Errors.Free;end;
+ finally RegisterDefaultGameVariant(nil);ClearRegisteredGames;Application.OnException:=nil;Errors.Free;LayoutWatch.Free;end;
  WriteLn('Layout checks: ',Checks,' checks, ',Failures,' failures');
  if Failures>0 then Halt(1);
 end.

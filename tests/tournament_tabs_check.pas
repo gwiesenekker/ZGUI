@@ -1,13 +1,13 @@
 program tournament_tabs_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,uGuiLayoutTestWatch,
   {$IFDEF LCLgtk2}Gtk2,Gtk2Proc,{$ENDIF} Forms,Classes,SysUtils,Controls,
   StdCtrls,ExtCtrls,ComCtrls,CheckLst,Grids,Dialogs,LCLIntf,FPJSON,JSONParser,uMainForm,
   uTournamentHostForm,uTournamentDialog,uTournamentGridModel,uGamePosition,
   uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,uGameSetupTypes,
   uGameOrchestrator,uRunningGame,uDraughtsEngine,uDraughtsHubEngine,uEngineParamsJson,uGuiDialogs,uGameTree,uTournamentStorage;
 type TControlAccess=class(TControl);
-var Chess,Draughts:TGameVariant;Checks:Integer=0;
+var Chess,Draughts:TGameVariant;Checks:Integer=0;LayoutWatch:TGuiLayoutTestWatch;
 procedure Check(B:Boolean;const S:string);
 begin Inc(Checks);if not B then raise Exception.Create(S);end;
 procedure Peer;
@@ -66,7 +66,7 @@ end;
 function Grid(D:TTournamentDialog):TStringGrid;
 begin Result:=TStringGrid(D.FindComponent('TournamentPairings'));end;
 procedure Pump;
-begin Application.ProcessMessages;Sleep(10);end;
+begin LayoutWatch.Step('');Application.ProcessMessages;Sleep(10);end;
 function Contents(const Name:string):string;
 var L:TStringList;
 begin L:=TStringList.Create;try L.LoadFromFile(Name);Result:=L.Text;finally L.Free;end;end;
@@ -125,7 +125,7 @@ var Main:TMainForm;Host:TTournamentHostForm;Defs:TExternalEngineList;
     Tabs:array[0..3]of TTournamentDialog;I,J:Integer;Started:QWord;
     Directory,SaveName,Before,Published,Identity:string;D,Other:TTournamentDialog;
     Root:TGameTree;Page:TTabSheet;Rejected,CanClose:Boolean;L:TStringList;
-    Decisions:TDecisions;Data:TJSONObject;Combo:TComboBox;Starts:TStarts;
+    Probe:TForm;ProbePanel:TPanel;Decisions:TDecisions;Data:TJSONObject;Combo:TComboBox;Starts:TStarts;
 procedure CheckTabReady(H:TTournamentHostForm;D:TTournamentDialog);
 begin
  Check((TControlAccess(TControl(H)).AutoSizingLockCount=0) and
@@ -156,6 +156,7 @@ end;
 procedure CheckHiddenHost;
 var H:TTournamentHostForm;D:TTournamentDialog;W,Ht,I:Integer;
 begin
+ LayoutWatch.Step('hidden-host assembly and laptop sizing');
  H:=TTournamentHostForm.Create(Main);
  W:=H.Width;Ht:=H.Height;
  try
@@ -171,17 +172,18 @@ begin
   Check((H.WindowState=wsNormal) and (H.Width=W) and (H.Height=Ht),
    Format('Opening the host keeps normal size: %dx%d became %dx%d',[W,Ht,H.Width,H.Height]));
   H.NewTournament(Chess);Pump;
-  Check((H.Width=W) and (H.Height=Ht),'Adding a tab preserves the current window size');
-  H.Font.Name:='Inter';H.Font.Size:=10;
+  Check((H.Width=W) and (H.Height=Ht),Format('Adding a tab preserves size: %dx%d became %dx%d min=%dx%d',[W,Ht,H.Width,H.Height,H.Constraints.MinWidth,H.Constraints.MinHeight]));
   for I:=0 to H.Count-1 do begin
-   H.Pages.ActivePageIndex:=I;D:=H.Dialogs[I];D.Font.Name:='Inter';D.Font.Size:=10;
-   D.RefreshLayout;Pump;H.Height:=720;Pump;
-   WriteLn('U26 Inter tournament tab ',I,': height=',H.Height,' minimum=',H.Constraints.MinHeight);
-   Check(H.Height<=720,Format('U26 Inter-font tournament host fits laptop work area: height=%d minimum=%d',[H.Height,H.Constraints.MinHeight]));
+   LayoutWatch.Step('default-font tournament tab '+IntToStr(I));
+   H.Pages.ActivePageIndex:=I;D:=H.Dialogs[I];Pump;H.Height:=690;Pump;
+   WriteLn('U26 default tournament tab ',I,': system_font=',Screen.SystemFont.Name,' system_size=',Screen.SystemFont.Size,
+    ' form_font=',H.Font.Name,' size=',H.Font.Size,
+    ' height=',H.Height,' minimum=',H.Constraints.MinHeight);Flush(Output);
+   Check(H.Height<=700,Format('U26 default-font tournament host fits laptop work area: height=%d minimum=%d',[H.Height,H.Constraints.MinHeight]));
    CheckTabReady(H,D);
   end;
 
- finally H.Free;end;
+ finally LayoutWatch.Step('destroy default-font hidden host');H.Free;end;
 end;
 procedure ChangeGame(D:TTournamentDialog;Variant:TGameVariant);
 var C:TComboBox;Index:Integer;
@@ -213,6 +215,7 @@ procedure CheckSwitchPaintOrder;
 var O:TSwitchPaintObserver;V:TGameVariant;K,J,N:Integer;C:TWinControl;
  Controls:TList;Handles:array of THandle;
 begin
+ LayoutWatch.Step('in-place game switch paint order');
  O:=TSwitchPaintObserver.Create;Controls:=TList.Create;O.Dialog:=Host.Dialogs[0];
  for J:=0 to O.Dialog.ComponentCount-1 do
   if (O.Dialog.Components[J] is TWinControl) and TWinControl(O.Dialog.Components[J]).HandleAllocated then
@@ -465,6 +468,7 @@ end;
 
 function LargeFontTab:TTournamentDialog;
 begin
+  LayoutWatch.Step('large-font tournament tab');
   Host.Font.Size:=18;Result:=Host.NewTournament(Chess);CheckTabReady(Host,Result);Pump;
   Check(Result.Font.Size=18,'New tab inherits the host font');
   Check((Result.Parent.ClientWidth>=Result.Constraints.MinWidth) and
@@ -473,6 +477,7 @@ end;
 
 procedure DiscardAll;
 begin
+ LayoutWatch.Step('discard tournament tabs');
  GuiTestConfirmationResult:=mrNo;
  try Check(Host.PrepareCloseAll and Host.FinishCloseAll,'Discard explicitly closes remaining tournament tabs');
  finally GuiTestConfirmationResult:=0;end;
@@ -484,6 +489,18 @@ begin
   try Peer;finally Chess.Free;Draughts.Free;end;Halt;
  end;
  RequireDerivedFormResource:=False;Application.Initialize;Application.CaptureExceptions:=False;
+ if (ParamStr(1)='--watchdog-bounds-test') or (ParamStr(1)='--watchdog-timeout-test') then begin
+  Probe:=TForm.Create(nil);Probe.Name:='WatchdogProbe';ProbePanel:=TPanel.Create(Probe);
+  ProbePanel.Name:='LoopingPanel';ProbePanel.Parent:=Probe;Probe.Show;
+  if ParamStr(1)='--watchdog-timeout-test' then LayoutWatch:=TGuiLayoutTestWatch.Create(200)
+  else LayoutWatch:=TGuiLayoutTestWatch.Create;
+  LayoutWatch.Step('deliberate '+ParamStr(1));
+  if ParamStr(1)='--watchdog-bounds-test' then
+   for I:=0 to 20000 do ProbePanel.Left:=I mod 2
+  else Sleep(5000);
+  Halt(1);
+ end;
+ LayoutWatch:=TGuiLayoutTestWatch.Create;
  RegisterGame(TChessVariant.Create,ChessGuiProfile);RegisterGame(TDraughtsVariant.Create,DraughtsGuiProfile);
  Chess:=RegisteredGame(0);Draughts:=RegisteredGame(1);RegisterDefaultGameVariant(Chess);
  Directory:=GetTempFileName(GetTempDir,'tabs');DeleteFile(Directory);ForceDirectories(Directory);
@@ -638,7 +655,7 @@ begin
   WriteLn('Tournament tabs checks passed (',Checks,' checks)');
  finally
   GuiTestConfirmationOnShow:=nil;GuiTestConfirmationResult:=0;GuiTestFileDialogResult:=-1;
-  Main.Free;Defs.Free;L.Free;Decisions.Free;Starts.Owners.Free;Starts.Free;DeleteFile(EnginesJsonFileName);
+  Main.Free;LayoutWatch.Free;Defs.Free;L.Free;Decisions.Free;Starts.Owners.Free;Starts.Free;DeleteFile(EnginesJsonFileName);
   RegisterDefaultGameVariant(nil);ClearRegisteredGames;
  end;
 end.

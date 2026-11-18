@@ -1450,7 +1450,10 @@ strength settings. Existing registrations without private options still read
 the old executable-side `.params.json` file until saved in the engine editor.
 Older ZGUI versions ignore the new registration options; rebuild both platform
 versions before using them. The legacy file is left unchanged. Start warns only when participants still
-share those legacy settings. Hub/DXP parameter files are unchanged.
+share those legacy settings. Private options do not isolate files an engine itself
+writes beside its executable (for example logs or learning files). If an engine
+cannot safely share those files, use separate engine directories. Hub/DXP parameter
+files are unchanged.
 
 Concurrency respects existing engine reservations: five participants permit at
 most two games at once. Rows waiting for a busy engine say so. Concurrent active
