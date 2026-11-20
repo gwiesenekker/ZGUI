@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Embed the Markdown manual as a resource — 2026-11-20
 
-Commit: pending.
+Commit: `cf9c828`.
 
 - Authorization: “Implement now; waive prior review”. Scope: manual RCDATA
   embedding, Linux/Windows build integration, loading and tests. Local work note:
