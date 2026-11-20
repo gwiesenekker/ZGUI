@@ -2,6 +2,33 @@
 
 ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
+## Unreleased
+
+### Embed the Markdown manual as a resource — 2026-11-20
+
+Commit: pending.
+
+- Authorization: “Implement now; waive prior review”. Scope: manual RCDATA
+  embedding, Linux/Windows build integration, loading and tests. Local work note:
+  chatgpt/MANUAL_RESOURCE_IMPLEMENTATION.md (kept outside Git).
+- Replace generated Pascal manual string literals with a named ZGUI_MANUAL
+  RCDATA resource compiled by FPC's resource compiler. Keep the small generated
+  build-identity include and keep generated files in the build directories.
+- Load the resource through TResourceStream and pass the same Markdown to the
+  existing Help parser, renderer, contents and search. Both chess and draughts
+  retain the same visible Help behavior and offline manual; Default IDE builds
+  retain their MANUAL.md fallback.
+- Use the configured Windows FPC installation's fpcres.exe; Linux uses fpcres
+  on PATH. Keep resource inputs separate from FPC's unit output to prevent its
+  resource-copy step from overwriting an input with itself.
+- Validation: GTK2 build and full regression passed; all 30 GUI suites passed,
+  including Help/menu/search/reflow, both game contexts and 11,258 layout checks.
+  Python and native Pascal generator checks passed for Unicode/space/apostrophe
+  paths, CRLF, clean/dirty/archive/no-Git builds, missing compiler/input failures,
+  conflicting external manuals and the IDE fallback. Windows build.bat checks
+  passed under Wine. Windows cross-compilation was skipped (missing FPC target
+  units); native Windows execution remains unverified.
+
 ## 1.2 — 2026-11-18
 
 ### Address the catch-up review findings — 2026-11-18

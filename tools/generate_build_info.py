@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Embed the manual and the build's Git identity, without modifying sources."""
+"""Generate build identity and a manual RCDATA resource in the build directory."""
 import pathlib
 import subprocess
 import sys
@@ -14,9 +14,9 @@ def literal(text):
     return "'" + text.replace("'", "''") + "'"
 
 
-def generate(root, output):
+def generate(root, output, resource_compiler="fpcres"):
     root = pathlib.Path(root).resolve()
-    output = pathlib.Path(output)
+    output = pathlib.Path(output).resolve()
     try:
         if pathlib.Path(git(root, 'rev-parse', '--show-toplevel')).resolve() != root:
             raise ValueError('Source folder is not the repository root')
@@ -27,19 +27,26 @@ def generate(root, output):
     except (OSError, ValueError, subprocess.CalledProcessError):
         commit, revision, dirty = 'unavailable (source archive)', 'source build', False
     manual = (root / 'MANUAL.md').read_text(encoding='utf-8')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    resources = output.parent / 'resources'
+    resources.mkdir(exist_ok=True)
+    # Keep input resources separate from FPC's unit output: FPC copies .res
+    # files there, and copying a resource onto itself would truncate it.
+    # Compile the Markdown as data, not as thousands of Pascal string literals.
+    # ASCII relative input names also avoid quoting paths inside the RC script.
+    with (resources / 'gwdgui-manual.md').open('w', encoding='utf-8', newline='') as stream:
+        stream.write(manual)
+    (resources / 'gwdgui-manual.rc').write_text(
+        'ZGUI_MANUAL RCDATA "gwdgui-manual.md"\n', encoding='ascii')
+    subprocess.run([resource_compiler, '-of', 'res', 'gwdgui-manual.rc',
+                    '-o', 'gwdgui-manual.res'], cwd=resources, check=True)
     lines = [
+        '{$R ' + literal(str(resources / 'gwdgui-manual.res')) + '}',
         'const',
         '  BuildCommit = ' + literal(commit) + ';',
         '  BuildRevision = ' + literal(revision) + ';',
         '  BuildHasChanges = ' + str(dirty) + ';',
-        '  EmbeddedManual: UTF8String =',
     ]
-    parts = manual.split('\n')
-    for i, part in enumerate(parts):
-        # Preserve all text, including an absent/present final newline.
-        suffix = ';' if i == len(parts)-1 else ' + #10 +'
-        lines.append('    ' + literal(part) + suffix)
-    output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 

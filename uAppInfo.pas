@@ -5,7 +5,7 @@ function AppBuildCommit: string;
 function AppAboutText(const AGameName: string = 'International draughts'): string;
 function AppManualText: string;
 implementation
-uses Classes, SysUtils;
+uses Classes, SysUtils{$IFDEF MSWINDOWS}, Windows{$ENDIF};
 {$IFDEF GWDGUI_EMBEDDED_HELP}
 {$I gwdgui-build.inc}
 {$ELSE}
@@ -13,7 +13,6 @@ const
   BuildCommit = 'unavailable (build with build.sh or the Windows build mode to embed the commit)';
   BuildRevision = 'development build';
   BuildHasChanges = False;
-  EmbeddedManual: UTF8String = '';
 {$ENDIF}
 function AppBuildCommit: string;
 begin Result := BuildCommit; end;
@@ -25,8 +24,16 @@ begin
 end;
 function AppManualText: string;
 var Lines: TStringList; Path: string;
+    {$IFDEF GWDGUI_EMBEDDED_HELP}Stream:TResourceStream;{$ENDIF}
 begin
-  Result := EmbeddedManual;
+  Result := '';
+  {$IFDEF GWDGUI_EMBEDDED_HELP}
+  Stream:=TResourceStream.Create(HInstance,'ZGUI_MANUAL',RT_RCDATA);
+  try
+    SetLength(Result,Stream.Size);
+    if Length(Result)>0 then Stream.ReadBuffer(Result[1],Length(Result));
+  finally Stream.Free;end;
+  {$ENDIF}
   if Result <> '' then Exit;
   // Direct IDE/source-archive builds can use a manual beside the executable.
   Path := IncludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(ParamStr(0)))) + 'MANUAL.md';

@@ -7,6 +7,6 @@ if not exist "%OUT%" mkdir "%OUT%"
 if errorlevel 1 exit /b 1
 "%~1" -B "-FU%OUT%" "-FE%OUT%" "-o%OUT%\generate_build_info.exe" "%~dp0generate_build_info.pas"
 if errorlevel 1 exit /b 1
-"%OUT%\generate_build_info.exe" "%ROOT%" "%OUT%\gwdgui-build.inc"
+"%OUT%\generate_build_info.exe" "%ROOT%" "%OUT%\gwdgui-build.inc" "%~dp1fpcres.exe"
 if errorlevel 1 exit /b 1
 exit /b 0

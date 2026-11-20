@@ -11,7 +11,8 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import generate_build_info
 
 with tempfile.TemporaryDirectory(prefix='gwdgui-build-info-') as scratch:
-    folder = pathlib.Path(scratch)
+    folder = pathlib.Path(scratch) / "Build output Gérard's"
+    folder.mkdir()
     source = folder / 'source'
     source.mkdir()
     program = folder / 'check.pas'
@@ -28,12 +29,16 @@ end.
     for index, (manual, git_results, expected_commit, dirty) in enumerate([
         ("# Manual\nDraughts player's guide — αβ\n", [str(source), 'a'*40, 'v3.0-1-gaaaaaaa', ''], 'a'*40, False),
         ("Changed manual's last line", [str(source), 'b'*40, 'v3.0-2-gbbbbbbb', ' M MANUAL.md'], 'b'*40, True),
+        ("CRLF manual\r\nUnicode — 棋\r\n", [str(source), 'c'*40, 'v-test', ''], 'c'*40, False),
         ("Nested archive\n", [str(folder)], 'unavailable (source archive)', False),
         ("Source archive\n", OSError('no git'), 'unavailable (source archive)', False),
     ]):
-        (source / 'MANUAL.md').write_text(manual, encoding='utf-8')
+        (source / 'MANUAL.md').write_bytes(manual.encode('utf-8'))
         with mock.patch.object(generate_build_info, 'git', side_effect=git_results):
             generate_build_info.generate(source, folder / 'gwdgui-build.inc')
+        assert b'EmbeddedManual' not in (folder / 'gwdgui-build.inc').read_bytes()
+        # The executable must read its embedded resource, not a neighboring file.
+        (folder / 'MANUAL.md').write_text('Wrong external manual')
         result = subprocess.run(['fpc', '-B', '-dGWDGUI_EMBEDDED_HELP', '-Fu'+str(ROOT),
                                  '-Fi'+str(folder), '-FU'+str(folder), '-FE'+str(folder), str(program)],
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -42,8 +47,17 @@ end.
         output = subprocess.check_output([str(folder / 'check')]).decode('utf-8')
         about, embedded = output.split('---MANUAL---\n', 1)
         assert output.splitlines()[0] == expected_commit, 'embedded commit differs from build input'
-        assert embedded == manual, 'manual text/Unicode/apostrophes/final newline changed'
+        assert embedded == manual.replace('\r\n', '\n'), 'manual text/Unicode/apostrophes/final newline changed'
         assert ('Includes uncommitted changes.' in about) == dirty, 'dirty build marker incorrect'
+    (folder / 'MANUAL.md').unlink()
+    # A resource compiler failure must fail the build, not silently reuse data.
+    with mock.patch.object(generate_build_info, 'git', side_effect=OSError()):
+        try:
+            generate_build_info.generate(source, folder / 'gwdgui-build.inc', resource_compiler=str(folder / 'missing-fpcres'))
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError('Missing resource compiler must stop generation')
     # An IDE build without generated data must not pretend to identify a commit.
     result = subprocess.run(['fpc', '-B', '-Fu'+str(ROOT), '-FU'+str(folder),
                              '-FE'+str(folder), str(program)], stdout=subprocess.PIPE,

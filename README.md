@@ -104,7 +104,10 @@ build.bat
 You can supply a Lazarus location with `build.bat "C:\lazarus\lazbuild.exe"`.
 Alternatively, open `zgui.lpi`, select the **Windows** build mode, and build.
 The Windows build mode embeds help and Git identity without Python. The Linux
-script embeds them too. The Lazarus **Default** mode instead reads `MANUAL.md`
+script embeds them too. Both embed `MANUAL.md` as a named RCDATA resource using
+`fpcres` (included with FPC); the existing Help window parses the Markdown.
+The Linux build requires `fpcres` on PATH; the Windows build uses the copy beside
+Lazarus’s configured FPC compiler. The Lazarus **Default** mode instead reads `MANUAL.md`
 beside the executable and reports build identity as unavailable.
 
 Build scripts replace the installed executable only after successful compilation.

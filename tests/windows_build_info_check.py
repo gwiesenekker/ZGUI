@@ -2,10 +2,14 @@
 """Exercise the Windows build's native generator with real Git and compiled About."""
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
+
+RESOURCE_COMPILER = shutil.which('fpcres')
+assert RESOURCE_COMPILER, 'FPC resource compiler is required'
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'tools'))
@@ -60,13 +64,16 @@ end.
             manual.write_text('No Git manual', encoding='utf-8')
             env['PATH'] = str(base / 'nonexistent')
         generated.write_text('stale output must be replaced')
-        run([helper, root, generated], env=env)
+        run([helper, root, generated, RESOURCE_COMPILER], env=env)
+        native_resource = (base / 'resources/gwdgui-manual.res').read_bytes()
         # Compare with the existing Linux generator's contract.
         from unittest import mock
         context = mock.patch('generate_build_info.git', side_effect=OSError()) if case == 'no git' else mock.patch.dict(os.environ, {})
         with context:
             generate(root, expected)
         assert generated.read_bytes() == expected.read_bytes(), case
+        assert native_resource == (base / 'resources/gwdgui-manual.res').read_bytes(), case
+        assert b'EmbeddedManual' not in generated.read_bytes(), 'Manual must be resource data'
         run(['fpc', '-B', '-dGWDGUI_EMBEDDED_HELP', '-Fu'+str(ROOT),
              '-Fi'+tmp, '-FU'+tmp, '-FE'+tmp, program])
         output = run([base / 'check']).decode('utf-8')
@@ -80,6 +87,8 @@ end.
             assert 'unavailable (source archive)' in about, case
         else:
             assert run(['git', '-C', source, 'rev-parse', 'HEAD']).decode().strip() in about, case
+    assert subprocess.run([str(helper), str(source), str(generated), str(base / 'missing-fpcres')],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0
     # Missing required inputs must stop the pre-build, rather than accepting stale data.
     manual.unlink()
     assert subprocess.run([str(helper), str(source), str(generated)],
@@ -95,6 +104,8 @@ assert 'lib/build-info' in mode.find('SearchPaths/IncludeFiles').get('Value')
 assert mode.find('ExecuteBefore') is None, 'ExecuteBefore must be inside Other'
 command = mode.find('Other/ExecuteBefore/Command').get('Value')
 assert 'build_windows.cmd' in command and '$(CompPath)' in command
+prebuild = (ROOT / 'tools/build_windows.cmd').read_text()
+assert '"%~dp1fpcres.exe"' in prebuild, 'Use the resource compiler beside the configured Windows FPC'
 
 # build.bat drives the same build mode from the command line. cmd.exe needs CRLF
 # line endings for its labels (goto).

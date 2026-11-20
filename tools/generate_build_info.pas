@@ -66,19 +66,48 @@ begin
   end;
 end;
 
-var Root, Commit, Revision, Manual, Text, OutputName: string;
+procedure WriteText(const Name,Text:string);
+var Stream:TFileStream;
+begin
+  Stream:=TFileStream.Create(Name,fmCreate);
+  try
+    if Length(Text)>0 then Stream.WriteBuffer(Text[1],Length(Text));
+  finally Stream.Free;end;
+end;
+
+procedure CompileManual(const Directory,Compiler,Manual:string);
+var P:TProcess;Log:TStringStream;
+begin
+  WriteText(Directory+DirectorySeparator+'gwdgui-manual.md',Manual);
+  WriteText(Directory+DirectorySeparator+'gwdgui-manual.rc',
+    'ZGUI_MANUAL RCDATA "gwdgui-manual.md"'+#10);
+  P:=TProcess.Create(nil);Log:=TStringStream.Create('');
+  try
+    P.Executable:=Compiler;
+    P.CurrentDirectory:=Directory;
+    P.Parameters.Add('-of');P.Parameters.Add('res');
+    P.Parameters.Add('gwdgui-manual.rc');P.Parameters.Add('-o');
+    P.Parameters.Add('gwdgui-manual.res');
+    P.Options:=[poUsePipes,poStderrToOutPut,poNoConsole];
+    P.Execute;Log.CopyFrom(P.Output,0);P.WaitOnExit;
+    if P.ExitStatus<>0 then
+      raise Exception.Create('Manual resource compilation failed: '+Log.DataString);
+  finally Log.Free;P.Free;end;
+end;
+
+var Root, Commit, Revision, Manual, Text, OutputName, Compiler, ResourceDirectory: string;
     Dirty: Boolean;
-    Start, I: SizeInt;
-    Stream: TFileStream;
 begin
   {$IFDEF MSWINDOWS}
   SetMultiByteConversionCodePage(CP_UTF8);
   SetMultiByteFileSystemCodePage(CP_UTF8);
   {$ENDIF}
   try
-    if ParamCount <> 2 then raise Exception.Create('Expected source root and output filename');
+    if not (ParamCount in [2,3]) then
+      raise Exception.Create('Expected source root, output filename and optional fpcres path');
     Root := ExcludeTrailingPathDelimiter(ExpandFileName(InputParam(1)));
     OutputName := ExpandFileName(InputParam(2));
+    Compiler:='fpcres';if ParamCount=3 then Compiler:=InputParam(3);
     try
       {$IFDEF MSWINDOWS}
       if CompareText(ExpandFileName(Git(Root, ['rev-parse', '--show-toplevel'])), Root) <> 0 then
@@ -96,26 +125,16 @@ begin
     end;
     Manual := StringReplace(ReadText(Root + DirectorySeparator + 'MANUAL.md'), #13#10, #10, [rfReplaceAll]);
     Manual := StringReplace(Manual, #13, #10, [rfReplaceAll]);
-    Text := 'const' + #10 + '  BuildCommit = ' + Quoted(Commit) + ';' + #10 +
-      '  BuildRevision = ' + Quoted(Revision) + ';' + #10 +
-      '  BuildHasChanges = ' + BoolToStr(Dirty, True) + ';' + #10 +
-      '  EmbeddedManual: UTF8String =' + #10;
-    Start := 1;
-    for I := 1 to Length(Manual) do
-      if Manual[I] = #10 then
-      begin
-        Text += '    ' + Quoted(Copy(Manual, Start, I - Start)) + ' + #10 +' + #10;
-        Start := I + 1;
-      end;
-    Text += '    ' + Quoted(Copy(Manual, Start, MaxInt)) + ';' + #10;
     if not ForceDirectories(ExtractFileDir(OutputName)) then
       raise Exception.Create('Cannot create build information directory');
-    Stream := TFileStream.Create(OutputName, fmCreate);
-    try
-      Stream.WriteBuffer(Text[1], Length(Text));
-    finally
-      Stream.Free;
-    end;
+    ResourceDirectory:=ExtractFileDir(OutputName)+DirectorySeparator+'resources';
+    if not ForceDirectories(ResourceDirectory) then
+      raise Exception.Create('Cannot create manual resource directory');
+    CompileManual(ResourceDirectory,Compiler,Manual);
+    Text := '{$R ' + Quoted(ResourceDirectory+DirectorySeparator+'gwdgui-manual.res') + '}' + #10 + 'const' + #10 + '  BuildCommit = ' + Quoted(Commit) + ';' + #10 +
+      '  BuildRevision = ' + Quoted(Revision) + ';' + #10 +
+      '  BuildHasChanges = ' + BoolToStr(Dirty, True) + ';' + #10;
+    WriteText(OutputName,Text);
   except
     on E: Exception do
     begin

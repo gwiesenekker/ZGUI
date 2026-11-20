@@ -1,6 +1,6 @@
 # ZGUI User Manual
 
-Updated 18 November 2026.
+Updated 20 November 2026.
 
 ZGUI plays, analyses and stores orthodox chess and international 10×10 draughts.
 Chess uses UCI engines and PGN files; draughts uses Hub/DXP engines and PDN files.
@@ -2164,7 +2164,9 @@ A typical source build is:
 bash build.sh
 ```
 
-`build.sh` embeds the current manual and Git build identity. On Windows, run
+`build.sh` embeds the current Markdown manual as an RCDATA resource and records
+the Git build identity. It uses `fpcres` from the FPC installation (on PATH for
+Linux; beside Lazarus’s configured compiler for Windows). On Windows, run
 `build.bat` from the source directory; it finds `lazbuild.exe` on PATH or in a
 standard Lazarus folder (or takes its path as an argument), builds `zgui.exe`
 with the **Windows** build mode in `lib\candidate`, and replaces `zgui.exe`
