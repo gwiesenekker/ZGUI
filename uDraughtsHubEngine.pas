@@ -484,6 +484,8 @@ var
 begin
   Result := False;
   if StopRequested then Exit;
+  if FEngine.RegistrationProblem<>'' then begin
+    Log(FEngine.RegistrationProblem);ChangeState(esError,FEngine.RegistrationProblem);Exit;end;
   Args := TStringList.Create;
   try
     FWorker.PrepareLaunch(FEngine,FParams,Args);

@@ -10,6 +10,7 @@ uses
   uPlatformProcess, SyncObjs, uChessUciEngine, uChessUciProtocol, uProcessEngineWorker, uThreadMessageQueue;
 
 type
+  TEngineRegistrationCheck = function(AEngine:TExternalEngineDefinition):string of object;
   TEngineAcceptedEvent = procedure(Sender: TObject;
     AEngine: TExternalEngineDefinition; var AAccepted: Boolean) of object;
 
@@ -43,6 +44,7 @@ type
     FIniPathEdit: TEdit;
     FInitMemo: TMemo;
     FKindCombo: TComboBox;
+    FOnRegistrationCheck:TEngineRegistrationCheck;
     FOnAccepted: TEngineAcceptedEvent;
     FParamsGrid: TStringGrid;
     FInlineParamCombo: TComboBox;
@@ -58,6 +60,7 @@ type
     procedure EditEnvironment(Row:Integer);
     function IsComboParamRow(Row: Integer): Boolean;
     procedure AcceptClick(Sender: TObject);
+    procedure CheckRegistration(Engine:TExternalEngineDefinition);
     procedure ButtonPanelResize(Sender: TObject);
     procedure BrowseClick(Sender: TObject);
     procedure CancelClick(Sender: TObject);
@@ -99,6 +102,7 @@ type
     destructor Destroy; override;
     procedure LoadEngine(AEngine: TExternalEngineDefinition);
     procedure RefreshLayout; override;
+    property OnRegistrationCheck:TEngineRegistrationCheck read FOnRegistrationCheck write FOnRegistrationCheck;
     property OnAccepted: TEngineAcceptedEvent read FOnAccepted write FOnAccepted;
   end;
 
@@ -545,6 +549,14 @@ begin
   UpdateKindFields;
 end;
 
+procedure TEngineEditForm.CheckRegistration(Engine:TExternalEngineDefinition);
+var Problem:string;
+begin
+ if not Assigned(FOnRegistrationCheck) then Exit;
+ Problem:=FOnRegistrationCheck(Engine);
+ if Problem<>'' then raise EConvertError.Create(Problem);
+end;
+
 procedure TEngineEditForm.AcceptClick(Sender: TObject);
 var
   Accepted: Boolean;
@@ -555,6 +567,7 @@ begin
   FreeAndNil(FAcceptedEngine);
   try
     FAcceptedEngine := CurrentEngineDefinition;
+    CheckRegistration(FAcceptedEngine);
     ParseEngineFeatureFlags(EngineParamValue(FCapturedParams,'gui-feature-flags','[]')).Free;
     if FAcceptedEngine.Kind in [eekHub,eekUci] then
     begin
@@ -849,8 +862,8 @@ begin
   StoreArgumentParams;
   Engine:=nil;
   try
-    try Engine:=CurrentEngineDefinition;
-    except on E:Exception do begin ShowGuiOkDialog(Self,'Invalid environment',E.Message);Exit;end;end;
+    try Engine:=CurrentEngineDefinition;CheckRegistration(Engine);
+    except on E:Exception do begin ShowGuiOkDialog(Self,'Invalid engine configuration',E.Message);Exit;end;end;
     FStdoutMemo.Clear;
     FTextBuffer := '';
     FAllowHubIdAutoUpdate := False;

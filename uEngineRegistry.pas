@@ -16,6 +16,7 @@ type
   private
     FArguments: string;
     FEnvironmentJson:string;
+    FRegistrationProblem:string;
     FDxpHost: string;
     FDxpId: string;
     FDxpPort: Word;
@@ -39,6 +40,7 @@ type
     function KindText: string;
     procedure NormalizeIds;
 
+    property RegistrationProblem:string read FRegistrationProblem;
     property EnvironmentJson:string read FEnvironmentJson write SetEnvironmentJson;
     property Arguments: string read FArguments write FArguments;
     property DxpHost: string read FDxpHost write FDxpHost;
@@ -80,20 +82,22 @@ procedure AddEngineReservationKeys(AEngine: TExternalEngineDefinition;
   AKeys: TStrings);
 function EnginesJsonFileName: string;
 // Why AEngine cannot be launched on this computer ('' when its executable
-// exists): no executable configured, or the file is missing. Mentions a path
-// written for another operating system (engines.json copied between Linux and
-// Windows).
+// exists and its registration is valid): missing configuration/file, a shared
+// installation conflict, or a path written for another operating system
+// (engines.json copied between Linux and Windows).
 function EngineExecutableProblem(AEngine: TExternalEngineDefinition): string;
 function EngineIdentityKey(AEngine: TExternalEngineDefinition): string;
 function FindEngineByIdentityKey(AEngines: TExternalEngineList; const Key: string): TExternalEngineDefinition;
 function EnginePickerDisplayName(AEngine: TExternalEngineDefinition;
   ASlotIndex: Integer): string;
+function EngineRegistrationConflict(AEngine:TExternalEngineDefinition;AEngines:TExternalEngineList;IgnoreIndex:Integer=-1):string;
+procedure RefreshEngineRegistrationProblems(AEngines:TExternalEngineList);
 procedure LoadExternalEngines(const AFileName: string; AEngines: TExternalEngineList);
 procedure SaveExternalEngines(const AFileName: string; AEngines: TExternalEngineList);
 
 implementation
 
-uses uEngineEnvironment,
+uses uEngineInstallation,uEngineEnvironment,
   JSONParser, SHA1;
 
 procedure TExternalEngineDefinition.SetEnvironmentJson(const Value:string);
@@ -116,6 +120,7 @@ begin
     Exit;
   FArguments := Source.Arguments;
   FEnvironmentJson:=Source.EnvironmentJson;
+  FRegistrationProblem:=Source.RegistrationProblem;
   FDxpHost := Source.DxpHost;
   FDxpId := Source.DxpId;
   FDxpPort := Source.DxpPort;
@@ -300,6 +305,50 @@ begin
   end;
 end;
 
+procedure InstallationKeys(Engine:TExternalEngineDefinition;out DirectoryKey,ExecutableKey:string);
+begin
+ DirectoryKey:='';ExecutableKey:='';if (Engine=nil) or (Trim(Engine.ExePath)='') then Exit;
+ ExecutableKey:=InstallationPathKey(Engine.ExePath);
+ DirectoryKey:=ExtractFilePath(Engine.ExePath);if DirectoryKey='' then DirectoryKey:='.';
+ DirectoryKey:=InstallationPathKey(DirectoryKey);
+end;
+function ConflictText(Engine,Other:TExternalEngineDefinition;SameDirectory:Boolean):string;
+begin
+ if SameDirectory then Result:='Engine directory is already registered by '
+ else Result:='Engine executable is already registered by ';
+ Result+=Other.IdText+' ('+Other.ExePath+'): '+ExtractFilePath(ExpandFileName(Engine.ExePath))+
+  '. Keep one registration per installed directory and executable; use separate installed copies for comparisons.';
+end;
+function EngineRegistrationConflict(AEngine:TExternalEngineDefinition;AEngines:TExternalEngineList;IgnoreIndex:Integer):string;
+var I:Integer;DirectoryKey,ExecutableKey,OtherDirectory,OtherExecutable:string;
+begin
+ Result:='';if (AEngine=nil) or (AEngines=nil) then Exit;
+ InstallationKeys(AEngine,DirectoryKey,ExecutableKey);if DirectoryKey='' then Exit;
+ for I:=0 to AEngines.Count-1 do begin
+  if (I=IgnoreIndex) or (AEngines[I]=AEngine) then Continue;
+  InstallationKeys(AEngines[I],OtherDirectory,OtherExecutable);
+  if DirectoryKey=OtherDirectory then Exit(ConflictText(AEngine,AEngines[I],True));
+  if (ExecutableKey<>'') and (ExecutableKey=OtherExecutable) then Exit(ConflictText(AEngine,AEngines[I],False));
+ end;
+end;
+procedure RefreshEngineRegistrationProblems(AEngines:TExternalEngineList);
+var DirectoryKeys,ExecutableKeys:array of string;I,J:Integer;
+begin
+ if AEngines=nil then Exit;
+ SetLength(DirectoryKeys,AEngines.Count);SetLength(ExecutableKeys,AEngines.Count);
+ for I:=0 to AEngines.Count-1 do begin
+  AEngines[I].FRegistrationProblem:='';
+  InstallationKeys(AEngines[I],DirectoryKeys[I],ExecutableKeys[I]);
+ end;
+ for I:=0 to AEngines.Count-1 do if DirectoryKeys[I]<>'' then
+  for J:=0 to AEngines.Count-1 do if I<>J then begin
+   if DirectoryKeys[I]=DirectoryKeys[J] then begin
+    AEngines[I].FRegistrationProblem:=ConflictText(AEngines[I],AEngines[J],True);Break;end;
+   if ExecutableKeys[I]=ExecutableKeys[J] then begin
+    AEngines[I].FRegistrationProblem:=ConflictText(AEngines[I],AEngines[J],False);Break;end;
+  end;
+end;
+
 function EngineExecutableProblem(AEngine: TExternalEngineDefinition): string;
 var
   LPath: string;
@@ -311,8 +360,9 @@ begin
   LPath := Trim(AEngine.ExePath);
   if LPath = '' then
     Exit('no executable is configured for ' + EnginePickerDisplayName(AEngine, 0));
-  if FileExists(LPath) then
-    Exit;
+  if FileExists(LPath) then begin
+    Result:=AEngine.RegistrationProblem;Exit;
+  end;
   {$IFDEF MSWINDOWS}
   LForeign := LPath[1] = '/';
   {$ELSE}
@@ -522,6 +572,7 @@ begin
     for I := 0 to TJSONArray(Data).Count - 1 do
       if TJSONArray(Data).Items[I].JSONType = jtObject then
         AEngines.Add(EngineFromJson(TJSONObject(TJSONArray(Data).Items[I])));
+    RefreshEngineRegistrationProblems(AEngines);
   finally
     Data.Free;
   end;

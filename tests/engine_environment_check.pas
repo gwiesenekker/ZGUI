@@ -80,8 +80,9 @@ begin
     Check(EngineParamValue(Loaded,'gui-environment','ABSENT')='ABSENT','Not written into shared '+A.KindText+' params');end;
   end;
   List.Add(A);A:=nil;List.Add(B);B:=nil;SaveExternalEngines(FileName,List);LoadExternalEngines(FileName,Reloaded);
+  Check((Reloaded[0].RegistrationProblem<>'') and (Reloaded[1].RegistrationProblem<>''),'Legacy overrides do not exempt a shared executable');
   Check((Reloaded.Count=2) and (Reloaded[0].EnvironmentJson=List[0].EnvironmentJson) and
-   (Reloaded[1].EnvironmentJson=List[1].EnvironmentJson),'Registry roundtrip keeps independent overrides');
+   (Reloaded[1].EnvironmentJson=List[1].EnvironmentJson),'Legacy registry settings remain readable for inspection');
  finally A.Free;B.Free;CopyDef.Free;List.Free;Reloaded.Free;DeleteFile(FileName);DeleteFile(ParamFile);end;
  First:=TPlatformProcess.Create;Second:=TPlatformProcess.Create;Args:=TStringList.Create;
  One:=TProbe.Create;Two:=TProbe.Create;

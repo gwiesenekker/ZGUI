@@ -1,7 +1,7 @@
 program chess_tournament_check;
 {$mode objfpc}{$H+}
 {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}{$FATAL Use the LPI}{$ENDIF}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Controls,Classes,SysUtils,StdCtrls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces,Forms,Controls,Classes,SysUtils,StdCtrls,
  ExtCtrls,Grids,CheckLst,FPJSON,JSONParser,uChessPosition,uGamePosition,uGameGuiProfile,
  uEngineRegistry,uEngineParamsJson,uTournamentDialog,uTournamentGridModel,uTournamentResults,
  uTournamentStorage,uGameSetupTypes,uMainForm,uRunningGame,uGameOrchestrator,uChessUciEngine,
@@ -84,15 +84,17 @@ begin
  try
   for I:=1 to Count do begin
    D:=TExternalEngineDefinition.Create;D.Kind:=eekUci;D.UciId:='Peer '+IntToStr(I);
-   D.ExePath:=ExpandFileName(ParamStr(0));
+   D.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));
    D.Arguments:='--peer '+Mode+' '+IntToStr(I)+' "'+Directory+'/peer-'+IntToStr(I)+'.trace"';
    if Real then begin
     D.ExePath:=ExpandFileName(ParamStr(I));
     D.ExecutableName:=ExtractFileName(D.ExePath);D.Arguments:='';
    end;
+   if not Real then begin P:=nil;AddOrUpdateParam(P,'Ponder','check','true',False);
+    SaveEngineParamsToJson(EngineParamsFileName(D.ExePath),'uci',P);end;
    List.Add(D);
   end;
-  D:=TExternalEngineDefinition.Create;D.Kind:=eekHub;D.ExePath:=ExpandFileName(ParamStr(0));D.HubId:='Not chess';List.Add(D);
+  D:=TExternalEngineDefinition.Create;D.Kind:=eekHub;D.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'not-chess');D.HubId:='Not chess';List.Add(D);
   SaveExternalEngines(EnginesJsonFileName,List);
   if not Real then begin
    P:=nil;AddOrUpdateParam(P,'Ponder','check','true',False);SaveEngineParamsToJson(ParamsFile,'uci',P);
@@ -140,7 +142,7 @@ begin
     Grid.Cells[TournamentColReason,1]+'; policy='+BoolToStr(Setup.ForcePonderOff,True));
   GuiTestConfirmationResult:=mrYes;
   try Button(D,'Play').Click;finally GuiTestConfirmationResult:=0;end;
-  if not Real then Check(Pos('same executable',GuiTestLastConfirmationText)>0,'D6 shared-options warning is shown once at Start');
+  if not Real then Check(D.IsRunning,'Separate installed peers start without a shared-executable override');
   Tick:=GetTickCount64;MaxBusy:=0;CheckedLiveEdit:=False;
   repeat
    Pump(H,D);H.Main.CollectBusyEngineKeys(Keys);if Keys.Count>MaxBusy then MaxBusy:=Keys.Count;

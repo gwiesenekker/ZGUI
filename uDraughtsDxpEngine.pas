@@ -989,6 +989,8 @@ var
 begin
   Result := False;
   FStopping := False;
+  if FEngine.RegistrationProblem<>'' then begin
+    Log(FEngine.RegistrationProblem);ChangeState(esError,FEngine.RegistrationProblem);Exit;end;
   CloseSocket;
   TimeWaitCount := TcpTimeWaitCountForPort(FEngine.DxpPort);
   if TimeWaitCount > 0 then

@@ -1,6 +1,6 @@
 program time_forfeit_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF}Interfaces,Forms,Controls,Classes,SysUtils,StdCtrls,ExtCtrls,Grids,FPJSON,JSONParser,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture,Interfaces,Forms,Controls,Classes,SysUtils,StdCtrls,ExtCtrls,Grids,FPJSON,JSONParser,
  uMainForm,uTournamentDialog,uTournamentGridModel,uTournamentStorage,uTimeForfeit,uGamePosition,uChessPosition,
  uDraughtsPosition,uGameGuiProfile,uEngineRegistry,uGameSetupTypes,uGuiDialogs,Dialogs,uEngineBase;
 var Checks:Integer=0;Chess,Draughts:TGameVariant;Main:TMainForm;JudgeScore:string='3';Directory:string;
@@ -33,7 +33,7 @@ var E:TExternalEngineDefinition;L:TExternalEngineList;I:Integer;
 begin
  L:=TExternalEngineList.Create;
  try for I:=0 to 5 do begin
-  E:=TExternalEngineDefinition.Create;E.ExePath:=ExpandFileName(ParamStr(0));E.Arguments:='unused '+IntToStr(I);
+  E:=TExternalEngineDefinition.Create;E.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));E.Arguments:='unused '+IntToStr(I);
   if I<3 then begin E.Kind:=eekUci;E.UciId:='Judge UCI '+IntToStr(I);end
   else begin E.Kind:=eekHub;E.HubId:='Judge Hub '+IntToStr(I);end;L.Add(E);
  end;SaveExternalEngines(EnginesJsonFileName,L);finally L.Free;end;

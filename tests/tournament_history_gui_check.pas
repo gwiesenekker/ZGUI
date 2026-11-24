@@ -1,6 +1,6 @@
 program tournament_history_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF}Interfaces,Forms,Controls,Classes,SysUtils,StdCtrls,Grids,FPJSON,JSONParser,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture,Interfaces,Forms,Controls,Classes,SysUtils,StdCtrls,Grids,FPJSON,JSONParser,
  uMainForm,uTournamentDialog,uTournamentGridModel,uGamePosition,uChessPosition,uDraughtsPosition,
  uGameGuiProfile,uEngineRegistry,uGameSetupTypes,uTimeForfeit,uGuiDialogs,Dialogs,uRunningGame;
 var Checks:Integer=0;Chess,Draughts:TGameVariant;Main:TMainForm;Directory:string;
@@ -13,7 +13,7 @@ var E:TExternalEngineDefinition;L:TExternalEngineList;I:Integer;
 begin
  L:=TExternalEngineList.Create;
  try for I:=0 to 3 do begin
-  E:=TExternalEngineDefinition.Create;E.ExePath:=ExpandFileName(ParamStr(0));E.Arguments:='unused '+IntToStr(I);
+  E:=TExternalEngineDefinition.Create;E.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));E.Arguments:='unused '+IntToStr(I);
   if I<2 then begin E.Kind:=eekUci;E.UciId:='History UCI '+IntToStr(I);end
   else begin E.Kind:=eekHub;E.HubId:='History Hub '+IntToStr(I);end;L.Add(E);
  end;SaveExternalEngines(EnginesJsonFileName,L);finally L.Free;end;

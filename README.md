@@ -10,7 +10,9 @@ analysis, tournament and database infrastructure.
   moves, FEN position setup, board flipping and configurable appearance.
 - PGN for chess and PDN for draughts, including comments and nested variations.
 - UCI chess engines and Hub/DXP draughts engines, configurable through the
-  existing engine editor. Engine INI-file editing remains available.
+  existing engine editor. Each registration requires its own installed directory
+  and executable; comparisons use separate installed copies. Engine INI-file editing
+  remains available.
 - Human and engine games with clocks, increments, engine analysis, PV browsing,
   hints, evaluation bars, score history and Auto Play.
 - UCI and Hub pondering, with per-engine compatibility flags. Optional

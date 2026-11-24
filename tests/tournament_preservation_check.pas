@@ -4,7 +4,7 @@ program tournament_preservation_check;
   {$FATAL Build this test with its .lpi project to enable noninteractive dialogs}
 {$ENDIF}
 uses
-  {$IFDEF UNIX}cthreads,{$ENDIF}
+  {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture,
   Interfaces, Forms, Classes, SysUtils, StdCtrls, Grids, ExtCtrls, CheckLst, Controls, FPJSON, JSONParser, uGuiDialogs,
   uEngineRegistry, uTournamentStorage, uTournamentDialog, uTournamentGridModel, uMainForm, uRunningGame, uGameSetupTypes,
   uGameOrchestrator, uGameTreeActor, uGameTreeBuilder, uDraughtsPdn, uDraughtsPosition, uDraughtsHubEngine, uDraughtsDxpEngine, uGamePosition;
@@ -976,7 +976,7 @@ var Dialog, Reloaded, Missing: TTournamentDialog; Engines: TExternalEngineList;
       if OmitA and (Name = 'A') then Continue;
       Engine := TExternalEngineDefinition.Create;
       Engine.Kind := eekHub; Engine.HubId := Name;
-      Engine.ExePath := ExpandFileName(ParamStr(0));
+      Engine.ExePath := InstallEngineFixture(ExpandFileName(ParamStr(0)),Name);
       Engines.Add(Engine);
     end;
     SaveExternalEngines(Config, Engines);
@@ -1183,13 +1183,15 @@ begin
     Check(EngineIdentityKey(Fast) <> EngineIdentityKey(Slow), 'arguments distinguish tournament engine identities');
     LegacyKey := LowerCase(Fast.KindText) + '|' + LowerCase(ExpandFileName(Fast.ExePath)) + '|' + LowerCase(Fast.IdText);
     Check(FindEngineByIdentityKey(Engines, LegacyKey) = nil, 'ambiguous legacy key must not silently choose the first engine');
+    Fast.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'argument-fast');
+    Slow.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'argument-slow');
     SaveExternalEngines(Config, Engines);
     Dialog := TTournamentDialog.Create(nil,DefaultGameVariant);
     Grid := TStringGrid(Dialog.FindComponent('TournamentPairings'));
     AddTournamentPairingRow(Grid, EnginePickerDisplayName(Fast, 1), EnginePickerDisplayName(Slow, 2), 1);
     Check(Dialog.GameSetupForRow(1, Setup), 'argument variants resolve in game setup');
     Check((Setup.WhiteEngine.Arguments = '--level fast') and (Setup.BlackEngine.Arguments = '--level slow'),
-      'same executable must launch distinct argument variants');
+      'separate installed configurations retain their argument values');
     Dialog.SaveTournamentToFile(Fixture);
     Reloaded := TTournamentDialog.Create(nil,DefaultGameVariant); Reloaded.LoadTournamentFromFile(Fixture);
     Check(Reloaded.GameSetupForRow(1, Setup), 'argument variants survive tournament reload');
@@ -1306,7 +1308,7 @@ begin
  try
   for I:=0 to High(Names) do begin
    D:=TExternalEngineDefinition.Create;D.Kind:=eekHub;D.HubId:=Names[I];
-   D.ExePath:=ExpandFileName(ParamStr(0));if I=0 then D.ExePath:=Fixture+'.missing';Engines.Add(D);
+   D.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'start-'+IntToStr(I));if I=0 then D.ExePath:=Fixture+'.missing';Engines.Add(D);
   end;
   SaveExternalEngines(EnginesJsonFileName,Engines);Dialog:=TTournamentDialog.Create(nil,DefaultGameVariant);
   Grid:=TStringGrid(Dialog.FindComponent('TournamentPairings'));

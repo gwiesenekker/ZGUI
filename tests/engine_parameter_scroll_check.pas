@@ -1,6 +1,6 @@
 program engine_parameter_scroll_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces,Forms,Classes,SysUtils,Controls,
  Grids,Types,LMessages,LCLType,StdCtrls,ExtCtrls,uEngineRegistry,uRunningGame,
  uGameSetupTypes,uGameTreeActor,uGameTreeBuilder,uGameOrchestrator,uEngineEditForm,uChessPosition,uDraughtsPosition,
  uGamePosition,uGameGuiProfile,uTournamentDialog,uEnginesDialog,uDatabaseForm,
@@ -135,7 +135,7 @@ begin
   for I:=1 to 8 do begin
    E:=TExternalEngineDefinition.Create;
    if GameVariantId(V)='chess' then E.Kind:=eekUci else E.Kind:=eekHub;
-   E.ExePath:=ExpandFileName(ParamStr(0));E.UciId:='Viewport '+IntToStr(I);E.HubId:=E.UciId;Engines.Add(E);
+   E.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));E.UciId:='Viewport '+IntToStr(I);E.HubId:=E.UciId;Engines.Add(E);
   end;
   SaveExternalEngines(EnginesJsonFileName,Engines);D:=TTournamentDialog.Create(P.Main,V);
   D.Font.Size:=FontSize;D.Width:=1100;D.Height:=900;D.Show;Pump;

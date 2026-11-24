@@ -1,6 +1,6 @@
 program interactive_cli_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} uCliProtocolOutput,Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, uCliProtocolOutput,Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
  ExtCtrls,Grids,Dialogs,FPJSON,JSONParser,uMainForm,uSprtPanel,uSprt,uTournamentDialog,uTournamentHostForm,
  uTournamentStorage,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
  uEngineRegistry,uEngineParamsJson,uGameSetupTypes,uDraughtsHubEngine,uChessUciEngine,uGuiDialogs,
@@ -61,7 +61,7 @@ begin
  L:=TExternalEngineList.Create;
  try
   for I:=0 to 3 do begin
-   E:=TExternalEngineDefinition.Create;E.ExePath:=ExpandFileName(ParamStr(0));
+   E:=TExternalEngineDefinition.Create;E.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));
    if I<2 then begin E.Kind:=eekUci;E.UciId:='CLI Chess '+IntToStr(I);E.Arguments:='--peer uci';end
    else begin E.Kind:=eekHub;E.HubId:='CLI Draughts '+IntToStr(I);E.Arguments:='--peer hub';end;
    E.Arguments:=E.Arguments+' '+IntToStr(I);L.Add(E);
@@ -130,9 +130,9 @@ begin
  try
   L.Add(Chess.DefaultStartingFEN);L.SaveToFile(FileName);Main:=TMainForm.Create(nil);SetCurrentDir(Directory);
   Before:=RecoveryFiles;
-  J:=Response('run_tournament engine1="CLI Chess 0" engine2="CLI Chess 1" ballot='+FileName,'ERROR','CONFIRMATION_REQUIRED');
-  try Check(J.Find('tournament')=nil,'Relative ballot resolves from launch directory; refusal publishes no handle');finally J.Free;end;
-  Check((Main.TournamentHost.Count=0) and (RecoveryFiles=Before),'Refused relative-ballot match leaves no tab or files');
+  J:=Response('run_tournament engine1="CLI Chess 0" engine2="CLI Chess 1" ballot='+FileName,'OK');
+  try Check(J.Get('games_total',0)=2,'Relative ballot resolves from launch directory');finally J.Free;end;
+  Main.TournamentHost.Dialogs[0].StopTournament;Pump;
  finally
   SetCurrentDir(Launch);if Main<>OriginalMain then Main.Free;Main:=OriginalMain;
   DeleteFile(FileName);L.Free;
@@ -153,6 +153,8 @@ begin
   Clone:=TExternalEngineDefinition.Create;Clone.Assign(Engines[0]);Clone.Arguments:=SavedArgs+' clone';Engines.Add(Clone);
   SaveExternalEngines(EnginesJsonFileName,Engines);
   Error('run_tournament engine1="CLI Chess 0" engine2_id=2','AMBIGUOUS_ENGINE');
+  Error('run_tournament engine1_id=1 engine2_id=2','CONFIGURE');
+  Error('run_tournament engine1_id=1 engine2_id=2 allow_shared_executable=true','CONFIGURE');
   Error('run_tournament engine1="CLI Chess 0" engine1_id=1 engine2_id=2','BAD_ARGUMENT');
   Engines.Delete(Engines.Count-1);SaveExternalEngines(EnginesJsonFileName,Engines);
   J:=Response('run_tournament engine1_key="'+Key+'" engine2_id=2 time=0','ERROR','CONFIGURE');J.Free;
@@ -231,13 +233,7 @@ begin
   for I:=1 to 13 do Fens.Add(V.DefaultStartingFEN);Fens.SaveToFile(FenFile);
   Args:='engine1="'+A+'" engine2="'+B+'" ballot="'+FenFile+'" shuffle_opening_pairs=true time=600 moves=75 increment=0.25 concurrent=1';
   Count:=Main.TournamentHost.Count;
-  if V=Chess then begin
-   Before:=RecoveryFiles;
-   J:=Response('run_tournament '+Args,'ERROR','CONFIRMATION_REQUIRED');
-   try Check(J.Find('tournament')=nil,'Rejected confirmation has no published tournament ID');finally J.Free;end;
-   Check((Main.TournamentHost.Count=Count) and (RecoveryFiles=Before),'Refusal leaves no tab, archive, publication or lock file');
-   Check(Main.TestGameCount=0,'No game started before named confirmation');
-  end;
+
   J:=Response('run_tournament '+Args+' allow_shared_executable=true','OK');
   try Id:=J.Get('tournament',0);Check(J.Get('games_total',0)=26,'Ballot expands to 26 ordinary games');Check(J.Get('pairs_total',0)=13,'Duplicate FENs remain separate opening pairs');finally J.Free;end;
   D:=Main.TournamentHost.Dialogs[Main.TournamentHost.Count-1];

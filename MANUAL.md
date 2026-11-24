@@ -124,9 +124,9 @@ Optional settings: `name`, `ballot`, `shuffle_opening_pairs`, `time` (seconds pe
 sudden death), `increment` (fractional seconds allowed) and `concurrent`. Omitted
 clock settings use the selected game's existing GUI defaults. Use a decimal point
 in commands even if GUI edits use a decimal comma. Relative paths use the launch
-directory. To explicitly accept the legacy UCI shared-options-file warning, add
-`allow_shared_executable=true`; no other warning is automatically accepted.
-This check runs before pairing: a refusal leaves no tournament tab or files.
+directory. Each participant must have its own installed directory and executable.
+Conflicting registrations are rejected before pairing. The legacy
+`allow_shared_executable` flag cannot override this rule.
 
 This interactive `run_tournament` form creates a match. The separate one-shot
 startup form `zgui run_tournament file="saved.json"` opens a saved event. Do not
@@ -301,7 +301,7 @@ spaces. Supply exactly one selector for each engine:
 | `moves=75` | Nonnegative integer moves per period; 0 means sudden death. Omitted: selected game's GUI default. |
 | `increment=3` | Nonnegative finite increment in seconds; decimal values such as 0.5 are accepted. Omitted: selected game's GUI default. |
 | `concurrent=1` | Positive integer maximum simultaneous games. Default: 1. Engine reservations can limit actual concurrency. |
-| `allow_shared_executable=true` | Accept legacy UCI registrations that still inherit one executable-side options file. Accepts true or false; default: false. Registrations saved with private options do not need this confirmation. |
+| `allow_shared_executable=true` | Deprecated compatibility syntax (true/false). It does not permit sharing an installed directory or executable. |
 | `time_forfeit=loss` | Default rules-based timeout policy, including chess timeout draws. Alternatively, use a unique compatible Hub/UCI engine name for symmetric evaluation adjudication. |
 | `time_forfeit_id=3` | Select the adjudicator by session ID instead of its name; supply only one time-forfeit selector. |
 | `time_forfeit_key="..."` | Select the adjudicator by identity key instead of its name or ID. |
@@ -391,9 +391,9 @@ before testing. Register two available engines for the same game through
    This creates two colour-reversed games, each with 30 seconds per player and
    no increment. Expect a normal tournament tab and an immediate `OK` response
    containing `"tournament":N`; the command does not wait for completion.
-   If legacy UCI registrations share one options file, retry with
-   `allow_shared_executable=true` appended to explicitly accept that configuration.
-   The refused attempt should leave no extra tab or pairing files.
+   Use separate installed directories and executables for the two registrations.
+   A directory/executable conflict is rejected; the legacy shared-executable flag
+   does not bypass it.
 
 4. Query the returned tournament ID (replace `1` if necessary):
 
@@ -414,7 +414,7 @@ before testing. Register two available engines for the same game through
 
    Each position produces two games with colours reversed. This works with
    either chess or draughts ballots and two engines for that game. Add the
-   shared-executable option when applicable, then query the new returned ID.
+   appropriate engine IDs, then query the new returned ID.
 
 6. Check interaction with the live GUI:
 
@@ -450,7 +450,6 @@ before testing. Register two available engines for the same game through
    query_tournament id=1
    ```
 
-   Append `allow_shared_executable=true` to the tournament command if required.
    Then run from cmd:
 
    ```bat
@@ -529,9 +528,22 @@ local port at the same time.
 
 Engine executables may live outside the ZGUI directory. ZGUI launches the
 registered path, with the engine's own directory as its working directory.
-UCI registrations saved by the current editor have independent option values,
-even when they use the same executable. Hub/DXP settings and unmigrated UCI
-registrations still use the executable-side parameter file; see section 2.6.
+Only one engine registration is allowed per installed directory, across all
+protocols. This is the directory containing the registered executable. A shared
+executable is also a conflict, regardless of different names,
+arguments, private UCI options or environment overrides. Filesystem aliases such
+as symlinks, junctions and hard links do not create separate installations. To
+compare versions or configurations, install separate actual copies in separate
+directories. Changing a registration's own settings remains supported.
+
+Existing conflicting registrations are retained for inspection and removal, but
+cannot launch games, annotators, tournaments or editor probes. **Engines...** marks
+them as registration conflicts; hover over the executable name for the explanation.
+Keep one registration per installation or point each retained registration at its
+own installed copy.
+No settings or archived tournaments are automatically deleted. UCI registration
+options and environments retain their current storage format; Hub/DXP settings
+and unmigrated UCI registrations use executable-side parameters (section 2.6).
 
 ### 2.1 UCI engines (chess)
 
@@ -742,8 +754,10 @@ can use (replace the policy filename with your actual file):
 ```
 
 ZGUI inherits its current environment and applies these overrides only to that
-registration's child process. Two registrations sharing an executable can use
-different values concurrently. The overrides also apply to **Launch engine** in
+registration's child process. Separate installed copies in separate directories
+can use different values concurrently. Sharing an executable or installed
+directory between registrations is prohibited. The overrides also apply to
+**Launch engine** in
 the editor, annotators, games and tournaments, for UCI, Hub and locally launched
 DXP engines. A remote DXP engine's environment is controlled on its own computer.
 Restart an existing engine session to apply changed values.
@@ -769,8 +783,8 @@ with no overrides retain their earlier identity.
 ZGUI stores the engine registry in `engines.json` beside the ZGUI executable.
 
 - **UCI:** after accepting the engine editor, option values are saved in that
-  registration's `uci_options` array in `engines.json`. Two registrations of one
-  executable can use different Hash, Threads or strength settings. Identity,
+  registration's `uci_options` array in `engines.json`. Registrations in
+  separate installed directories can use different Hash, Threads or strength settings. Identity,
   launch arguments and INI text remain in the registration's existing fields.
 - **Existing UCI registrations:** if `uci_options` is absent, ZGUI reads the old
   executable-side `.params.json` file's `uci` section. Saving that registration
@@ -778,7 +792,7 @@ ZGUI stores the engine registry in `engines.json` beside the ZGUI executable.
   An explicitly empty private array uses defaults rather than inheriting the file.
 - **Hub and DXP:** parameters remain beside the engine executable, using its
   name with extension `.params.json` and separate `hub` and `dxp` sections.
-  Registrations sharing that file also share those saved settings.
+  Each registration must have its own installed directory and executable.
 
 Back up `engines.json`, any legacy/Hub/DXP parameter files and external INI files
 when moving an installation. Older ZGUI builds ignore private UCI options, so
@@ -1472,7 +1486,9 @@ asserting an independently verified rule cause.
 This reference describes displayed causes; it does not add adjudication rules.
 
 The cross table ranks engines by points, wins, Sonneborn-Berger score, and then
-name. It also shows the individual matchup results. In a head-to-head event
+name. Drag any column divider, including the one after **Engine**, to change its
+width. Result refreshes retain those widths; statistics widths also survive
+participant changes. It also shows the individual matchup results. In a head-to-head event
 with only two engines, their SB totals are equal; use Points to read the match
 score.
 
@@ -1532,16 +1548,12 @@ resolve the current Swiss round before creating the next one.
 
 Tournament games force Ponder off at runtime, even when an engine has it saved
 as true. Saved options and ordinary games keep their own choice. Saving a UCI
-registration stores its options with that registration in `engines.json`; two
-named registrations can use the same executable with different Threads, Hash or
-strength settings. Existing registrations without private options still read
-the old executable-side `.params.json` file until saved in the engine editor.
-Older ZGUI versions ignore the new registration options; rebuild both platform
-versions before using them. The legacy file is left unchanged. Start warns only when participants still
-share those legacy settings. Private options do not isolate files an engine itself
-writes beside its executable (for example logs or learning files). If an engine
-cannot safely share those files, use separate engine directories. Hub/DXP parameter
-files are unchanged.
+registration stores its options with that registration in `engines.json`.
+Comparisons require separate installed directories and executable copies; different
+private options or environments cannot bypass that rule. Existing registrations
+without private options still read their executable-side `.params.json` file until
+saved in the engine editor. The storage format is retained; this is an installation
+uniqueness rule, not an automatic settings migration.
 
 Concurrency respects existing engine reservations: five participants permit at
 most two games at once. Rows waiting for a busy engine say so. Concurrent active

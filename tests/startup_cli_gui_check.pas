@@ -1,6 +1,6 @@
 program startup_cli_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces,Forms,Classes,SysUtils,Controls,
  StdCtrls,ExtCtrls,Dialogs,Grids,CheckLst,Process,uMainForm,uTournamentHostForm,uTournamentDialog,
  uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,
  uDraughtsHubEngine,uChessUciEngine,uDraughtsEngine,uGuiDialogs,uStartupCommand,
@@ -132,7 +132,7 @@ begin
  L:=TExternalEngineList.Create;
  try
   for I:=0 to 3 do begin
-   E:=TExternalEngineDefinition.Create;E.ExePath:=ExpandFileName(ParamStr(0));
+   E:=TExternalEngineDefinition.Create;E.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));
    if I<2 then begin E.Kind:=eekUci;E.UciId:='CLI Chess '+IntToStr(I);E.Arguments:='--peer uci';end
    else begin E.Kind:=eekHub;E.HubId:='CLI Draughts '+IntToStr(I);E.Arguments:='--peer hub';end;
    E.Arguments:=E.Arguments+' '+IntToStr(I);L.Add(E);

@@ -1,6 +1,6 @@
 program tournament_tabs_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,uGuiLayoutTestWatch,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces,uGuiLayoutTestWatch,
   {$IFDEF LCLgtk2}Gtk2,Gtk2Proc,{$ENDIF} Forms,Classes,SysUtils,Controls,
   StdCtrls,ExtCtrls,ComCtrls,CheckLst,Grids,Dialogs,LCLIntf,FPJSON,JSONParser,uMainForm,
   uTournamentHostForm,uTournamentDialog,uTournamentGridModel,uGamePosition,
@@ -264,7 +264,7 @@ var I:Integer;D:TExternalEngineDefinition;
 begin
  Defs.Clear;
  for I:=0 to 3 do begin
-  D:=TExternalEngineDefinition.Create;D.ExePath:=ExpandFileName(ParamStr(0));
+  D:=TExternalEngineDefinition.Create;D.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));
   if I<2 then begin D.Kind:=eekUci;D.UciId:='Chess '+IntToStr(I);D.Arguments:='--peer uci';end
   else begin D.Kind:=eekHub;D.HubId:='Draughts '+IntToStr(I);D.Arguments:='--peer hub';end;
   if Hold then D.Arguments:=D.Arguments+' hold';Defs.Add(D);
@@ -508,7 +508,7 @@ begin
  LayoutWatch.Step('bounded backfill '+V.Name);RegisterEngines(True);
  if V=Chess then Base:=0 else Base:=2;
  for K:=0 to 1 do begin
-  Def:=TExternalEngineDefinition.Create;Def.Assign(Defs[Base]);
+  Def:=TExternalEngineDefinition.Create;Def.Assign(Defs[Base]);Def.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'backfill-'+IntToStr(K));
   if V=Chess then Def.UciId:='Backfill chess '+IntToStr(K)
   else Def.HubId:='Backfill draughts '+IntToStr(K);
   Defs.Add(Def);

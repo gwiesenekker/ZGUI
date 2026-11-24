@@ -79,6 +79,7 @@ type
     FBlackEngines: TStringList;
     FClosing: Boolean;
     FCrossTableGrid: TStringGrid;
+    FCrossTableWidthsInitialized:Boolean;
     FEngineCheckList: TCheckListBox;
     FEngines: TExternalEngineList;
     FFileName: string;
@@ -631,6 +632,7 @@ begin
   CrossTablePanel.BevelOuter := bvNone;
 
   FCrossTableGrid := TStringGrid.Create(Self);
+  FCrossTableGrid.Name:='TournamentCrossTable';
   FCrossTableGrid.MouseWheelOption := mwGrid;
   FCrossTableGrid.Options := FCrossTableGrid.Options + [goThumbTracking];
   FCrossTableGrid.Parent := CrossTablePanel;
@@ -639,7 +641,7 @@ begin
   FCrossTableGrid.RowCount := 2;
   FCrossTableGrid.FixedRows := 1;
   FCrossTableGrid.Options := FCrossTableGrid.Options - [goEditing] +
-    [goColSizing, goRowSelect];
+    [goColSizing, goFixedColSizing, goRowSelect];
 
   PairingPanel := TPanel.Create(Self);
   PairingPanel.Parent := GridPanel;
@@ -1129,43 +1131,21 @@ begin
 end;
 
 function TTournamentDialog.ConfirmSharedExecutables(CommandMode:Boolean;AllowShared:Boolean):Boolean;
-var Seen,Keys:TStringList;Row:Integer;HasPairing,Conflict:Boolean;
- function Participant(D:TExternalEngineDefinition):Boolean;
- var Path,Key:string;
+var I:Integer;
+ function Allowed(Engine:TExternalEngineDefinition):Boolean;
  begin
-  Result:=True;if D=nil then Exit;
-  if D.UciOptionsJson<>'' then Exit; // Private registration settings do not share a file.
-  Key:=EngineIdentityKey(D);if Keys.IndexOf(Key)>=0 then Exit;
-  Keys.Add(Key);Path:=ExpandFileName(D.ExePath);
-  if Seen.IndexOf(Path)>=0 then Exit(False);
-  Seen.Add(Path);
+  Result:=(Engine=nil) or (Engine.RegistrationProblem='');
+  if not Result and not CommandMode then
+    ShowGuiOkDialog(Self,'Engine registration conflict',Engine.RegistrationProblem);
  end;
 begin
-  Result:=True;if FProfile.FileFormat<>gffPgn then Exit;
-  Seen:=TStringList.Create;Keys:=TStringList.Create;
-  try
-    Seen.CaseSensitive:={$IFDEF MSWINDOWS}False{$ELSE}True{$ENDIF};
-    // Existing pairings are authoritative; a fresh CONFIGURE preflight uses
-    // the selected registrations, before pairing can publish any files.
-    HasPairing:=False;Conflict:=False;
-    for Row:=1 to FGrid.RowCount-1 do
-      if TournamentGridHasPairingAtRow(FGrid,Row) then begin
-        HasPairing:=True;
-        if not Participant(EngineForRow(Row,True)) or
-          not Participant(EngineForRow(Row,False)) then Conflict:=True;
-      end;
-    if not HasPairing then
-      for Row:=0 to FEngineCheckList.Items.Count-1 do
-        if FEngineCheckList.Checked[Row] then
-          if not Participant(EngineByDisplayName(FEngineCheckList.Items[Row])) then Conflict:=True;
-    if Conflict then begin
-      if CommandMode then Exit(AllowShared);
-      Result:=ShowGuiConfirmationDialog(Self,'Tournament',
-        'Two participants use the same executable and share one UCI options file.'+LineEnding+
-        'They cannot use different saved settings. Use separate executable paths for that comparison.'+LineEnding+
-        'Continue with the shared settings?', 'Continue','',mrCancel)=mrYes;
-    end;
-  finally Keys.Free;Seen.Free;end;
+ // Legacy API/flag retained for compatibility; it never bypasses uniqueness.
+ Result:=False;
+ for I:=1 to FGrid.RowCount-1 do if TournamentGridHasPairingAtRow(FGrid,I) then
+  if not Allowed(EngineForRow(I,True)) or not Allowed(EngineForRow(I,False)) then Exit;
+ for I:=0 to FEngineCheckList.Items.Count-1 do if FEngineCheckList.Checked[I] then
+  if not Allowed(TExternalEngineDefinition(FEngineCheckList.Items.Objects[I])) then Exit;
+ Result:=True;
 end;
 
 procedure TTournamentDialog.AddLabelledEdit(AParent: TWinControl;
@@ -1652,6 +1632,8 @@ begin
     not (B.Kind in FProfile.EngineKinds) then raise EConvertError.Create('Choose two distinct engines for this game');
   if (EngineIdentityKey(A)<>Settings.Engine1Key) or (EngineIdentityKey(B)<>Settings.Engine2Key) then
     raise EConvertError.Create('Engine registration changed while configuring');
+  if A.RegistrationProblem<>'' then raise EConvertError.Create(A.RegistrationProblem);
+  if B.RegistrationProblem<>'' then raise EConvertError.Create(B.RegistrationProblem);
   DisableAlign;FLoadingTournament:=True;
   try
     if Settings.Name<>'' then FTournamentNameEdit.Text:=Settings.Name;
@@ -2723,7 +2705,7 @@ begin
       UpdateButtons;Exit(tsrNothingEligible);
     end;
     if not ConfirmSharedExecutables(CommandMode,AllowShared) then begin
-      if CommandMode then AMessage:='Shared executable requires allow_shared_executable=true'
+      if CommandMode then AMessage:='Resolve conflicting engine registrations in Engines before starting'
       else AMessage:='Tournament start cancelled';Exit(tsrCancelled);end;
     AutoSaveTournament;
     if FStorageError<>'' then begin AMessage:=FStorageError;Exit(tsrFailed);end;
@@ -3153,12 +3135,33 @@ var
   Results: TStringList;
   Table: TTournamentCrossTable;
   WhiteEngines: TStringList;
+  Widths:array of record Key:string;Width:Integer;end;
+  procedure Remember(const Key:string;Index:Integer);
+  var N:Integer;
+  begin
+    N:=Length(Widths);SetLength(Widths,N+1);
+    Widths[N].Key:=Key;Widths[N].Width:=FCrossTableGrid.ColWidths[Index];
+  end;
+  function SavedWidth(const Key:string;Default:Integer):Integer;
+  var Index:Integer;
+  begin
+    for Index:=0 to High(Widths) do if Widths[Index].Key=Key then Exit(Widths[Index].Width);
+    Result:=Default;
+  end;
 begin
   if FClosing then
     Exit;
   if FCrossTableGrid = nil then
     Exit;
 
+  Widths:=nil;
+  if FCrossTableWidthsInitialized then begin
+    Remember('engine',0);
+    for I:=1 to FCrossTableGrid.ColCount-4 do Remember('opponent:'+FCrossTableGrid.Cells[0,I],I);
+    Remember('points',FCrossTableGrid.ColCount-3);
+    Remember('wins',FCrossTableGrid.ColCount-2);
+    Remember('sb',FCrossTableGrid.ColCount-1);
+  end;
   Engines := TStringList.Create;
   WhiteEngines := TStringList.Create;
   BlackEngines := TStringList.Create;
@@ -3206,9 +3209,13 @@ begin
           FormatTournamentSB(Table.SB[Table.Order[I]],FProfile.FileFormat);
       end;
 
-    FCrossTableGrid.ColWidths[0] := 260;
-    for I := 1 to FCrossTableGrid.ColCount - 1 do
-      FCrossTableGrid.ColWidths[I] := 72;
+    FCrossTableGrid.ColWidths[0]:=SavedWidth('engine',260);
+    for I:=0 to High(Table.Order) do
+      FCrossTableGrid.ColWidths[I+1]:=SavedWidth('opponent:'+Table.EngineNames[Table.Order[I]],72);
+    FCrossTableGrid.ColWidths[Col]:=SavedWidth('points',72);
+    FCrossTableGrid.ColWidths[Col+1]:=SavedWidth('wins',72);
+    FCrossTableGrid.ColWidths[Col+2]:=SavedWidth('sb',72);
+    FCrossTableWidthsInitialized:=True;
   finally
     Results.Free;
     BlackEngines.Free;

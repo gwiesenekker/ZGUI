@@ -208,7 +208,7 @@ begin
        D:=FHost.NewTournament(V);if D=nil then Fail('BUSY','Tournament host is busy');
        D.ConfigureNewTournament(Settings);
        if not D.ConfirmSharedExecutables(True,AllowShared) then
-         Fail('CONFIRMATION_REQUIRED','Shared executable requires allow_shared_executable=true');
+         Fail('CONFIGURE','Resolve conflicting engine registrations in Engines before starting');
        Phase:='PAIRING';
        if not D.CreatePairing(Msg,True) then begin
          if D.StorageError<>'' then Phase:='STORAGE';Fail(Phase,Msg);

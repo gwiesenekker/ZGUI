@@ -1,6 +1,6 @@
 program sprt_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,ExtCtrls,Grids,Graphics,CheckLst,Controls,FPJSON,JSONParser,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces,Forms,Classes,SysUtils,StdCtrls,ExtCtrls,Grids,Graphics,CheckLst,Controls,FPJSON,JSONParser,
  uTournamentDialog,uTournamentGridModel,uTournamentStorage,uSprt,uSprtPanel,uGamePosition,uChessPosition,uDraughtsPosition,
  uGameGuiProfile,uEngineRegistry,uGameSetupTypes,uGuiDialogs,Dialogs;
 type TGraphAccess=class(TSprtGraph)
@@ -17,7 +17,7 @@ begin
  L:=TExternalEngineList.Create;
  try
   for I:=0 to 5 do begin
-   E:=TExternalEngineDefinition.Create;E.ExePath:=ExpandFileName(ParamStr(0));E.Arguments:='unused '+IntToStr(I);
+   E:=TExternalEngineDefinition.Create;E.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));E.Arguments:='unused '+IntToStr(I);
    if I<3 then begin E.Kind:=eekUci;E.UciId:='SPRT UCI '+IntToStr(I);end
    else begin E.Kind:=eekHub;E.HubId:='SPRT Hub '+IntToStr(I);end;L.Add(E);
   end;

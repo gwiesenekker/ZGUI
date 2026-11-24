@@ -1,7 +1,7 @@
 program uci_gui_check;
 {$mode objfpc}{$H+}
 {$IFNDEF GWDGUI_NONINTERACTIVE_TEST}{$FATAL Build with LPI}{$ENDIF}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces, Forms, Controls, Classes, SysUtils,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces, Forms, Controls, Classes, SysUtils,
   StdCtrls, Menus, Grids, ExtCtrls, ComCtrls, uGameTreeView, uEngineEditForm, uEngineRegistry,
   uEngineParamsJson, uMainForm, uChessPosition, uChessUciEngine, uGamePosition,
   uGameGuiProfile, uDraughtsPosition, uGameTree, uGuiDialogs, uGameTreeSearchRef,
@@ -200,7 +200,7 @@ var F: TMainForm; Engines: TExternalEngineList; D: TExternalEngineDefinition;
 begin
   Engines:=TExternalEngineList.Create; Keys:=TStringList.Create;
   D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=Exe; D.UciId:='GUI UCI'; D.Arguments:='--fake-uci'; Engines.Add(D);
-  D:=TExternalEngineDefinition.Create; D.Kind:=eekHub; D.ExePath:=Exe; D.HubId:='Not Chess'; Engines.Add(D);
+  D:=TExternalEngineDefinition.Create; D.Kind:=eekHub; D.ExePath:=InstallEngineFixture(Exe,'not-chess'); D.HubId:='Not Chess'; Engines.Add(D);
   SaveExternalEngines(EnginesJsonFileName,Engines); F:=TMainForm.Create(nil);
   try
     Item:=Menu(F,'Open Annotator'); Popup:=TPopupMenu(Item.GetParentMenu); Popup.OnPopup(Popup);
@@ -443,7 +443,7 @@ begin
   Engines:=TExternalEngineList.Create; Keys:=TStringList.Create;
   D:=TExternalEngineDefinition.Create; D.Kind:=eekUci; D.ExePath:=Exe; D.UciId:='Game UCI';
   if not RealEngine then D.Arguments:='--fake-uci'; Engines.Add(D);
-  if not RealEngine then begin D:=TExternalEngineDefinition.Create; D.Kind:=eekHub; D.ExePath:=Exe; D.HubId:='Not Chess'; Engines.Add(D); end;
+  if not RealEngine then begin D:=TExternalEngineDefinition.Create; D.Kind:=eekHub; D.ExePath:=InstallEngineFixture(Exe,'not-chess'); D.HubId:='Not Chess'; Engines.Add(D); end;
   SaveExternalEngines(EnginesJsonFileName,Engines);
   F:=TMainForm.Create(nil); Dialog:=TGameSetupForm.Create(F,DefaultGameVariant); Capture:=TGameAccept.Create; Capture.Main:=F;
   try

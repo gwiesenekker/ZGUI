@@ -1,6 +1,6 @@
 program uci_engine_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Classes, SysUtils, SyncObjs, uChessUciEngine,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Classes, SysUtils, SyncObjs, uChessUciEngine,
   uChessUciProtocol, uChessPosition, uGamePosition, uEngineBase, uEngineRegistry,
   uEngineParamsJson, uProcessEngineWorker;
 var Checks: Integer=0;
@@ -105,7 +105,7 @@ begin
  FileName:=EngineParamsFileName(ExpandFileName(ParamStr(0)));RegistryName:=FileName+'.registrations';
  try
   A.Kind:=eekUci;A.UciId:='A';A.ExePath:=ExpandFileName(ParamStr(0));A.Arguments:='--fake-uci normal';
-  B.Assign(A);B.UciId:='B';Legacy.Assign(A);
+  B.Assign(A);B.ExePath:=InstallEngineFixture(A.ExePath,'private-b');B.UciId:='B';Legacy.Assign(A);
   Params:=nil;AddOrUpdateParam(Params,'hash','spin','16',False);SaveEngineParamsToJson(FileName,'uci',Params);
   Text.LoadFromFile(FileName);Before:=Text.Text;
   AddOrUpdateParam(Params,'hash','spin','32',False);SaveEngineDefinitionParams(A,Params);

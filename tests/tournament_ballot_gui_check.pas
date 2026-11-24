@@ -1,6 +1,6 @@
 program tournament_ballot_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,Controls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces,Forms,Classes,SysUtils,Controls,
  StdCtrls,Grids,CheckLst,ExtCtrls,FPJSON,JSONParser,uTournamentDialog,uTournamentStorage,
  uTournamentGridModel,uTournamentBallot,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
  uEngineRegistry,uGuiDialogs,uGameSetupTypes,uGameFileReader,uGameTreePdn,uSprtPanel,uSprt;
@@ -28,7 +28,7 @@ begin
  L:=TExternalEngineList.Create;
  try
   for I:=1 to 4 do begin
-   D:=TExternalEngineDefinition.Create;D.ExePath:=ExpandFileName(ParamStr(0));D.Arguments:='--peer '+IntToStr(I);
+   D:=TExternalEngineDefinition.Create;D.ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));D.Arguments:='--peer '+IntToStr(I);
    if I<=2 then begin D.Kind:=eekUci;D.UciId:='Chess '+IntToStr(I);end
    else begin D.Kind:=eekHub;D.HubId:='Draughts '+IntToStr(I);end;
    L.Add(D);

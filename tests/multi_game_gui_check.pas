@@ -1,6 +1,6 @@
 program multi_game_gui_check;
 {$mode objfpc}{$H+}
-uses {$IFDEF UNIX}cthreads,{$ENDIF} Interfaces,Forms,Classes,SysUtils,StdCtrls,ComCtrls,
+uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, Interfaces,Forms,Classes,SysUtils,StdCtrls,ComCtrls,
   uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,uEngineRegistry,
   uGameSetupTypes,uGameSetupForm,uGameOrchestrator,uRunningGame,uEngineEditForm,uMainForm,
   uEngineParamsJson,uGameBoardControl,uChessBoardControl,uDraughtsBoardControl,Menus,Controls,Dialogs,
@@ -694,11 +694,11 @@ var Main:TMainForm;Engines:TExternalEngineList;Defs:array[0..5]of TExternalEngin
 begin
   Engines:=TExternalEngineList.Create;Busy:=TStringList.Create;Lines:=TStringList.Create;
   for I:=0 to 5 do begin
-    Defs[I]:=TExternalEngineDefinition.Create;Defs[I].ExePath:=ExpandFileName(ParamStr(0));
+    Defs[I]:=TExternalEngineDefinition.Create;Defs[I].ExePath:=InstallEngineFixture(ExpandFileName(ParamStr(0)),'peer-'+IntToStr(I));
     if I in [0,1,4] then begin Defs[I].Kind:=eekUci;Defs[I].UciId:='Chess '+IntToStr(I);Defs[I].Arguments:='--peer uci';end
     else begin Defs[I].Kind:=eekHub;Defs[I].HubId:='Draughts '+IntToStr(I);Defs[I].Arguments:='--peer hub';end;
     if RealEngines then begin
-      J:=I+1;if I=4 then J:=1 else if I=5 then J:=4;
+      J:=I+1;
       Defs[I].ExePath:=ExpandFileName(ParamStr(J));Defs[I].ExecutableName:=ExtractFileName(Defs[I].ExePath);
       if Defs[I].Kind=eekHub then Defs[I].Arguments:='hub' else Defs[I].Arguments:='';
     end;
@@ -764,7 +764,8 @@ begin
   if ParamStr(1)='--peer' then begin
     Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;try Peer;finally Chess.Free;Draughts.Free;end;Halt;
   end;
-  RealEngines:=ParamCount=4;
+  RealEngines:=ParamCount=6;
+  if (ParamCount<>0) and not RealEngines then raise Exception.Create('Real-engine mode requires six separate installed executables (chess, chess, draughts, draughts, chess annotator, draughts annotator)');
   RequireDerivedFormResource:=False;Application.Initialize;Application.ShowMainForm:=False;Application.CaptureExceptions:=False;
   Chess:=TChessVariant.Create;Draughts:=TDraughtsVariant.Create;
   RegisterGame(Chess,ChessGuiProfile);RegisterGame(Draughts,DraughtsGuiProfile);RegisterDefaultGameVariant(Chess);

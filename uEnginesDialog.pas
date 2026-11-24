@@ -28,6 +28,7 @@ type
     procedure EngineAccepted(Sender: TObject; AEngine: TExternalEngineDefinition;
       var AAccepted: Boolean);
     procedure OpenEngineEditor(AIndex: Integer);
+    function CheckRegistration(AEngine:TExternalEngineDefinition):string;
     procedure RefreshGrid;
     procedure MeasureColumns;
     procedure GridCellHint(Sender:TObject;ACol,ARow:Integer;var HintText:string);
@@ -130,6 +131,7 @@ begin
   begin
     FAddForm := TEngineEditForm.Create(Self,FVariant);
     FAddForm.OnAccepted := @EngineAccepted;
+    FAddForm.OnRegistrationCheck:=@CheckRegistration;
   end;
   FAddForm.LoadEngine(nil);
   ShowFormCenteredOnOwner(FAddForm, Self);
@@ -211,6 +213,9 @@ begin
   end;
 end;
 
+function TEnginesDialog.CheckRegistration(AEngine:TExternalEngineDefinition):string;
+begin Result:=EngineRegistrationConflict(AEngine,FEngines,FEditingIndex);end;
+
 procedure TEnginesDialog.EngineAccepted(Sender: TObject;
   AEngine: TExternalEngineDefinition; var AAccepted: Boolean);
 var
@@ -220,6 +225,8 @@ begin
   AAccepted := False;
   if AEngine = nil then
     Exit;
+  OtherEngineName:=CheckRegistration(AEngine);
+  if OtherEngineName<>'' then begin ShowGuiOkDialog(Self,'Engines',OtherEngineName);Exit;end;
   if ProtocolIdConflict(AEngine, OtherEngineName) then
   begin
     ShowGuiOkDialog(Self, 'Engines',
@@ -258,6 +265,7 @@ begin
   begin
     FAddForm := TEngineEditForm.Create(Self,FVariant);
     FAddForm.OnAccepted := @EngineAccepted;
+    FAddForm.OnRegistrationCheck:=@CheckRegistration;
   end;
   FAddForm.LoadEngine(FEngines[AIndex]);
   ShowFormCenteredOnOwner(FAddForm, Self);
@@ -275,7 +283,8 @@ begin
   HintText:='';
   if (ARow>=FGrid.FixedRows) and (ARow<FGrid.RowCount) and
      (ACol>=0) and (ACol<FGrid.ColCount) then
-    HintText:=FGrid.Cells[ACol,ARow];
+    if (ACol=1) and (ARow<=FEngines.Count) and (FEngines[ARow-1].RegistrationProblem<>'') then HintText:=FEngines[ARow-1].RegistrationProblem
+    else HintText:=FGrid.Cells[ACol,ARow];
 end;
 
 procedure TEnginesDialog.MeasureColumns;
@@ -295,12 +304,15 @@ var
   Engine: TExternalEngineDefinition;
   I: Integer;
 begin
+  RefreshEngineRegistrationProblems(FEngines);
   FGrid.RowCount := FEngines.Count + 1;
   for I := 0 to FEngines.Count - 1 do
   begin
     Engine := FEngines[I];
     FGrid.Cells[0, I + 1] := Engine.ExePath;
-    if EngineExecutableProblem(Engine) = '' then
+    if Engine.RegistrationProblem<>'' then
+      FGrid.Cells[1,I+1]:=Engine.ExecutableName+' (registration conflict)'
+    else if EngineExecutableProblem(Engine) = '' then
       FGrid.Cells[1, I + 1] := Engine.ExecutableName
     else
       FGrid.Cells[1, I + 1] := Engine.ExecutableName + ' (not found)';

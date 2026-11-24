@@ -4,6 +4,37 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Require separate engine installations and fix cross-table resizing — 2026-11-24
+
+Commit: pending.
+
+- Authorization: “Implement now; waive prior review” for one registration and
+  configuration per installed directory. Additional steering: do not allow two
+  registrations sharing an executable to have different overrides. Existing
+  settings storage is retained; no user registrations/configurations are deleted.
+  Local note: chatgpt/ENGINE_INSTALLATION_UNIQUENESS.md (outside Git).
+- Reject duplicate directories or executables across all engine protocols before
+  registration acceptance or editor probe launch. Compare filesystem identities
+  to catch directory aliases, executable symlinks and hard links. Separate actual
+  installed copies in separate directories remain valid; overrides cannot bypass
+  this rule.
+- Retain conflicting legacy registry entries for inspection/removal, mark them in
+  Engines, and block game/annotator/tournament/adapter launches. CLI availability
+  reports the conflict. The legacy allow_shared_executable flag cannot waive it.
+- Reuse existing engine definitions, launch guards and editor validation. Preserve
+  UCI options/environment metadata, shared-parameter compatibility and saved game
+  data. Update both games' manual and test fixtures for separate installations.
+- Additional GUI authorization: “Apply now; waive prior review” for the cross-table
+  divider after Engine. Enable fixed-column sizing and preserve user widths by
+  engine/statistic role across result and participant refreshes, for both games.
+- Validation: GTK2 application build and full regression passed. All 32 GUI
+  suites passed, including 26 installation/divider GUI checks, 473 tournament-tab checks and 11,258 layout checks. Tournament
+  preservation, chess tournament and 21 core installation checks passed.
+  Windows batch checks passed
+  under Wine; cross-compilation was unavailable (missing target units). Native
+  Windows verification remains outstanding.
+
+
 ### Configure private engine environments — 2026-11-24
 
 Commit: `0df24c6`.

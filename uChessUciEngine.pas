@@ -155,6 +155,7 @@ begin
   try
     try
       if WorkerStopping then Exit;
+      if FDefinition.RegistrationProblem<>'' then raise EInvalidOperation.Create(FDefinition.RegistrationProblem);
       Init.Text:=FDefinition.InitText;
       for I:=0 to Init.Count-1 do begin
         Line:=Trim(Init[I]);
