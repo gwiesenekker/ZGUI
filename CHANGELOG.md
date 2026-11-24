@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Configure registered engines through the interactive CLI — 2026-11-24
 
-Commit: pending.
+Commit: `3c8daa6`.
 
 - Authorization: “Please proceed!” in response to the named configure_engine
   implementation/review choice, selecting implementation with prior review waived.
