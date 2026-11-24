@@ -225,6 +225,7 @@ type
     procedure AcceptInitialSettings;
     function HasTournamentData: Boolean;
     function IsRunning: Boolean;
+    function UsesEngineInstallation(Engine:TExternalEngineDefinition):Boolean;
     function SaveTournamentWithDialog: Boolean;
     function ChooseSaveFileName(out FileName:string):Boolean;
     procedure StopForClose;
@@ -242,7 +243,7 @@ type
 
 implementation
 
-uses
+uses uEngineInstallation,
   uGameDocumentContext, Dialogs, SHA1, Graphics, JSONParser, Math, LazFileUtils,
   uGuiDialogs, uMainForm, uRunningGame, uTournamentGridModel, uTournamentModel,
   uTournamentPairing, uTournamentResults, uTournamentTypes, uTournamentStorage,
@@ -3123,6 +3124,18 @@ begin
     FStopButton.Enabled := (FRunning or (ActiveRunningGameCount>0)) and
       (not FRefereeStopPending);
   end;
+end;
+
+function TTournamentDialog.UsesEngineInstallation(Engine:TExternalEngineDefinition):Boolean;
+var I:Integer;Key:string;
+ function Matches(Other:TExternalEngineDefinition):Boolean;
+ begin Result:=(Other<>nil) and (InstallationPathKey(Other.ExePath)=Key);end;
+begin
+ Result:=False;if (Engine=nil) or not IsRunning then Exit;
+ Key:=InstallationPathKey(Engine.ExePath);
+ if Matches(ForfeitEngine) then Exit(True);
+ for I:=1 to FGrid.RowCount-1 do if TournamentGridHasPairingAtRow(FGrid,I) then
+  if Matches(EngineForRow(I,True)) or Matches(EngineForRow(I,False)) then Exit(True);
 end;
 
 procedure TTournamentDialog.UpdateCrossTable;

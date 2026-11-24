@@ -42,7 +42,7 @@ procedure SaveEngineDefinitionParams(AEngine: TExternalEngineDefinition;
 
 implementation
 
-uses uEngineFeatureFlags,
+uses uAtomicFile,uEngineFeatureFlags,
   Classes, FPJSON, JSONParser, SysUtils;
 
 function EngineHasFeatureFlag(const AParams:TEngineParamArray;const Flag:string):Boolean;
@@ -497,7 +497,7 @@ begin
     Lines := TStringList.Create;
     try
       Lines.Text := JsonText;
-      Lines.SaveToFile(AFileName);
+      WriteTextFileAtomically(AFileName,Lines.Text);
     finally
       Lines.Free;
     end;

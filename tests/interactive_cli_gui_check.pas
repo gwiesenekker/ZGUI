@@ -1,7 +1,7 @@
 program interactive_cli_gui_check;
 {$mode objfpc}{$H+}
 uses {$IFDEF UNIX}cthreads,{$ENDIF} uEngineInstallationFixture, uCliProtocolOutput,Interfaces,Forms,Classes,SysUtils,Controls,StdCtrls,
- ExtCtrls,Grids,Dialogs,FPJSON,JSONParser,uMainForm,uSprtPanel,uSprt,uTournamentDialog,uTournamentHostForm,
+ ExtCtrls,Grids,Dialogs,Menus,uEnginesDialog,FPJSON,JSONParser,uMainForm,uSprtPanel,uSprt,uTournamentDialog,uTournamentHostForm,
  uTournamentStorage,uGamePosition,uChessPosition,uDraughtsPosition,uGameGuiProfile,
  uEngineRegistry,uEngineParamsJson,uGameSetupTypes,uDraughtsHubEngine,uChessUciEngine,uGuiDialogs,
  uStartupCommand,uRunningGame,uGameTree,uAtomicFile,FileUtil,uTournamentGridModel,uTournamentBallot;
@@ -138,6 +138,92 @@ begin
   DeleteFile(FileName);L.Free;
  end;
 end;
+procedure ConfigurationChecks;
+var L:TExternalEngineList;Params:TEngineParamArray;J:TJSONObject;Text:TStringList;
+ RegistryBefore,ParamsBefore,ParamFile,ConfigFile,Args,Key:string;I,K:Integer;
+ Item:TMenuItem;Popup:TPopupMenu;Tick:QWord;EngineDialog:TEnginesDialog;
+begin
+ L:=TExternalEngineList.Create;Text:=TStringList.Create;
+ try
+  LoadExternalEngines(EnginesJsonFileName,L);
+  // Captured schemas are the same metadata saved after a GUI handshake.
+  for I:=0 to 2 do begin
+   Params:=nil;
+   if I<2 then begin
+    AddOrUpdateParam(Params,'Hash','spin','16',False);Params[0].MinValue:='1';Params[0].MaxValue:='128';
+    AddOrUpdateParam(Params,'Ponder','check','false',False);
+   end else AddOrUpdateParam(Params,'threads','int','1',False);
+   SaveEngineDefinitionParams(L[I],Params);
+  end;
+  SaveExternalEngines(EnginesJsonFileName,L);Text.LoadFromFile(EnginesJsonFileName);RegistryBefore:=Text.Text;
+  J:=Response('configure_engine engine_id=1','OK');
+  try Check(not J.Get('changed',True),'Inspect has no writes');Check(TJSONObject(J.Find('options')).Get('Hash','')='16','Inspect exposes captured options');finally J.Free;end;
+  J:=Response('configure_engine engine_id=1 options='' {"Hash":64,"Ponder":true} '' dry_run=true','OK');
+  try Check(J.Get('dry_run',False) and not J.Get('changed',True),'Dry run validates without saving');finally J.Free;end;
+  Text.LoadFromFile(EnginesJsonFileName);Check(Text.Text=RegistryBefore,'Dry run retains exact registry bytes');
+  Error('configure_engine engine_id=1 options=''{"Hash":129}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 options=''{"Missing":1}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 options=''{"Hash":1,"hash":2}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 options=''{"Ponder":"maybe"}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 options=''{"gui-uci-id":"renamed"}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 environment=''{"INVALID-NAME":"x"}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 environment=''{"TEST":null}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 feature_flags=''{"no-pondering":true}''','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 dry_run=yes','BAD_ARGUMENT');
+  Error('configure_engine engine_id=1 engine="CLI Chess 0"','BAD_ARGUMENT');
+  Text.LoadFromFile(EnginesJsonFileName);Check(Text.Text=RegistryBefore,'Invalid patches preserve registry bytes');
+  J:=Response('configure_engine engine_id=1 options=''{"Hash":64,"Ponder":true}'' feature_flags=''["NO-PONDERING"]''','OK');
+  try Check(J.Get('changed',False),'UCI patch persisted');finally J.Free;end;
+  LoadExternalEngines(EnginesJsonFileName,L);Params:=nil;LoadEngineDefinitionParams(L[0],'uci',Params);
+  Check((EngineParamValue(Params,'Hash','')='64') and (EngineParamValue(Params,'Ponder','')='true'),'GUI loader reads CLI UCI changes');
+  Check(EngineHasFeatureFlag(Params,'no-pondering'),'Feature flags canonicalized and saved');
+  ParamFile:=EngineParamsFileName(L[2].ExePath);Text.LoadFromFile(ParamFile);ParamsBefore:=Text.Text;
+  Error('configure_engine engine_id=3 options=''{"threads":"bad\nline"}''','BAD_ARGUMENT');
+  Text.LoadFromFile(ParamFile);Check(Text.Text=ParamsBefore,'Invalid Hub patch retains parameter file');
+  ConfigFile:=Directory+'/configuration.json';Text.Text:='{"options":{"threads":2},"feature_flags":["no-ponder-hit"]}';Text.SaveToFile(ConfigFile);
+  J:=Response('configure_engine engine_id=3 file="'+ConfigFile+'"','OK');J.Free;
+  LoadExternalEngines(EnginesJsonFileName,L);Params:=nil;LoadEngineDefinitionParams(L[2],'hub',Params);
+  Check((EngineParamValue(Params,'threads','')='2') and EngineHasFeatureFlag(Params,'no-ponder-hit'),'Hub GUI loader reads file patch');
+  Error('configure_engine engine_id=3 file="'+ConfigFile+'" options=''{}''','BAD_ARGUMENT');
+  Text.Text:='{"unexpected":true}';Text.SaveToFile(ConfigFile);
+  Error('configure_engine engine_id=3 file="'+ConfigFile+'"','BAD_ARGUMENT');
+  DeleteFile(ConfigFile);
+  // Environment changes configuration identity: use returned ID thereafter.
+  Key:=EngineIdentityKey(L[0]);
+  J:=Response('configure_engine engine="CLI Chess 0" environment=''{"ZGUI_TEST":"one","EMPTY":""}''','OK');
+  try I:=J.Get('id',0);Check((I>4) and (J.Get('key','')<>Key),'Changed environment returns a fresh identity/ID');finally J.Free;end;
+  Error('configure_engine engine_id=1','UNKNOWN_ENGINE');
+  J:=Response('configure_engine engine_id='+IntToStr(I)+' environment=''{}''','OK');J.Free;
+  // Return fixtures to their original defaults before match/identity assertions.
+  for I:=0 to 2 do begin
+   Args:='';if I<2 then Args:='options=''{"Hash":16,"Ponder":false}'' ';
+   J:=Response('configure_engine engine="'+L[I].IdText+'" '+Args+'feature_flags=''[]''','OK');J.Free;
+  end;
+  for K:=0 to 1 do begin
+   if K=0 then Main.SelectGameVariant(Chess) else Main.SelectGameVariant(Draughts);
+   Item:=nil;for I:=0 to Main.ComponentCount-1 do if (Main.Components[I] is TMenuItem) and
+    (TMenuItem(Main.Components[I]).Caption='Open Annotator') then Item:=TMenuItem(Main.Components[I]);
+   Check(Item<>nil,'Annotator menu available');Popup:=TPopupMenu(Item.GetParentMenu);Popup.OnPopup(Popup);Item.Items[0].Click;
+   Tick:=GetTickCount64;repeat Pump;until (Main.TestAnalyzerRunner<>nil) or (GetTickCount64-Tick>5000);
+   Check(Main.TestAnalyzerRunner<>nil,'Real annotator started');
+   if K=0 then Args:='CLI Chess 0' else Args:='CLI Draughts 2';
+   Error('configure_engine engine="'+Args+'" feature_flags=''[]''','BUSY');
+   J:=Response('configure_engine engine="'+Args+'"','OK');J.Free;
+   Item:=nil;for I:=0 to Main.ComponentCount-1 do if (Main.Components[I] is TMenuItem) and
+    (TMenuItem(Main.Components[I]).Caption='Close Annotator') then Item:=TMenuItem(Main.Components[I]);
+   Check(Item<>nil,'Close annotator available');Popup.OnPopup(Popup);Item.Click;
+   Tick:=GetTickCount64;repeat Pump;until (Main.TestAnalyzerRunner=nil) or (GetTickCount64-Tick>5000);
+   Check(Main.TestAnalyzerRunner=nil,'Annotator stopped');
+  end;
+  Main.SelectGameVariant(Chess);
+  for I:=0 to Main.ComponentCount-1 do if (Main.Components[I] is TButton) and
+   (TButton(Main.Components[I]).Caption='Engines...') then TButton(Main.Components[I]).Click;
+  EngineDialog:=nil;for I:=0 to Main.ComponentCount-1 do if Main.Components[I] is TEnginesDialog then EngineDialog:=TEnginesDialog(Main.Components[I]);
+  Check((EngineDialog<>nil) and EngineDialog.Visible,'Engine settings window opened');
+  Error('configure_engine engine_id=1 feature_flags=''[]''','BUSY');EngineDialog.Hide;
+ finally L.Free;Text.Free;end;
+end;
+
 procedure RegistryChecks;
 var Engines:TExternalEngineList;Clone:TExternalEngineDefinition;SavedArgs,Key:string;J:TJSONObject;
 begin
@@ -237,6 +323,8 @@ begin
   J:=Response('run_tournament '+Args+' allow_shared_executable=true','OK');
   try Id:=J.Get('tournament',0);Check(J.Get('games_total',0)=26,'Ballot expands to 26 ordinary games');Check(J.Get('pairs_total',0)=13,'Duplicate FENs remain separate opening pairs');finally J.Free;end;
   D:=Main.TournamentHost.Dialogs[Main.TournamentHost.Count-1];
+  Error('configure_engine engine="'+A+'" feature_flags=''[]''','BUSY');
+  J:=Response('configure_engine engine="'+A+'" feature_flags=''[]'' dry_run=true','OK');J.Free;
   Check(TCheckBox(D.FindComponent('TournamentShuffleOpeningPairs')).Checked,'CLI shuffle uses shared GUI setting');
   Check(D.GameSetupForRow(1,Setup),'Shared game setup available');
   Check((Setup.TimeControl.MovesPerPeriod=75) and (Abs(Setup.TimeControl.MinutesPerPeriod-10)<0.00001) and
@@ -433,7 +521,7 @@ begin
    Error('stop_tournament id=0','UNKNOWN_TOURNAMENT');
    Error('stop_tournament id=1 extra=true','BAD_ARGUMENT');
    Check(Main.TournamentHost.Count=0,'Invalid fresh setups leave no tabs');
-   LocaleSettings;RelativeBallot;RegistryChecks;Check(Main.TournamentHost.Count=0,'Registry errors create no tabs');
+   LocaleSettings;RelativeBallot;ConfigurationChecks;RegistryChecks;Check(Main.TournamentHost.Count=0,'Registry errors create no tabs');
    Match(Chess,'CLI Chess 0','CLI Chess 1');Match(Draughts,'CLI Draughts 2','CLI Draughts 3');
    GuiTestConfirmationOnShow:=@Probe.Show;
    try ShowGuiOkDialog(Main,'Modal test','Commands must return BUSY');finally GuiTestConfirmationOnShow:=nil;end;

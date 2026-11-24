@@ -1,8 +1,9 @@
 unit uInteractiveCommands;
 {$mode objfpc}{$H+}
 interface
-uses Classes,SysUtils,FPJSON,uTournamentHostForm,uTournamentDialog;
+uses Classes,SysUtils,FPJSON,uEngineRegistry,uCliCommand,uTournamentHostForm,uTournamentDialog;
 type
+  TCliBusyEnginesEvent=procedure(Keys:TStrings) of object;
   TCliTournamentEvent=procedure(Dialog:TTournamentDialog) of object;
   { GUI-thread-only adapter. Tournament state stays in the real host/dialog. }
   TInteractiveCommands=class
@@ -15,17 +16,20 @@ type
     FBindings:array of TBinding;
     FExecuting:Boolean;
     FOnTournament:TCliTournamentEvent;
+    FOnBusyEngines:TCliBusyEnginesEvent;
+    function ConfigureEngine(Engine:TExternalEngineDefinition;Engines:TExternalEngineList;Cmd:TCliCommand):TJSONObject;
     function EngineId(const Key:string):Integer;
   public
     constructor Create(Host:TTournamentHostForm;const BaseDirectory:string='');
     destructor Destroy;override;
     function Execute(const Line:string):string;
+    property OnBusyEngines:TCliBusyEnginesEvent read FOnBusyEngines write FOnBusyEngines;
     property OnTournament:TCliTournamentEvent read FOnTournament write FOnTournament;
   end;
 function CliError(const Code,MessageText:string;const Command:string=''):string;
 implementation
-uses uTimeForfeit,Forms,Math,uCliCommand,uCliDefinitions,uCliBinder,uCliTokenizer,uEngineRegistry,
- uGamePosition,uGameGuiProfile,LazFileUtils;
+uses uTimeForfeit,Forms,Math,uCliDefinitions,uCliBinder,uCliTokenizer,
+ uGamePosition,uGameGuiProfile,LazFileUtils,uEngineConfiguration,uEngineParamsJson,uEngineFeatureFlags,JSONParser;
 type ECliRequest=class(Exception)
   Code:string;
   constructor Create(const ACode,AMessage:string);
@@ -52,6 +56,84 @@ function TInteractiveCommands.EngineId(const Key:string):Integer;
 begin
  Result:=FEngineKeys.IndexOf(Key);if Result<0 then Result:=FEngineKeys.Add(Key);Inc(Result);
 end;
+function TInteractiveCommands.ConfigureEngine(Engine:TExternalEngineDefinition;Engines:TExternalEngineList;Cmd:TCliCommand):TJSONObject;
+var Patch:TJSONObject;Data:TJSONData;Params:TEngineParamArray;Names,Busy,Keys,Flags:TStringList;
+ FileName,Field,Value,Section:string;Stream:TFileStream;I,K:Integer;Mutating,DryRun:Boolean;
+ Options,Definition:TJSONObject;Definitions:TJSONArray;
+ procedure AddField(const Name:string;Value:TJSONData);
+ begin
+  if Patch.Find(Name)<>nil then begin Value.Free;Fail('BAD_ARGUMENT','Setting supplied more than once: '+Name);end;
+  Patch.Add(Name,Value);
+ end;
+begin
+ Result:=nil;Patch:=TJSONObject.Create;Names:=TStringList.Create;Busy:=TStringList.Create;Keys:=TStringList.Create;
+ try
+ try
+  DryRun:=False;
+  if Cmd.HasArgument('dry_run') then begin
+   Value:=LowerCase(Cmd['dry_run']);if (Value<>'true') and (Value<>'false') then Fail('BAD_ARGUMENT','dry_run requires true or false');
+   DryRun:=Value='true';
+  end;
+  if Cmd.HasArgument('file') then begin
+   FileName:=Cmd['file'];if FileName='' then Fail('BAD_ARGUMENT','Empty configuration filename');
+   if not FilenameIsAbsolute(FileName) then FileName:=ExpandFileName(FBaseDirectory+DirectorySeparator+FileName);
+   Stream:=TFileStream.Create(FileName,fmOpenRead or fmShareDenyNone);
+   try
+    if Stream.Size>1024*1024 then Fail('BAD_ARGUMENT','Configuration file exceeds 1 MiB');
+    SetLength(Value,Stream.Size);if Length(Value)>0 then Stream.ReadBuffer(Value[1],Length(Value));
+   finally Stream.Free;end;
+   Data:=GetJSON(Value);
+   try
+    if Data.JSONType<>jtObject then Fail('BAD_ARGUMENT','Configuration file must contain a JSON object');
+    for I:=0 to Data.Count-1 do begin
+     Field:=TJSONObject(Data).Names[I];
+     if (Field<>'options') and (Field<>'environment') and (Field<>'feature_flags') then
+      Fail('BAD_ARGUMENT','Unknown configuration field: '+Field);
+     AddField(Field,Data.Items[I].Clone);
+    end;
+   finally Data.Free;end;
+  end;
+  Names.Add('options');Names.Add('environment');Names.Add('feature_flags');
+  for I:=0 to Names.Count-1 do if Cmd.HasArgument(Names[I]) then AddField(Names[I],GetJSON(Cmd[Names[I]]));
+  Mutating:=Patch.Count>0;
+  if Engine.RegistrationProblem<>'' then Fail('CONFIGURE',Engine.RegistrationProblem);
+  if Mutating and (EngineExecutableProblem(Engine)<>'') then Fail('CONFIGURE',EngineExecutableProblem(Engine));
+  if Engine.Kind=eekUci then Section:='uci' else if Engine.Kind=eekHub then Section:='hub' else Section:='dxp';
+  LoadEngineDefinitionParams(Engine,Section,Params);SeedDefaultGuiParams(Params,Engine);
+  Data:=Patch.Find('options');
+  if Data<>nil then begin
+   if Data.JSONType<>jtObject then Fail('BAD_ARGUMENT','options must be a JSON object');
+   ApplyEngineOptions(Params,TJSONObject(Data));
+  end;
+  Data:=Patch.Find('environment');if Data<>nil then AddOrUpdateParam(Params,'gui-environment','string',Data.AsJSON,False);
+  Data:=Patch.Find('feature_flags');if Data<>nil then begin
+   Flags:=ParseEngineFeatureFlags(Data.AsJSON);
+   try AddOrUpdateParam(Params,'gui-feature-flags','string',EngineFeatureFlagsJson(Flags),False);finally Flags.Free;end;
+  end;
+  ValidateEngineConfiguration(Engine,Params);
+  if Mutating and not DryRun then begin
+   if not Assigned(FOnBusyEngines) then Fail('BUSY','Engine availability cannot be checked');
+   FOnBusyEngines(Busy);AddEngineReservationKeys(Engine,Keys);
+   for I:=0 to Keys.Count-1 do if Busy.IndexOf(Keys[I])>=0 then Fail('BUSY','Stop games/annotators using this engine and close its engine settings window before configuring it');
+   for I:=0 to FHost.Count-1 do if FHost.Dialogs[I].UsesEngineInstallation(Engine) then
+    Fail('BUSY','Stop the tournament using this engine before configuring it');
+   try SaveEngineConfiguration(EnginesJsonFileName,Engines,Engine,Params);
+   except on E:Exception do Fail('STORAGE',E.Message);end;
+  end;
+  Result:=TJSONObject.Create;Result.Add('changed',Mutating and not DryRun);Result.Add('dry_run',DryRun);
+  Result.Add('environment',GetJSON(EngineParamValue(Params,'gui-environment','{}')));
+  Result.Add('feature_flags',GetJSON(EngineParamValue(Params,'gui-feature-flags','[]')));
+  Options:=TJSONObject.Create;Result.Add('options',Options);Definitions:=TJSONArray.Create;Result.Add('option_definitions',Definitions);
+  for K:=0 to High(Params) do if Copy(LowerCase(Params[K].Name),1,4)<>'gui-' then begin
+   Options.Add(Params[K].Name,Params[K].Value);Definition:=TJSONObject.Create;Definitions.Add(Definition);
+   Definition.Add('name',Params[K].Name);Definition.Add('type',Params[K].ParamType);
+   Definition.Add('default',Params[K].DefaultValue);Definition.Add('min',Params[K].MinValue);
+   Definition.Add('max',Params[K].MaxValue);Definition.Add('choices',Params[K].Choices);
+  end;
+ except Result.Free;Result:=nil;raise;end;
+ finally Patch.Free;Names.Free;Busy.Free;Keys.Free;end;
+end;
+
 function TInteractiveCommands.Execute(const Line:string):string;
 var Tokens:TStringList;Spec:TCommandDefinition;Binder:TCommandBinder;Cmd:TCliCommand;
  Engines:TExternalEngineList;J,Item:TJSONObject;Items:TJSONArray;Name,Msg,Key,Phase:string;
@@ -115,6 +197,7 @@ begin
    if Name='run_tournament' then AddParams(['engine1','engine2','engine1_id','engine2_id','engine1_key','engine2_key',
       'name','ballot','shuffle_opening_pairs','time','moves','increment','concurrent','allow_shared_executable',
       'time_forfeit','time_forfeit_id','time_forfeit_key','adjudication_time','adjudication_threshold'])
+   else if Name='configure_engine' then AddParams(['engine','engine_id','engine_key','options','environment','feature_flags','file','dry_run'])
    else if (Name='query_tournament') or (Name='stop_tournament') then begin
      Spec.Arguments.Add(TParameterDefinition.Create('id',True));
      if Name='query_tournament' then AddParams(['pairs','sprt']);
@@ -136,7 +219,11 @@ begin
      if (Msg<>'true') and (Msg<>'false') then Fail('BAD_ARGUMENT','sprt requires true or false');
      IncludeSprt:=Msg='true';
    end;
-   if Name='list_engines' then begin
+   if Name='configure_engine' then begin
+     Engines:=TExternalEngineList.Create;LoadExternalEngines(EnginesJsonFileName,Engines);A:=Resolve('engine');
+     Item:=ConfigureEngine(A,Engines,Cmd);J.Free;J:=Item;J.Add('command',Name);
+     Key:=EngineIdentityKey(A);J.Add('id',EngineId(Key));J.Add('key',Key);J.Add('name',A.IdText);J.Add('protocol',A.KindText);
+   end else if Name='list_engines' then begin
      Engines:=TExternalEngineList.Create;LoadExternalEngines(EnginesJsonFileName,Engines);
      Items:=TJSONArray.Create;J.Add('engines',Items);
      for I:=0 to Engines.Count-1 do begin

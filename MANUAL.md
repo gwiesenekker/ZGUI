@@ -271,6 +271,79 @@ retained tournament and file. Invalid unpublished setups are discarded.
 
 Native Windows console/pipe validation remains outstanding for this release.
 
+#### Configure an existing engine from the CLI
+
+Use `configure_engine` to inspect or update one existing registration before a
+benchmark. It uses the GUI's option schemas, validation and settings storage;
+it does not launch an engine, create a registration, change its executable or
+edit its INI file. Register the installed copy and use **Launch engine** and
+**Launched correctly** once to capture its advertised options first. Separate
+benchmark configurations require separate installed directories and executables.
+
+```text
+list_engines
+configure_engine engine_id=1
+configure_engine engine_id=1 options='{"Hash":256,"Threads":1}' dry_run=true
+configure_engine engine_id=1 options='{"Hash":256,"Threads":1}'
+configure_engine engine="GWD candidate" environment='{"GWD_EXPERIMENT":"1"}'
+configure_engine engine="GWD candidate" feature_flags='["no-pondering"]'
+```
+
+Replace the example environment variable with one supported by your engine.
+These are ZGUI prompt commands, also valid as lines in a piped command file on
+Windows or Linux. Single quotes preserve the JSON double quotes. For paths in
+JSON, escape each backslash as `\\`, or use forward slashes. When passing text
+through a shell, its own quoting rules apply before ZGUI receives it; a command
+file avoids that extra quoting layer.
+
+| Parameter | Meaning |
+| --- | --- |
+| `engine="name"` | Select a unique registered engine name. |
+| `engine_id=N` | Select an ID returned by `list_engines` in this session. |
+| `engine_key="..."` | Select the exact current registration identity key. Supply exactly one engine selector. |
+| `options='{"Threads":1}'` | Merge values into known engine options; names are case-insensitive. Accept strings, numbers and booleans. Unknown options, button actions and `gui-` metadata are rejected. Existing advertised types/ranges/choices are validated as in the GUI; Hub validation follows its protocol syntax. |
+| `environment='{"NAME":"value"}'` | Replace the registration's complete environment overrides. Values must be strings; `{}` clears overrides, and `""` supplies an explicitly empty value. Other settings are preserved. |
+| `feature_flags='["no-pondering"]'` | Replace GUI compatibility flags. `[]` clears the flags. |
+| `file="candidate.json"` | Read a JSON object containing `options`, `environment` and/or `feature_flags`. Relative paths use ZGUI's launch directory. Maximum size: 1 MiB. Unknown fields or fields supplied both inline and in the file are rejected. |
+| `dry_run=true` | Validate and return the proposed values without writing files. Accepts true/false; default false. |
+
+For example, `candidate.json` can contain:
+
+```json
+{
+  "options": {"nthreads-alpha-beta": 1},
+  "environment": {"GWD_EXPERIMENT": "1"},
+  "feature_flags": ["no-pondering"]
+}
+```
+
+```text
+configure_engine engine="GWD candidate" file="candidate.json"
+run_tournament engine1="GWD candidate" engine2="GWD baseline" ballot="ballot2.fen"
+```
+
+Omitting all three setting groups and `file` inspects current settings without
+writing. A successful response reports `changed`, `dry_run`, the current engine
+`id`/`key`/`name`/`protocol`, option values, captured `option_definitions`, environment
+overrides and feature flags. Option values are returned as strings, matching GUI
+storage. Dry-run responses retain the current registration identity.
+
+Changing environment overrides changes registration identity. Use the ID/key
+returned by the successful update, or run `list_engines` again; old IDs/keys are
+not silently redirected. Names remain unchanged. Native engine option changes
+keep the current identity. Existing tournament tabs retain their captured
+registration settings; create a new tournament to benchmark the updated settings.
+
+Updates are refused with `BUSY` while the engine is reserved by a game or
+annotator, while a running/stopping tournament references it (including its
+adjudicator), or while its engine settings window is open. Inspection and dry
+runs remain available. Stop the affected activity before applying a change.
+Conflicting installations remain blocked. Invalid patches do not write settings;
+`STORAGE` reports write failures. The existing settings serializers publish files
+atomically; when updating both Hub/DXP parameters and the registry, a reported
+failure restores their previous bytes. This is not a crash-safe multi-file
+transaction.
+
 #### Interactive CLI command and parameter reference
 
 Start the normal GUI and its interactive command input with `zgui.exe --cli`
@@ -279,6 +352,7 @@ on Windows or `./zgui --cli` on Linux. The same commands work through pipes.
 | Command | Parameters | Purpose |
 | --- | --- | --- |
 | `list_engines` | None | List registered engines, their session IDs, keys, names, protocols, game and executable availability. Does not launch engines. |
+| `configure_engine` | One engine selector; optional `options`, `environment`, `feature_flags`, `file`, `dry_run` | Inspect or update an existing engine using the GUI settings storage. |
 | `run_tournament` | Two engine selectors; optional settings below | Create and start a two-engine match in a normal tournament tab. Returns immediately with a tournament ID. |
 | `query_tournament` | Required `id=N`; optional `pairs=true`, `sprt=true` (both default false) | Read the current state of the CLI-created tournament with that returned ID. Repeat to monitor progress. |
 | `stop_tournament` | Required `id=N` | Request the GUI Stop action for that tournament; return immediately and keep its tab/results. Query to monitor shutdown. |

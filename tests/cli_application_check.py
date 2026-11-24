@@ -135,6 +135,13 @@ with tempfile.TemporaryDirectory(prefix='zgui-cli-application-') as tmp:
   c=Client(str(exe),['--cli'],folder)
   try:
    data=c.command('list_engines');check(len(data['engines'])==4,'actual zgui --cli reaches the GUI dispatcher')
+   cfg=c.command('configure_engine engine_id=1')
+   check(not cfg['changed'] and 'option_definitions' in cfg,'actual executable inspects configuration')
+   cfg=c.command('configure_engine engine_id=1 environment=\'{"PIPE_TEST":"preview"}\' dry_run=true')
+   check(cfg['dry_run'] and not cfg['changed'],'actual pipe dry run does not write')
+   for engine in [1,3]:
+    cfg=c.command(f'configure_engine engine_id={engine} feature_flags=\'[]\'')
+    check(cfg['changed'],'actual pipe configures both protocols')
    matches=[]
    ballot=folder/'79.fen'
    ballot.write_text(('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\n')*79)

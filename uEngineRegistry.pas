@@ -97,7 +97,7 @@ procedure SaveExternalEngines(const AFileName: string; AEngines: TExternalEngine
 
 implementation
 
-uses uEngineInstallation,uEngineEnvironment,
+uses uAtomicFile,uEngineInstallation,uEngineEnvironment,
   JSONParser, SHA1;
 
 procedure TExternalEngineDefinition.SetEnvironmentJson(const Value:string);
@@ -594,7 +594,7 @@ begin
     Lines := TStringList.Create;
     try
       Lines.Text := Data.FormatJSON([], 2) + LineEnding;
-      Lines.SaveToFile(AFileName);
+      WriteTextFileAtomically(AFileName,Lines.Text);
     finally
       Lines.Free;
     end;

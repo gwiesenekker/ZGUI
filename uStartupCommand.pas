@@ -23,7 +23,7 @@ begin
     'Open a saved chess or draughts tournament in a visible tab and press Play.'+LineEnding+
     'Existing results are preserved. Use Reschedule in the GUI to replay a game.'+LineEnding+
     'Relative paths use the launch directory. The GUI stays open after completion.'+LineEnding+
-    'Interactive --cli opens the GUI and accepts list_engines, run_tournament, query_tournament and stop_tournament.'+LineEnding+
+    'Interactive --cli opens the GUI and accepts list_engines, configure_engine, run_tournament, query_tournament and stop_tournament.'+LineEnding+
     'In --cli, run_tournament creates a two-engine match; file= is the separate startup form.'+LineEnding+
     'Only one startup mode is accepted; there is no headless mode.';
 end;

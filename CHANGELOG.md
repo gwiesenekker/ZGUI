@@ -4,6 +4,35 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Configure registered engines through the interactive CLI — 2026-11-24
+
+Commit: pending.
+
+- Authorization: “Please proceed!” in response to the named configure_engine
+  implementation/review choice, selecting implementation with prior review waived.
+  Local note: chatgpt/CONFIGURE_ENGINE_IMPLEMENTATION.md (outside Git).
+- Add configure_engine to the existing --cli dispatcher and pipe transport, using
+  its name/ID/key selectors. Inspect settings, merge captured native option values,
+  replace environment overrides or feature flags, load JSON patches from a file,
+  and validate with dry_run=true. No new registrations or executable paths.
+- Reuse the GUI's parameter loaders/serializers and share its validation helper.
+  Keep the installation uniqueness rule. Return the new identity/ID after an
+  environment change; never redirect old IDs to the changed registration.
+- Refuse writes while the engine is reserved, referenced by an active/stopping
+  tournament (including its adjudicator), or exposed in an engine settings window.
+  Inspection and dry runs remain available. Applies to chess/UCI and draughts/Hub
+  and DXP; tournament execution and GUI layout are unchanged.
+- Publish existing settings serializers through the atomic-file helper. Restore
+  prior files/definition on reported multi-file write failures. Add configuration
+  examples and a parameter reference to the embedded manual and startup help.
+- Validation: full regression passed, including 18 configuration storage/rollback
+  checks. All 32 GUI suites passed individually: the full run passed 31; its
+  pipe suite timed out clicking a close dialog, then passed unchanged on rerun
+  (115 checks). Focused interactive CLI checks passed (331), as did 473
+  tournament-tab and 11,258 layout checks. Windows build-script checks passed
+  under Wine; cross-compilation skipped missing target units. Native Windows
+  console/pipe verification remains outstanding.
+
 ### Require separate engine installations and fix cross-table resizing — 2026-11-24
 
 Commit: `16efd78`.

@@ -108,7 +108,7 @@ type
 
 implementation
 
-uses uEngineEnvironmentForm,uEngineEnvironment,uEngineFeatureFlagsForm,uEngineFeatureFlags,
+uses uEngineConfiguration,uEngineEnvironmentForm,uEngineEnvironment,uEngineFeatureFlagsForm,uEngineFeatureFlags,
   LCLType, uGuiDialogs, uGameGuiProfile;
 type TUciEditorLog=class(TThreadMessage)
   Text: string;
@@ -560,7 +560,6 @@ end;
 procedure TEngineEditForm.AcceptClick(Sender: TObject);
 var
   Accepted: Boolean;
-  I: Integer;
 begin
   StoreParamsGrid;
   StoreArgumentParams;
@@ -568,14 +567,7 @@ begin
   try
     FAcceptedEngine := CurrentEngineDefinition;
     CheckRegistration(FAcceptedEngine);
-    ParseEngineFeatureFlags(EngineParamValue(FCapturedParams,'gui-feature-flags','[]')).Free;
-    if FAcceptedEngine.Kind in [eekHub,eekUci] then
-    begin
-      if FAcceptedEngine.Kind=eekUci then begin
-        for I:=0 to High(FCapturedParams) do
-          if Copy(LowerCase(FCapturedParams[I].Name),1,4)<>'gui-' then ValidateUciValue(FCapturedParams[I],FCapturedParams[I].Value);
-      end else ValidateHubParams(FCapturedParams);
-    end;
+    ValidateEngineConfiguration(FAcceptedEngine,FCapturedParams);
     except
       on E: EConvertError do
       begin

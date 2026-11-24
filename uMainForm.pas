@@ -579,6 +579,7 @@ type
       const AFileName, AEventName: string);
     property TournamentEngineQueue: TTournamentEngineQueue read FTournamentEngineQueue;
     procedure CollectBusyEngineKeys(AKeys: TStrings);
+    procedure CollectConfigurationBusyEngineKeys(AKeys:TStrings);
     function EngineReservationDescription(const Key:string):string;
     procedure DrainTournamentClose;
     function StartInteractiveTerminal(out MessageText:string):Boolean;
@@ -5887,6 +5888,18 @@ begin
   end;
 end;
 
+procedure TMainForm.CollectConfigurationBusyEngineKeys(AKeys:TStrings);
+var I:Integer;Editing:Boolean;
+begin
+ CollectBusyEngineKeys(AKeys);
+ if FEnginesDialog=nil then Exit;
+ Editing:=FEnginesDialog.Visible;
+ for I:=0 to FEnginesDialog.ComponentCount-1 do
+  if (FEnginesDialog.Components[I] is TCustomForm) and TCustomForm(FEnginesDialog.Components[I]).Visible then Editing:=True;
+ if Editing then for I:=0 to FEnginesDialog.Engines.Count-1 do
+  AddEngineReservationKeys(FEnginesDialog.Engines[I],AKeys);
+end;
+
 procedure TMainForm.UpdateEngineUsage;
 var I,Games,Annotators:Integer;Context:TGameUiContext;Game:TRunningGame;UsageText:string;
 begin
@@ -6302,6 +6315,7 @@ begin
   if FInteractiveCommands=nil then begin
     FInteractiveCommands:=TInteractiveCommands.Create(FTournamentHost,FCliBaseDirectory);
     FInteractiveCommands.OnTournament:=@CliTournamentOpened;
+    FInteractiveCommands.OnBusyEngines:=@CollectConfigurationBusyEngineKeys;
   end;
   Result:=FInteractiveCommands.Execute(Line);
 end;

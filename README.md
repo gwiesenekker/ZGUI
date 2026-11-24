@@ -23,7 +23,8 @@ analysis, tournament and database infrastructure.
 - Opening ballot files (FEN for either game, EPD also for chess): every engine pair plays each FEN twice
   with colours reversed, optional opening-pair shuffling, and saved scheduled order.
 - Live paired GSPRT comparisons, optional time-forfeit adjudication, and an
-  interactive `--cli` in the normal GUI for creating, querying and stopping matches.
+  interactive `--cli` in the normal GUI for configuring registered engines and
+  creating, querying and stopping matches.
 - SQLite game databases, import and duplicate detection, player/event filters,
   position searches and move-based navigation.
 - Separate chess/draughts preferences where appropriate, a global engine-use
