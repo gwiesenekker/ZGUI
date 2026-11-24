@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Configure private engine environments — 2026-11-24
 
-Commit: pending.
+Commit: `0df24c6`.
 
 - Authorization: “Implement now; waive prior review”. Scope: gui-environment JSON,
   name/value editor, private local UCI/Hub/DXP launch overrides on Linux/Windows,
