@@ -56,7 +56,13 @@ with tempfile.TemporaryDirectory(prefix='zgui-version-') as tmp:
     commit=run(['git','-C',repo,'rev-parse','HEAD']).decode().strip()
     archive=base/'archive';archive.mkdir()
     with tarfile.open(fileobj=io.BytesIO(run(['git','-C',repo,'archive','HEAD']))) as tar:
-        tar.extractall(archive,filter='data')
+        # Extract only our four known fixture files; keep Python 3.8+ support.
+        for name in ('.gitattributes', 'MANUAL.md', 'tools/generate_build_info.py',
+                     'tools/generate_build_info.pas'):
+            target = archive / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tar.extractfile(name) as stream:
+                target.write_bytes(stream.read())
     run(['fpc','-B','-FU'+tmp,'-FE'+tmp,'-o'+str(base/'archive-generator'),archive/'tools/generate_build_info.pas'])
     run([base/'archive-generator',archive,output/'archive.inc',shutil.which('fpcres')],env=dict(os.environ,PATH=str(base/'missing')))
     assert "BuildCommit = '"+commit+"'" in (output/'archive.inc').read_text()

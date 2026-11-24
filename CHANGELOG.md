@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Match SCU version reporting and Windows build entry point — 2026-11-24
 
-Commit: pending.
+Commit: `ad90bd6`.
 
 - Authorization: “Implement now; waive prior review” for release-short-commit
   reporting in About/--version on Linux and Windows, builds without Git, and
