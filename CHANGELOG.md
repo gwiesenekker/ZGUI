@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Require separate engine installations and fix cross-table resizing — 2026-11-24
 
-Commit: pending.
+Commit: `16efd78`.
 
 - Authorization: “Implement now; waive prior review” for one registration and
   configuration per installed directory. Additional steering: do not allow two
