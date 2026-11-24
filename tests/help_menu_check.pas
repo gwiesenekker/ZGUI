@@ -64,7 +64,7 @@ begin
       (CurrentCommit = 'unavailable (source archive)'), 'build identifies its commit or explicitly identifies an archive');
     GuiTestConfirmationResult := mrYes;
     FindMenu(Main, 'About ZGUI...').Click;
-    Check((Pos('ZGUI', GuiTestLastConfirmationText) > 0) and
+    Check((Pos('ZGUI '+AppBuildVersion, GuiTestLastConfirmationText) > 0) and
       (Pos('Commit: ' + CurrentCommit, GuiTestLastConfirmationText) > 0), 'About action displays embedded commit');
     GuiTestConfirmationResult := 0;
     Before := Main.CurrentGameTreePdnText('before help');

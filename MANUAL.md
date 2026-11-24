@@ -2291,7 +2291,9 @@ bash build.sh
 `build.sh` embeds the current Markdown manual as an RCDATA resource and records
 the Git build identity. It uses `fpcres` from the FPC installation (on PATH for
 Linux; beside Lazarus’s configured compiler for Windows). On Windows, run
-`build.bat` from the source directory; it finds `lazbuild.exe` on PATH or in a
+`build.bat` from the source directory. As in SCU, it calls `build.ps1` through
+PowerShell; a cmd-only fallback retains the same build/publish path on minimal
+hosts. It finds `lazbuild.exe` on PATH or in a
 standard Lazarus folder (or takes its path as an argument), builds `zgui.exe`
 with the **Windows** build mode in `lib\candidate`, and replaces `zgui.exe`
 only after a successful build, so a failed or interrupted build keeps the
@@ -2299,14 +2301,17 @@ previous executable. Alternatively, open `zgui.lpi` in Lazarus, select the **Win
 mode under Project → Project Options → Build modes, then choose **Build**. Both
 use the build mode's pre-build step, which uses
 Lazarus’s configured compiler to embed the manual and Git identity; Python is
-not required. Install Git for Windows and make `git` available on PATH before
-starting Lazarus. Use a Git checkout or copy including `.git` to identify the
-commit. Changes to tracked files are marked in About.
+not required. Git is optional: when available, it records the full identity and
+tracked-file modification status. Without Git, both generators read this
+checkout's HEAD/reference metadata, including packed refs and linked worktrees.
+Keep `.git` with a shared checkout to identify the commit on Windows. About
+explicitly says when working-tree modification status cannot be determined.
 
 Direct IDE builds in the **Default** mode or
 `lazbuild zgui.lpi` builds remain supported, but report that the commit is
 unavailable and load `MANUAL.md` from beside the executable. Builds from source
-archives without Git metadata explicitly report that the commit is unavailable.
+archives created by `git archive` embed the archived commit. Other copies without
+Git metadata report an unknown commit rather than guessing one.
 
 The repository's regression checks can be run with:
 
@@ -2390,7 +2395,12 @@ the ends; use **F3** / **Shift+F3** for the same actions. **Ctrl+F** focuses and
 selects the search query. **Enter** finds the next match, and **Escape** closes
 the manual window.
 
-**Help → About ZGUI** shows the build description and full Git commit captured
-when the executable was built. A build made from modified tracked files is
+`zgui --version` (or `zgui.exe --version` on Windows) prints one line and exits
+without opening the GUI, using SCU's release-number–short-commit format, for
+example `1.2-abc1234`. It also works with redirected output. Unidentified source
+builds print `1.2-unknown`. The release number is maintained in `uAppInfo.pas`.
+
+**Help → About ZGUI** shows the same version, build description and full Git commit
+captured when the executable was built. A build made from modified tracked files is
 marked as including uncommitted changes. This identifies the running executable;
 it does not query whichever checkout happens to be on disk later.

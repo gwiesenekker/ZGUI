@@ -9,7 +9,7 @@ procedure RedirectCliDiagnostics(Handle:THandle);
 function CliProtocolOutputHandle:THandle;
 {$IFDEF MSWINDOWS}procedure ReleaseCliConsole;{$ENDIF}
 implementation
-uses uStartupCommand
+uses uAppInfo,uStartupCommand
  {$IFDEF UNIX},BaseUnix{$ENDIF}{$IFDEF LINUX},Linux{$ENDIF}
  {$IFDEF MSWINDOWS},Windows{$ENDIF};
 {$IFDEF LINUX}
@@ -93,6 +93,31 @@ begin
 end;
 function CliProtocolOutputHandle:THandle;
 begin Result:=ProtocolHandle;end;
+procedure PrintVersionAndExit;
+var Handle:THandle;Line:string;Written,Offset:Integer;
+ {$IFDEF MSWINDOWS}Opened:Boolean;{$ENDIF}
+begin
+ try
+  Line:=AppBuildVersion+LineEnding;
+  {$IFDEF MSWINDOWS}
+  Opened:=False;Handle:=GetStdHandle(STD_OUTPUT_HANDLE);
+  if (Handle=0) or (Handle=INVALID_HANDLE_VALUE) then begin
+   if not AttachConsole(DWORD(-1)) then RaiseLastOSError;
+   Handle:=CreateFile('CONOUT$',GENERIC_WRITE,FILE_SHARE_READ or FILE_SHARE_WRITE,nil,OPEN_EXISTING,0,0);
+   if Handle=INVALID_HANDLE_VALUE then RaiseLastOSError;Opened:=True;
+  end;
+  {$ELSE}Handle:=1;{$ENDIF}
+  try
+   Offset:=1;
+   while Offset<=Length(Line) do begin
+    Written:=FileWrite(Handle,Line[Offset],Length(Line)-Offset+1);
+    if Written<=0 then raise EWriteError.Create('Cannot write version');Inc(Offset,Written);
+   end;
+  finally {$IFDEF MSWINDOWS}if Opened then FileClose(Handle);{$ENDIF}end;
+ except Halt(1);end;
+ // Run before Interfaces, SynEdit, preferences and any application windows.
+ Halt(0);
+end;
 procedure Bootstrap;
 var Args:TStringList;I:Integer;Request:TStartupCommand;
 begin
@@ -102,6 +127,7 @@ begin
   try
    // Flags are ASCII; full Unicode argument binding still happens in zgui.lpr.
    Request:=ParseStartupCommand(Args);
+   if Request.Kind=sckVersion then PrintVersionAndExit;
    if Request.Kind=sckInteractive then PrepareCliProtocolOutput;
   except
    // Startup reports argument/I/O errors through its normal GUI error path.

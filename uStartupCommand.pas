@@ -3,7 +3,7 @@ unit uStartupCommand;
 interface
 uses Classes;
 type
-  TStartupCommandKind=(sckNone,sckHelp,sckRunTournament,sckInteractive);
+  TStartupCommandKind=(sckNone,sckHelp,sckRunTournament,sckInteractive,sckVersion);
   TStartupCommand=record
     Kind:TStartupCommandKind;
     FileName:string;
@@ -18,7 +18,7 @@ begin
     'zgui run_tournament file="tournament.json"'+LineEnding+
     'zgui run_tournament --file "tournament.json"'+LineEnding+
     'zgui run_tournament "tournament.json"'+LineEnding+
-    'zgui --cli'+LineEnding+
+    'zgui --cli'+LineEnding+'zgui --version'+LineEnding+
     'zgui --help'+LineEnding+'zgui help run_tournament'+LineEnding+LineEnding+
     'Open a saved chess or draughts tournament in a visible tab and press Play.'+LineEnding+
     'Existing results are preserved. Use Reschedule in the GUI to replay a game.'+LineEnding+
@@ -63,6 +63,10 @@ begin
     end;
     if Tokens.Count=0 then Exit;
     Token:=LowerCase(Tokens[0]);
+    if Token='--version' then begin
+      if Tokens.Count<>1 then raise ECliError.Create('Use --version alone');
+      Result.Kind:=sckVersion;Exit;
+    end;
     if Token='--cli' then begin
       if Tokens.Count<>1 then raise ECliError.Create('Use --cli alone, without a startup command or extra arguments');
       Result.Kind:=sckInteractive;Exit;

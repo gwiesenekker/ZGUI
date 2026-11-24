@@ -4,6 +4,36 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Match SCU version reporting and Windows build entry point — 2026-11-24
+
+Commit: pending.
+
+- Authorization: “Implement now; waive prior review” for release-short-commit
+  reporting in About/--version on Linux and Windows, builds without Git, and
+  retained full-commit/dirty details. Follow-up: “Could you also update build.bat
+  in the same way as for SCU?” Local note: chatgpt/SCU_STYLE_VERSION_BUILD.md.
+- Report 1.2-<seven-character commit> using the current release number, or
+  1.2-unknown when unidentified. --version prints one line before GUI startup;
+  About retains the full commit, build description and modification status.
+- Read this checkout's metadata when Git is unavailable, including detached or
+  packed HEAD references and linked worktrees. Mark modification status unknown
+  in that case. Git source archives retain their commit through export-subst.
+- Make build.bat a SCU-style PowerShell entry point. Reuse the existing candidate
+  publisher in tools/build_zgui.cmd, retaining backup/recovery, failed-build and
+  failed-publish safeguards and the current Lazarus argument/override behavior.
+  Preserve a cmd-only fallback; Windows IDE and batch builds share the existing
+  native generator and configured FPC/resource compiler.
+- Applies equally to chess and draughts; game execution and GUI layout are
+  unchanged. Update documentation and version/build/startup checks.
+- Validation: full regression passed. The full GUI run passed 32 suites; the
+  fresh-start resize check inherited prior suites' saved profile and timed out
+  closing. Give it a private profile per game; both games then passed against
+  the same executable, completing all 33 suites individually. Includes actual
+  display-free --version, About, 119 integrated CLI checks, 473 tournament-tab
+  checks and 11,258 layout checks. Generator parity/archive/no-Git checks passed.
+  The shared cmd publisher passes all 12 Wine replacement scenarios. Native
+  Windows PowerShell/console QA remains outstanding; cross units are missing.
+
 ### Configure registered engines through the interactive CLI — 2026-11-24
 
 Commit: `3c8daa6`.

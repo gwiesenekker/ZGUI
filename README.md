@@ -97,12 +97,15 @@ bash build.sh
 ./zgui
 ```
 
-On Windows, install Lazarus and Git for Windows, make `git` available on PATH,
-and run:
+On Windows, install Lazarus and run:
 
 ```bat
 build.bat
 ```
+
+`build.bat` uses the SCU-style `build.ps1` entry point, retaining ZGUI’s
+candidate/backup recovery safeguards. Git is optional: checkout metadata supplies
+the commit when Git is unavailable; modification status is then unknown.
 
 You can supply a Lazarus location with `build.bat "C:\lazarus\lazbuild.exe"`.
 Alternatively, open `zgui.lpi`, select the **Windows** build mode, and build.
@@ -114,7 +117,9 @@ Lazarus’s configured FPC compiler. The Lazarus **Default** mode instead reads 
 beside the executable and reports build identity as unavailable.
 
 Build scripts replace the installed executable only after successful compilation.
-Modified tracked files are identified in About when build identity is embedded.
+`./zgui --version` or `zgui.exe --version` prints `1.2-<short commit ID>` and
+exits without opening a window. About displays the same version and full commit;
+modified tracked files are identified when Git can determine their status.
 The repository ignores generated binaries, local settings, engines, databases
 and temporary output; source files and test fixtures remain versioned.
 

@@ -1,2 +1,5 @@
 *.pdf binary
 *.bat text eol=crlf
+*.cmd text eol=crlf
+tools/generate_build_info.py export-subst
+tools/generate_build_info.pas export-subst

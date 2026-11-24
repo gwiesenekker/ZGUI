@@ -6334,6 +6334,7 @@ begin
   if FClosing then begin MessageText:='ZGUI is closing';Exit;end;
   if Request.Kind=sckNone then Exit(True);
   if Request.Kind=sckHelp then begin MessageText:=StartupCommandHelp;Exit(True);end;
+  if Request.Kind=sckVersion then begin MessageText:=AppBuildVersion;Exit(True);end;
   if Request.Kind=sckInteractive then Exit(StartInteractiveTerminal(MessageText));
   try
     EnsureTournamentHost;

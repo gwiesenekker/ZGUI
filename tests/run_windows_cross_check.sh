@@ -18,13 +18,16 @@ for candidate in wine64 wine /usr/lib/wine/wine64; do
   if command -v "$candidate" >/dev/null 2>&1; then WINE="$candidate"; break; fi
 done
 if [[ -n "$WINE" ]]; then
-  echo "==> windows_build_bat_check (build.bat under Wine cmd.exe)"
+  echo "==> windows_build_bat_check (shared build publisher under Wine cmd.exe; PowerShell wrapper needs native Windows)"
   BAT_DIR="$OUT_DIR/batcheck"
   mkdir -p "$BAT_DIR/tests"
   cp "$ROOT_DIR/build.bat" "$BAT_DIR/build.bat"
+  cp "$ROOT_DIR/build.ps1" "$BAT_DIR/build.ps1"
+  mkdir -p "$BAT_DIR/tools"
+  cp "$ROOT_DIR/tools/build_zgui.cmd" "$BAT_DIR/tools/build_zgui.cmd"
   cp "$ROOT_DIR/tests/windows_build_bat_check.bat" "$BAT_DIR/tests/"
   BAT_PATH="$(printf 'Z:%s/tests/windows_build_bat_check.bat' "$BAT_DIR" | sed 's#/#\\#g')"
-  WINEPREFIX="${WINEPREFIX:-$OUT_DIR/wineprefix}" WINEDEBUG=-all \
+  ZGUI_BUILD_TEST_CMD_ONLY=1 WINEPREFIX="${WINEPREFIX:-$OUT_DIR/wineprefix}" WINEDEBUG=-all \
     "$WINE" cmd /c "$BAT_PATH" 2>/dev/null |
     tr -d '\r' | tee "$OUT_DIR/build-bat.log"
   grep -q '^build.bat checks passed$' "$OUT_DIR/build-bat.log" ||

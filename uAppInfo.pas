@@ -1,6 +1,7 @@
 unit uAppInfo;
 {$mode objfpc}{$H+}{$codepage utf8}
 interface
+function AppBuildVersion: string;
 function AppBuildCommit: string;
 function AppAboutText(const AGameName: string = 'International draughts'): string;
 function AppManualText: string;
@@ -13,14 +14,28 @@ const
   BuildCommit = 'unavailable (build with build.sh or the Windows build mode to embed the commit)';
   BuildRevision = 'development build';
   BuildHasChanges = False;
+  BuildChangesKnown = False;
 {$ENDIF}
+resourcestring
+  AppReleaseVersion = '1.2';
+function AppBuildVersion:string;
+var ShortId:string;I:Integer;
+begin
+ ShortId:='unknown';
+ if Length(BuildCommit) in [40,64] then begin
+  ShortId:=LowerCase(Copy(BuildCommit,1,7));
+  for I:=1 to Length(BuildCommit) do if not (BuildCommit[I] in ['0'..'9','a'..'f','A'..'F']) then begin ShortId:='unknown';Break;end;
+ end;
+ Result:=AppReleaseVersion+'-'+ShortId;
+end;
 function AppBuildCommit: string;
 begin Result := BuildCommit; end;
 function AppAboutText(const AGameName: string): string;
 begin
-  Result := 'ZGUI' + LineEnding + AGameName + LineEnding +
+  Result := 'ZGUI ' + AppBuildVersion + LineEnding + AGameName + LineEnding +
     LineEnding + 'Build: ' + BuildRevision + LineEnding + 'Commit: ' + BuildCommit;
   if BuildHasChanges then Result += LineEnding + 'Includes uncommitted changes.';
+  if not BuildChangesKnown then Result += LineEnding + 'Working-tree status unavailable.';
 end;
 function AppManualText: string;
 var Lines: TStringList; Path: string;

@@ -83,7 +83,7 @@ end.
         else:
             assert embedded == (root / 'MANUAL.md').read_text(encoding='utf-8'), case
         assert ('Includes uncommitted changes.' in about) == (case in ['dirty', 'empty']), case
-        if case in ['nested archive', 'no git']:
+        if case == 'nested archive':
             assert 'unavailable (source archive)' in about, case
         else:
             assert run(['git', '-C', source, 'rev-parse', 'HEAD']).decode().strip() in about, case
@@ -111,7 +111,10 @@ assert '"%~dp1fpcres.exe"' in prebuild, 'Use the resource compiler beside the co
 # line endings for its labels (goto).
 batch = (ROOT / 'build.bat').read_bytes()
 assert b'\r\n' in batch and b'\n' not in batch.replace(b'\r\n', b''), 'build.bat must use CRLF'
-batch_text = batch.decode('ascii')
+wrapper = batch.decode('ascii')
+assert 'powershell.exe -NoProfile -ExecutionPolicy Bypass' in wrapper
+assert 'build.ps1' in wrapper and 'tools\\build_zgui.cmd' in wrapper
+batch_text = (ROOT / 'tools/build_zgui.cmd').read_bytes().decode('ascii')
 assert '--build-mode=Windows' in batch_text and 'zgui.lpi' in batch_text
 assert '--no-write-project' in batch_text
 for label in ('failed', 'publishfailed'):

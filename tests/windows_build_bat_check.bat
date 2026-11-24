@@ -15,7 +15,13 @@ mkdir "%WORK%"
 if not exist "%WORK%\" exit /b 1
 copy /y "%ROOT%\build.bat" "%WORK%\build.bat" >nul
 if not exist "%WORK%\build.bat" exit /b 1
+copy /y "%ROOT%\build.ps1" "%WORK%\build.ps1" >nul
+mkdir "%WORK%\tools"
+copy /y "%ROOT%\tools\build_zgui.cmd" "%WORK%\tools\build_zgui.cmd" >nul
 type nul > "%WORK%\zgui.lpi"
+set "BUILD_ENTRY=%WORK%\build.bat"
+rem Wine ships a powershell stub; test the real shared cmd publisher there.
+if defined ZGUI_BUILD_TEST_CMD_ONLY set "BUILD_ENTRY=%WORK%\tools\build_zgui.cmd"
 set "FAKE=%WORK%\fake_lazbuild.cmd"
 echo @echo off> "%FAKE%"
 echo if "%%FAKE_MODE%%"=="ok" echo NEW^> "%%GWDGUI_BUILD_DIR%%zgui.exe">> "%FAKE%"
@@ -58,7 +64,7 @@ if not "%~4"=="keep" (
   if not "%~4"=="-" echo %~4> "%WORK%\zgui.old.exe"
 )
 set "FAKE_MODE=%~2"
-call "%WORK%\build.bat" "%FAKE%" > "%WORK%\%~1.log" 2>&1
+call "%BUILD_ENTRY%" "%FAKE%" > "%WORK%\%~1.log" 2>&1
 set "RC=%ERRORLEVEL%"
 call :content zgui.exe
 set "EXE=%CONTENT%"

@@ -26,7 +26,10 @@ for game in ('chess', 'draughts'):
         shutil.copy2(sys.argv[1], executable)
         (folder / 'prefs.json').write_text(json.dumps({'last_game': game}))
         with (folder / 'stderr.log').open('w') as log:
-            process = subprocess.Popen([str(executable)], cwd=folder, stderr=log, stdout=log)
+            # A fresh-launch check must not inherit saved documents/preferences from
+            # earlier GUI suites, which can correctly prompt on Ctrl+Q.
+            process = subprocess.Popen([str(executable)], cwd=folder, stderr=log, stdout=log,
+                                       env=dict(os.environ, XDG_CONFIG_HOME=str(folder / 'config')))
             try:
                 deadline = time.monotonic() + 10
                 window = None

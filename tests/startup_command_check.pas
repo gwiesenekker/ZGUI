@@ -31,6 +31,11 @@ begin
  finally L.Free;end;
 end;
 begin
+ CaseOf(['--version'],sckVersion);
+ CaseOf(['--version','extra'],sckNone,'',True);
+ CaseOf(['--version','--cli'],sckNone,'',True);
+ CaseOf(['--cli','--version'],sckNone,'',True);
+ CaseOf(['--display','unused','--version'],sckVersion);
  CaseOf(['--cli'],sckInteractive);
  CaseOf(['--debug-log=x','--cli','--disableaccurateframe'],sckInteractive);
  CaseOf(['--cli','run_tournament','a.json'],sckNone,'',True);

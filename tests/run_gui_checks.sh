@@ -42,6 +42,13 @@ else
   FAILED+=("cli_application_check (run)")
 fi
 
+echo "==> version_reporting_check (actual executable without a display)"
+if python3 "$ROOT_DIR/tests/version_reporting_check.py" "$OUT_DIR/cli-application/zgui"; then
+  PASSED=$((PASSED + 1))
+else
+  FAILED+=("version_reporting_check (run)")
+fi
+
 echo "==> native_main_resize_check (real application shrink/grow and idle CPU for both games)"
 if timeout 60s python3 "$ROOT_DIR/tests/native_main_resize_check.py" "$OUT_DIR/cli-application/zgui"; then
   PASSED=$((PASSED + 1))
