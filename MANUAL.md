@@ -1,6 +1,6 @@
 # ZGUI User Manual
 
-Updated 20 November 2026.
+Updated 24 November 2026.
 
 ZGUI plays, analyses and stores orthodox chess and international 10×10 draughts.
 Chess uses UCI engines and PGN files; draughts uses Hub/DXP engines and PDN files.
@@ -660,6 +660,7 @@ Important GUI parameters include:
 
 | Parameter | Meaning |
 | --- | --- |
+| `gui-environment` | Private per-registration environment overrides as a JSON object; click its name or value to edit Variables or multi-line JSON |
 | `gui-feature-flags` | GUI compatibility flags as a JSON string; click its name or value to edit checkboxes |
 | `gui-engine-type` | Engine protocol: `hub`, `dxp` or `uci` |
 | `gui-uci-id` | UCI identity used by ZGUI |
@@ -724,6 +725,43 @@ not advertised engine options:
 
 The earlier development spelling `gui-gwd-dxp-pv` remains readable and is saved
 as `dxp-pv` when accepted in the checkbox editor. All flags default to off.
+
+
+
+#### Engine environment overrides
+
+Click **gui-environment** in an engine's parameter grid to edit a name/value
+**Variables** table or the multi-line **JSON** tab. For example, a GWD policy test
+can use (replace the policy filename with your actual file):
+
+```json
+{
+  "GWD_LMR_POLICY_BENCHMARK": "path/to/policy-file",
+  "GWD_LMR_POLICY_LOGIT_THRESHOLD": "0.0"
+}
+```
+
+ZGUI inherits its current environment and applies these overrides only to that
+registration's child process. Two registrations sharing an executable can use
+different values concurrently. The overrides also apply to **Launch engine** in
+the editor, annotators, games and tournaments, for UCI, Hub and locally launched
+DXP engines. A remote DXP engine's environment is controlled on its own computer.
+Restart an existing engine session to apply changed values.
+
+Values must be JSON strings, including numbers such as `"0.0"`. Names use ASCII
+letters, digits and underscores and start with a letter or underscore. Duplicate
+names and NUL characters are rejected. Names are case-sensitive on Linux and
+case-insensitive on Windows (saved in uppercase there). Empty strings set empty
+variables; they do not unset them. Remove a row, or use `{}`, to restore normal
+inheritance. Values are literal: ZGUI does not run a shell or expand variable
+references. Relative paths are interpreted by the engine in its working directory.
+
+Environment overrides are saved privately in that registration's `environment`
+object in **engines.json**, for all three protocols. They are not shared through
+`.params.json`, not sent as engine protocol options, and never change ZGUI's own
+environment. They are part of engine identity: changing them can require matching
+or reselecting engines when loading a saved tournament. Existing registrations
+with no overrides retain their earlier identity.
 
 
 ### 2.6 Where engine settings are stored
@@ -2205,7 +2243,7 @@ distribution includes `protocol.txt` for its Hub handshake and commands.
 ### 12.1 File locations and portability
 
 - `engines.json` and `prefs.json` live beside the ZGUI executable. Keep that
-  directory writable. Private UCI options are in `engines.json`. Hub/DXP and legacy
+  directory writable. Private UCI options and per-registration environment overrides are in `engines.json`. Hub/DXP and legacy
   UCI `.params.json` files live beside the engine executable (section 2.6);
   launch/INI paths remain part of engine configuration.
 - PGN/PDN, database and saved tournament files live where you choose them. Import logs

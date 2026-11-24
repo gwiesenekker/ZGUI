@@ -10,6 +10,7 @@ CHECKS=(
   sprt_check.pas
   interactive_command_check.pas
   startup_command_check.pas
+  engine_environment_check.pas
   engine_feature_flags_check.pas
   position_contract_check.pas
   chess_position_check.pas

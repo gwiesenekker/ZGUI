@@ -4,6 +4,33 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Configure private engine environments — 2026-11-24
+
+Commit: pending.
+
+- Authorization: “Implement now; waive prior review”. Scope: gui-environment JSON,
+  name/value editor, private local UCI/Hub/DXP launch overrides on Linux/Windows,
+  identity checks, documentation and tests. Local note:
+  chatgpt/ENGINE_ENVIRONMENT_IMPLEMENTATION.md (kept outside Git).
+- Add a Variables/JSON editor through the existing engine parameter grid. Validate
+  portable variable names and string values; preserve empty values and Unicode.
+- Save overrides per registration in engines.json, including Hub and DXP; exclude
+  them from shared parameter files. Include canonical overrides in engine identity
+  while preserving existing identities for empty/default environments.
+- Reuse the existing platform process launcher with a private inherited snapshot.
+  Linux passes it to TProcess; Windows uses a Unicode child environment block.
+  Apply it to editor probes, UCI/Hub runtime workers and local DXP launches, without
+  changing the parent environment or remote DXP peers. Both games are supported.
+- Add isolation, inheritance, empty-value, registry, identity and end-to-end local
+  UCI/Hub/DXP launch checks plus GUI table/JSON/acceptance/editor-reuse checks.
+- Validation: application build and full regression passed; all 31 GUI suites
+  passed, including 33 environment editor checks and 11,258 layout checks. Final
+  focused environment checks passed (35), covering real UCI/Hub/local DXP launches
+  and duplicate inherited entries. Windows batch checks passed under Wine; Windows
+  cross-compilation skipped (missing target units). Native Windows environment
+  execution remains outstanding.
+
+
 ### Embed the Markdown manual as a resource — 2026-11-20
 
 Commit: `cf9c828`.

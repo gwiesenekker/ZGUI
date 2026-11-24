@@ -59,7 +59,7 @@ type
     function IsRunning: Boolean;
     function NeedsPolling: Boolean;
     procedure Start(const AFileName: string; ALaunchArgs: TStrings;
-      const ACurrentDirectory: string);
+      const ACurrentDirectory: string; const AEnvironmentJson:string='');
     procedure WriteLine(const AText: string);
     procedure ReadAvailable;
     procedure RequestQuit(const AQuitCommand: string; AWaitMs: Integer);
@@ -74,6 +74,8 @@ procedure ExecuteAuxiliaryProcess(AProcess: TProcess);
 function ReadAuxiliaryProcessOutput(AProcess: TProcess): string;
 
 implementation
+
+uses uEngineEnvironment;
 
 {$IFDEF UNIX}
 function SetProcessGroup(Pid,GroupId:cint):cint;cdecl;external 'c' name 'setpgid';
@@ -240,9 +242,9 @@ begin
 end;
 
 procedure TPlatformProcess.Start(const AFileName: string; ALaunchArgs: TStrings;
-  const ACurrentDirectory: string);
+  const ACurrentDirectory: string; const AEnvironmentJson:string);
+var Environment,InheritedEnv:TStringList;
 {$IFDEF MSWINDOWS}
-var
   Child2ParentRead: THandle;
   Child2ParentWrite: THandle;
   CommandLine: string;
@@ -250,14 +252,22 @@ var
   Parent2ChildRead: THandle;
   Parent2ChildWrite: THandle;
   Security: TSecurityAttributes;
-  StartupInfo: TStartupInfo;
+  StartupInfo: TStartupInfoW;
+  WideCommandLine,WideDirectory,EnvironmentBlock:UnicodeString;
+  EnvironmentPointer:PWideChar;
+  Flags:DWORD;
 {$ELSE}
-var
   I: Integer;
 {$ENDIF}
 begin
+  Environment:=nil;InheritedEnv:=nil;
   LaunchLock.Acquire;
   try
+  // Construct a private snapshot; never change the GUI process environment.
+  if CanonicalEngineEnvironment(AEnvironmentJson)<>'{}' then begin
+    InheritedEnv:=InheritedEngineEnvironment;
+    Environment:=MergeEngineEnvironment(AEnvironmentJson,InheritedEnv);
+  end;
   Close;
   {$IFDEF MSWINDOWS}
   Parent2ChildRead := 0;
@@ -290,8 +300,16 @@ begin
   for I := 0 to ALaunchArgs.Count - 1 do
     CommandLine += ' ' + CommandLineQuote(ALaunchArgs[I]);
 
-    if not CreateProcess(nil, PChar(CommandLine), nil, nil, True,
-      CREATE_NO_WINDOW, nil, PChar(ACurrentDirectory), StartupInfo,
+    WideCommandLine:=UTF8Decode(CommandLine);WideDirectory:=UTF8Decode(ACurrentDirectory);
+    EnvironmentPointer:=nil;Flags:=CREATE_NO_WINDOW;
+    if Environment<>nil then begin
+      EnvironmentBlock:='';
+      for I:=0 to Environment.Count-1 do EnvironmentBlock+=UTF8Decode(Environment[I])+#0;
+      EnvironmentBlock+=#0;EnvironmentPointer:=PWideChar(EnvironmentBlock);
+      Flags:=Flags or CREATE_UNICODE_ENVIRONMENT;
+    end;
+    if not CreateProcessW(nil, PWideChar(WideCommandLine), nil, nil, True,
+      Flags, EnvironmentPointer, PWideChar(WideDirectory), StartupInfo,
       FProcessInfo) then
       RaiseLastOSError;
     CloseHandle(Parent2ChildRead);
@@ -317,6 +335,7 @@ begin
   for I := 0 to ALaunchArgs.Count - 1 do
     FProcess.Parameters.Add(ALaunchArgs[I]);
   FProcess.CurrentDirectory := ACurrentDirectory;
+  if Environment<>nil then FProcess.Environment.Assign(Environment);
   FProcess.Options := [poUsePipes, poStderrToOutPut];
   {$IFDEF UNIX}FProcess.OnForkEvent:=@IsolateChild;{$ENDIF}
   FProcess.ShowWindow := swoHIDE;
@@ -329,7 +348,7 @@ begin
     RaiseLastOSError;
   {$ENDIF}
   {$ENDIF}
-  finally LaunchLock.Release; end;
+  finally Environment.Free;InheritedEnv.Free;LaunchLock.Release; end;
 end;
 
 procedure TPlatformProcess.WriteLine(const AText: string);

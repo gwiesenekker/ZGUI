@@ -15,6 +15,7 @@ type
   TExternalEngineDefinition = class
   private
     FArguments: string;
+    FEnvironmentJson:string;
     FDxpHost: string;
     FDxpId: string;
     FDxpPort: Word;
@@ -28,6 +29,7 @@ type
     FIniFileName: string;
     FInitText: string;
     FKind: TExternalEngineKind;
+    procedure SetEnvironmentJson(const Value:string);
     procedure SetExePath(const AValue: string);
     procedure SetKind(AValue: TExternalEngineKind);
   public
@@ -37,6 +39,7 @@ type
     function KindText: string;
     procedure NormalizeIds;
 
+    property EnvironmentJson:string read FEnvironmentJson write SetEnvironmentJson;
     property Arguments: string read FArguments write FArguments;
     property DxpHost: string read FDxpHost write FDxpHost;
     property DxpId: string read FDxpId write FDxpId;
@@ -90,12 +93,16 @@ procedure SaveExternalEngines(const AFileName: string; AEngines: TExternalEngine
 
 implementation
 
-uses
+uses uEngineEnvironment,
   JSONParser, SHA1;
+
+procedure TExternalEngineDefinition.SetEnvironmentJson(const Value:string);
+begin FEnvironmentJson:=CanonicalEngineEnvironment(Value);end;
 
 constructor TExternalEngineDefinition.Create;
 begin
   inherited Create;
+  FEnvironmentJson:='{}';
   FKind := eekHub;
   FDxpHost := '127.0.0.1';
   FDxpPort := 27531;
@@ -108,6 +115,7 @@ begin
   if Source = nil then
     Exit;
   FArguments := Source.Arguments;
+  FEnvironmentJson:=Source.EnvironmentJson;
   FDxpHost := Source.DxpHost;
   FDxpId := Source.DxpId;
   FDxpPort := Source.DxpPort;
@@ -345,6 +353,7 @@ begin
   Configuration := Path + #0 + AEngine.IdText + #0 + AEngine.Arguments + #0 +
     AEngine.InitText + #0 + AEngine.IniFileName + #0 + AEngine.IniContent + #0 +
     LowerCase(AEngine.DxpHost) + #0 + IntToStr(AEngine.DxpPort) + #0 + IntToStr(Ord(AEngine.DxpRole));
+  if AEngine.EnvironmentJson<>'{}' then Configuration+=#0+'environment:'+AEngine.EnvironmentJson;
   Result := LegacyEngineIdentityKey(AEngine) + '|cfg2:' + SHA1Print(SHA1String(Configuration));
 end;
 
@@ -432,6 +441,9 @@ begin
     end;
     Result.UciOptionsJson:=AObject.Find('uci_options').AsJSON;
   end;
+  if AObject.Find('environment')<>nil then
+    try Result.EnvironmentJson:=AObject.Find('environment').AsJSON;
+    except Result.Free;raise;end;
   Result.HubId := AObject.Get('hub_id', '');
   Result.DxpId := AObject.Get('dxp_id', '');
   Result.Arguments := AObject.Get('arguments', '');
@@ -470,6 +482,7 @@ begin
     Result.Add('uci_id',AEngine.UciId);
     if AEngine.UciOptionsJson<>'' then Result.Add('uci_options',GetJSON(AEngine.UciOptionsJson));
   end;
+  if AEngine.EnvironmentJson<>'{}' then Result.Add('environment',GetJSON(AEngine.EnvironmentJson));
   Result.Add('kind', LowerCase(AEngine.KindText));
   Result.Add('arguments', AEngine.Arguments);
   if AEngine.IniFileName <> '' then Result.Add('ini_file_name', AEngine.IniFileName);

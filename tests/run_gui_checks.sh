@@ -70,6 +70,8 @@ run_check "init_colour_gui_check (GTK2, Hub initialization and preferences previ
 run_check "main_readability_gui_check (GTK2, full FEN and ten notation lines)" main_readability_gui_check "/main-readability" 30s
 run_check "engine_end_reason_gui_check (GTK2, engine reason snapshots and tournament persistence)" engine_end_reason_gui_check "/end-reason" 45s
 
+run_check "engine_environment_gui_check (GTK2, private environment table/JSON editor for both games)" engine_environment_gui_check "/environment" 60s
+
 run_check "engine_feature_flags_gui_check (GTK2, compatibility flags editor)" engine_feature_flags_gui_check "/feature-flags" 45s
 
 run_check "tournament_ballot_gui_check (GTK2, ballot positions and colour-reversed game rows)" tournament_ballot_gui_check "/ballots" 60s

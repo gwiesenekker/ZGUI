@@ -491,7 +491,7 @@ begin
     if StopRequested then Exit;
     Log('launch; executable=' + FEngine.ExePath);
     ChangeState(esLaunching, 'starting hub process');
-    FProcess.Start(FEngine.ExePath, Args, ExtractFilePath(FEngine.ExePath));
+    FProcess.Start(FEngine.ExePath, Args, ExtractFilePath(FEngine.ExePath),FEngine.EnvironmentJson);
     ChangeState(esInitializing, 'process launched; sending hub handshake');
 
     SendLine('hub');

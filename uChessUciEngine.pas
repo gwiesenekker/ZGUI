@@ -163,7 +163,7 @@ begin
       end;
       FOptions:=nil; FWorker.PrepareLaunch(FDefinition,FParams,Args);
       ChangeState(esLaunching,'starting UCI process');
-      FWorker.Process.Start(FDefinition.ExePath,Args,ExtractFilePath(FDefinition.ExePath));
+      FWorker.Process.Start(FDefinition.ExePath,Args,ExtractFilePath(FDefinition.ExePath),FDefinition.EnvironmentJson);
       ChangeState(esInitializing,'UCI handshake'); FExpectUci:=True; FWorker.SendLine('uci');
       if not FWorker.WaitForLine('uciok',EngineStartupTimeoutMs(FParams),Line) then
         raise EInvalidOperation.Create('UCI uciok not received: '+FWorker.LastWaitFailure);

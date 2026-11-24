@@ -832,7 +832,7 @@ begin
       Log('wrote expanded INI/config file; file=' + FEngine.IniFileName);
     Log('launch; executable=' + FEngine.ExePath);
     ChangeState(esLaunching, 'starting DXP process');
-    FProcess.Start(FEngine.ExePath, Args, ExtractFilePath(FEngine.ExePath));
+    FProcess.Start(FEngine.ExePath, Args, ExtractFilePath(FEngine.ExePath),FEngine.EnvironmentJson);
     Result := True;
   finally
     Args.Free;

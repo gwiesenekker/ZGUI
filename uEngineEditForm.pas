@@ -25,6 +25,7 @@ type
     FAllowHubIdAutoUpdate: Boolean;
     FBrowseDialog: TOpenDialog;
     FAcceptingClose: Boolean;
+    FRegistrationEnvironment:string;
     FRegistrationUciOptions:string;
     FCapturedParams: TEngineParamArray;
     FDirectoryDialog: TSelectDirectoryDialog;
@@ -54,6 +55,7 @@ type
     procedure FinishUciDiscovery;
     procedure ParamDoubleClick(Sender: TObject);
     procedure EditFeatureFlags(Row:Integer);
+    procedure EditEnvironment(Row:Integer);
     function IsComboParamRow(Row: Integer): Boolean;
     procedure AcceptClick(Sender: TObject);
     procedure ButtonPanelResize(Sender: TObject);
@@ -102,7 +104,7 @@ type
 
 implementation
 
-uses uEngineFeatureFlagsForm,uEngineFeatureFlags,
+uses uEngineEnvironmentForm,uEngineEnvironment,uEngineFeatureFlagsForm,uEngineFeatureFlags,
   LCLType, uGuiDialogs, uGameGuiProfile;
 type TUciEditorLog=class(TThreadMessage)
   Text: string;
@@ -479,6 +481,8 @@ begin
   CloseRunningEngine;
   FStdoutMemo.Clear;
   FTextBuffer := '';
+  FRegistrationEnvironment:='{}';
+  if AEngine<>nil then FRegistrationEnvironment:=AEngine.EnvironmentJson;
   FRegistrationUciOptions:='';
   if AEngine<>nil then FRegistrationUciOptions:=AEngine.UciOptionsJson;
   SetLength(FCapturedParams, 0);
@@ -549,8 +553,8 @@ begin
   StoreParamsGrid;
   StoreArgumentParams;
   FreeAndNil(FAcceptedEngine);
-  FAcceptedEngine := CurrentEngineDefinition;
   try
+    FAcceptedEngine := CurrentEngineDefinition;
     ParseEngineFeatureFlags(EngineParamValue(FCapturedParams,'gui-feature-flags','[]')).Free;
     if FAcceptedEngine.Kind in [eekHub,eekUci] then
     begin
@@ -687,7 +691,9 @@ end;
 function TEngineEditForm.CurrentEngineDefinition: TExternalEngineDefinition;
 begin
   Result := TExternalEngineDefinition.Create;
+  try
   Result.UciOptionsJson:=FRegistrationUciOptions;
+  Result.EnvironmentJson:=EngineParamValue(FCapturedParams,'gui-environment',FRegistrationEnvironment);
   Result.ExePath := Trim(FExeEdit.Text);
   Result.ExecutableName := ExtractFileName(Result.ExePath);
   if FKindCombo.ItemIndex=2 then Result.Kind:=eekUci
@@ -717,6 +723,7 @@ begin
   Result.InitText := FInitMemo.Text;
   if Result.Kind=eekHub then Result.InitText:='init';
   Result.NormalizeIds;
+  except Result.Free;raise;end;
 end;
 
 procedure TEngineEditForm.DxpLog(Sender: TObject; const AText: string);
@@ -840,8 +847,10 @@ begin
   Args := TStringList.Create;
   StoreParamsGrid;
   StoreArgumentParams;
-  Engine := CurrentEngineDefinition;
+  Engine:=nil;
   try
+    try Engine:=CurrentEngineDefinition;
+    except on E:Exception do begin ShowGuiOkDialog(Self,'Invalid environment',E.Message);Exit;end;end;
     FStdoutMemo.Clear;
     FTextBuffer := '';
     FAllowHubIdAutoUpdate := False;
@@ -892,7 +901,7 @@ begin
     Log('[launching ' + Engine.ExePath + ']');
     if Args.Count > 0 then
       Log('[arguments: ' + Args.DelimitedText + ']');
-    try FProcess.Start(Engine.ExePath, Args, ExtractFilePath(Engine.ExePath));
+    try FProcess.Start(Engine.ExePath, Args, ExtractFilePath(Engine.ExePath),Engine.EnvironmentJson);
     except on E:Exception do begin
       StopProcessFor(Engine);Log('[could not launch engine: '+E.Message+']');Exit;
     end;end;
@@ -944,7 +953,7 @@ var
   OtherSection: string;
   OtherValue: string;
   ParamsFileName: string;
-  Section: string;
+  Section,Environment:string;
 
   procedure CopyOtherParam(const AName: string);
   var
@@ -964,6 +973,7 @@ var
 
 begin
   OtherParams := nil;
+  Environment:=EngineParamValue(FCapturedParams,'gui-environment',FRegistrationEnvironment);
   ParamsFileName := EngineParamsFileName(Trim(FExeEdit.Text));
   if ParamsFileName = '' then
     Exit;
@@ -1008,6 +1018,7 @@ begin
     CopyOtherParam('gui-dxp-launch-arguments');
   end;
 
+  AddOrUpdateParam(FCapturedParams,'gui-environment','string',Environment,False);
   UpdateFieldsFromParams;
   Engine := CurrentEngineDefinition;
   try
@@ -1124,6 +1135,9 @@ begin
     Exit;
 
   FSelectedParamRow := Row;
+  if (Col in [0,2]) and SameText(FParamsGrid.Cells[0,Row],'gui-environment') then begin
+    FInlineParamCombo.Visible:=False;EditEnvironment(Row);Exit;
+  end;
   if (Col in [0,2]) and SameText(FParamsGrid.Cells[0,Row],'gui-feature-flags') then begin
     FInlineParamCombo.Visible:=False;EditFeatureFlags(Row);Exit;
   end;
@@ -1413,6 +1427,14 @@ begin
 end;
 function TEngineEditForm.IsComboParamRow(Row: Integer): Boolean;
 begin Result:=(Row>0) and (Row<FParamsGrid.RowCount) and SameText(FParamsGrid.Cells[1,Row],'combo'); end;
+procedure TEngineEditForm.EditEnvironment(Row:Integer);
+var Value:string;
+begin
+ Value:=FParamsGrid.Cells[2,Row];
+ try if EditEngineEnvironment(Self,Value) then FParamsGrid.Cells[2,Row]:=Value;
+ except on E:Exception do ShowGuiOkDialog(Self,'Engine environment',E.Message);end;
+end;
+
 procedure TEngineEditForm.EditFeatureFlags(Row:Integer);
 var Value:string;
 begin

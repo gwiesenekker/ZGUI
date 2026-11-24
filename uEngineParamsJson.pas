@@ -303,7 +303,7 @@ var I,N:Integer;
 begin
   N:=0;
   for I:=0 to High(Params) do
-    if not (SameText(Params[I].Name,'gui-engine-type') or SameText(Params[I].Name,'gui-uci-id') or
+    if not (SameText(Params[I].Name,'gui-environment') or SameText(Params[I].Name,'gui-engine-type') or SameText(Params[I].Name,'gui-uci-id') or
       SameText(Params[I].Name,'gui-uci-init') or SameText(Params[I].Name,'gui-uci-launch-arguments') or
       SameText(Params[I].Name,'gui-ini-file') or SameText(Params[I].Name,'gui-ini-content')) then begin
       Params[N]:=Params[I];Inc(N);
@@ -325,6 +325,7 @@ begin
       SeedDefaultGuiParams(AParams,AEngine);
     finally Data.Free;end;
   end else LoadEngineParamsFromJson(EngineParamsFileName(AEngine.ExePath),Section,AParams);
+  AddOrUpdateParam(AParams,'gui-environment','string',AEngine.EnvironmentJson,False);
 end;
 
 procedure SeedDefaultGuiParams(var AParams: TEngineParamArray;
@@ -333,6 +334,8 @@ var
   ProtocolText: string;
   RoleText: string;
 begin
+  if AEngine<>nil then AddOrUpdateParam(AParams,'gui-environment','string',AEngine.EnvironmentJson,True)
+  else AddOrUpdateParam(AParams,'gui-environment','string','{}',True);
   AddOrUpdateParam(AParams,'gui-feature-flags','string','[]',True);
   AddOrUpdateParam(AParams, 'gui-startup-timeout-ms', 'string', '60000', True);
   if (AEngine<>nil) and (AEngine.Kind=eekUci) then begin
@@ -514,6 +517,7 @@ begin
   if AEngine = nil then
     Exit;
 
+  AEngine.EnvironmentJson:=EngineParamValue(AParams,'gui-environment',AEngine.EnvironmentJson);
   // Retire the old Hub startup-script setting while preserving other keys.
   SetLength(Params,Length(AParams));N:=0;
   for I:=0 to High(AParams) do if not SameText(AParams[I].Name,'gui-hub-init') then begin
@@ -521,6 +525,8 @@ begin
   end;
   SetLength(Params,N);
   SeedDefaultGuiParams(Params, AEngine);
+  N:=0;for I:=0 to High(Params) do if not SameText(Params[I].Name,'gui-environment') then begin
+    Params[N]:=Params[I];Inc(N);end;SetLength(Params,N);
   SortEngineParams(Params);
   if AEngine.Kind=eekUci then begin
     // Keep identity, arguments and INI fields in the registry's existing fields.
