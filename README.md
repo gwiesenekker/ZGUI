@@ -1,4 +1,4 @@
-# ZGUI 1.2
+# ZGUI 1.3
 
 ZGUI is a desktop GUI for **chess and international draughts**, with both games
 available side by side. It builds on GWDGUI 3.4 and preserves its shared game,

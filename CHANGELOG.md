@@ -2,7 +2,7 @@
 
 ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
-## Unreleased
+## 1.3 — 2026-11-25
 
 ### Prepare the embedded release number for 1.3 — 2026-11-25
 

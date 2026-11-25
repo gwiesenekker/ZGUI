@@ -1,60 +1,63 @@
-# ZGUI 1.2 — 18 November 2026
+# ZGUI 1.3 — 25 November 2026
 
-ZGUI runs chess and international draughts side by side, reusing GWDGUI's game,
-analysis, tournament and database infrastructure.
+Chess and international draughts in one application, built on GWDGUI's shared
+GUI, game, analysis, tournament and database infrastructure.
 
-## Changes since 1.1
+## Changes since 1.2
 
-- Fix the main-window resize path that could close ZGUI without saving after
-  shrinking and enlarging the window.
-- Improve laptop-height layouts for both games while retaining readable PV and
-  annotator text, at least three notation lines, and all eight MCTS statistics
-  rows. Font changes preserve the annotator status box's minimum height.
-- Allow one bounded tournament backfill behind an older request blocked by a busy
-  engine, while keeping oldest-ready precedence and preventing unlimited bypass.
-- Reject new opening ballots containing positions that are already over, with
-  file/line/reason reporting and no partial replacement. Draughts FEN rejects
-  unpromoted men on their own promotion rank. Valid terminal starting positions
-  in existing tournament archives remain readable.
-- Accept four-field chess EPD opening ballots, with or without trailing operations.
-  Missing counters become 0/1; operations are ignored. Ordinary FEN entry remains
-  strict. The GUI picker and CLI use the same ballot loader.
-- Expand native resize, laptop, queue and ballot regression checks; update the
-  manual and stop shipping the obsolete GWDGUI PDF in the source tree.
+- Configure engine-specific environment variables through `gui-environment`,
+  using the Variables/JSON editor. Overrides apply privately to locally launched
+  UCI, Hub and DXP processes; the parent environment is unchanged.
+- Add `configure_engine` to the existing interactive `--cli` and pipe interface.
+  Inspect an existing registration, merge advertised engine options, replace
+  environment overrides or feature flags, load a JSON settings file, and preview
+  changes with `dry_run=true`. The command reuses GUI validation and storage and
+  refuses writes while the engine is in use or its settings window is open.
+- Require one registration per installed engine directory and executable,
+  regardless of options or environment overrides. **Existing conflicting entries
+  are retained but cannot launch.** Use separate actual installations to compare
+  engines/configurations, or remove conflicting duplicate registrations.
+- Fix resizing the tournament cross-table divider after **Engine**, and retain
+  chosen column widths when results or selected participants refresh.
+- Embed the Markdown manual as a resource, retaining the existing searchable
+  Help window and parser. Update the manual with the new configuration commands.
+- Report versions as `1.3-<short Git commit>` in About and `--version` on both
+  platforms. The version command exits without opening the GUI. Build identity
+  can be recovered from checkout metadata without Git, and from Git source archives.
+- Give `build.bat` an SCU-style PowerShell entry point while retaining the existing
+  build-candidate, backup and interrupted/failed-build recovery safeguards.
 
-## Downloads and dependencies
+## Downloads
 
-Choose the Linux or Windows x86_64 portable archive. Archives include the manual,
-license, changelog and build information. The Windows archive includes 64-bit
-`sqlite3.dll` for database operations; keep it beside `zgui.exe`. The standalone
-Windows executable needs that DLL separately for database features.
+Use the Linux or Windows x86_64 portable archive. Both include the manual,
+changelog, license and build information. The Windows archive includes 64-bit
+`sqlite3.dll`; keep it beside `zgui.exe` for database operations. The standalone
+Windows executable requires that DLL separately. Linux requires GTK2 and SQLite3
+available as `libsqlite3.so`.
 
-Linux requires GTK2 and SQLite3 loadable as `libsqlite3.so`. Engines, networks,
-books and tablebases are installed separately. No external piece font is needed.
+Engines, networks, books, tablebases, local settings and game databases are not
+bundled. No external piece font is required. Back up your own settings and games
+before upgrading; engine paths remain machine-specific.
 
-**SHA1SUMS** and **SHA256SUMS** cover the standalone executables and archives.
-**BUILD-INFO.txt** records the source revision, binary provenance and bundled
-SQLite runtime.
+**SHA1SUMS** and **SHA256SUMS** cover the executables, DLL and portable archives.
+See **BUILD-INFO.txt** for source identity and binary provenance.
 
-## Validation and known limits
+## Validation and notes
 
-The application source passed the full chess/draughts regression suite and all
-30 GUI suites, including 11,258 font/window/DPI checks. The actual Linux executable
-passed repeated native resizing and clean-close checks for both games on a hidden
-1366x768 display, accepting 1083x600, 1300x690 and 1366x700. Tournament, DXP and
-lifecycle checks also passed.
+Source and both reported executable versions identify commit
+`12a407644c0f776258b7ee15b857ca5c49eac608` (`1.3-12a4076`). The Linux application
+passed the shared regression checks and all 33 GUI suites, including 11,258 layout
+checks and 473 tournament-tab checks. The final release-number update passed the
+version/build-info checks and all 33 GUI suites. The Windows executable was built
+by the maintainer; its version and complete embedded manual were verified.
+Comprehensive native Windows console/pipe testing remains outstanding.
 
-The Windows executable was rebuilt and supplied by the maintainer. Its current
-embedded manual was verified. It reports a source-archive build without an
-embedded Git commit; comprehensive native Windows CLI console/pipe verification
-remains outstanding. The original resize report should also be rechecked in the
-reviewer's Lazarus environment. These follow-up fixes await independent review.
+In Windows cmd, the prompt can appear before the `--version` output. ZGUI has
+already exited; pressing Enter redraws the prompt. To wait explicitly, use:
 
-SPRT settings should be fixed before inspecting results if interpreting their
-nominal error rates. No finite set of tests proves support for all chess dead
-positions; the manual describes the implemented material checks. Keep tested
-engine options unchanged when resuming or replaying comparisons: saved tournament
-identities do not freeze those values.
+```bat
+start "" /b /wait zgui.exe --version
+```
 
-Based on GWDGUI 3.4; distributed under GPLv3. SQLite is public-domain software;
-see the SQLite notice in the Windows portable archive.
+Based on GWDGUI 3.4; distributed under GPLv3. The bundled SQLite runtime is public
+domain; see SQLITE-NOTICE.txt in the Windows archive.
