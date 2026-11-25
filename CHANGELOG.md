@@ -4,6 +4,15 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Document the Windows version-command prompt quirk — 2026-11-25
+
+Commit: pending.
+
+- Explain that cmd can display its prompt before the --version output, making
+  ZGUI appear to hang after it has already exited. Enter redraws the prompt.
+- Documentation only; application behavior is unchanged. Validate the embedded
+  manual and rebuild the installed Linux executable with the updated Help text.
+
 ### Match SCU version reporting and Windows build entry point — 2026-11-24
 
 Commit: `ad90bd6`.
