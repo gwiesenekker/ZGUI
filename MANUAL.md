@@ -2401,8 +2401,9 @@ example `1.2-abc1234`. It also works with redirected output. Unidentified source
 builds print `1.2-unknown`. The release number is maintained in `uAppInfo.pas`.
 
 When using `zgui --version` from a Windows command prompt, cmd can display its
-prompt before the version output arrives. This can make ZGUI appear to hang even
-though it has already exited normally. Pressing **Enter** redraws the prompt.
+prompt before the version output arrives. This can make it look as though ZGUI is
+hanging, even though it has already exited normally. Pressing **Enter** redraws
+the prompt.
 
 **Help → About ZGUI** shows the same version, build description and full Git commit
 captured when the executable was built. A build made from modified tracked files is
