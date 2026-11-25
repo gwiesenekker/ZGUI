@@ -4,6 +4,17 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ## Unreleased
 
+### Prepare the embedded release number for 1.3 — 2026-11-25
+
+Commit: pending.
+
+- Request: “Could you update the embedded release number and commit?”
+- Set AppReleaseVersion to 1.3, so About and --version identify subsequent Linux
+  and Windows builds as 1.3-<short commit ID>. Align current manual examples and
+  version checks. Release branding only; game behavior is unchanged.
+- Validation: version/build-info checks and all 33 shared GUI suites passed.
+  Existing Windows binaries require rebuilding.
+
 ### Document the Windows version-command prompt quirk — 2026-11-25
 
 Commit: `0fc5279`.

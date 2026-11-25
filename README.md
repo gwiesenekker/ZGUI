@@ -117,7 +117,7 @@ Lazarus’s configured FPC compiler. The Lazarus **Default** mode instead reads 
 beside the executable and reports build identity as unavailable.
 
 Build scripts replace the installed executable only after successful compilation.
-`./zgui --version` or `zgui.exe --version` prints `1.2-<short commit ID>` and
+`./zgui --version` or `zgui.exe --version` prints `1.3-<short commit ID>` and
 exits without opening a window. About displays the same version and full commit;
 modified tracked files are identified when Git can determine their status.
 The repository ignores generated binaries, local settings, engines, databases

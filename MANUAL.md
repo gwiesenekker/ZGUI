@@ -2397,8 +2397,8 @@ the manual window.
 
 `zgui --version` (or `zgui.exe --version` on Windows) prints one line and exits
 without opening the GUI, using SCU's release-number–short-commit format, for
-example `1.2-abc1234`. It also works with redirected output. Unidentified source
-builds print `1.2-unknown`. The release number is maintained in `uAppInfo.pas`.
+example `1.3-abc1234`. It also works with redirected output. Unidentified source
+builds print `1.3-unknown`. The release number is maintained in `uAppInfo.pas`.
 
 When using `zgui --version` from a Windows command prompt, cmd can display its
 prompt before the version output arrives. This can make it look as though ZGUI is

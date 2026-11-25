@@ -49,8 +49,8 @@ end.
         about, embedded = output.split('---MANUAL---\n', 1)
         assert output.splitlines()[0] == expected_commit, 'embedded commit differs from build input'
         short = expected_commit[:7] if len(expected_commit) in (40, 64) else 'unknown'
-        assert output.splitlines()[1] == '1.2-' + short
-        assert 'ZGUI 1.2-' + short in about
+        assert output.splitlines()[1] == '1.3-' + short
+        assert 'ZGUI 1.3-' + short in about
         assert embedded == manual.replace('\r\n', '\n'), 'manual text/Unicode/apostrophes/final newline changed'
         assert ('Includes uncommitted changes.' in about) == dirty, 'dirty build marker incorrect'
     (folder / 'MANUAL.md').unlink()

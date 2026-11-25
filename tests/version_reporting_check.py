@@ -75,6 +75,6 @@ if len(sys.argv)>1:
     env=os.environ.copy();env.pop('DISPLAY',None);env.pop('WAYLAND_DISPLAY',None)
     result=subprocess.run([sys.argv[1],'--version'],env=env,capture_output=True,timeout=5)
     assert result.returncode==0,(result.returncode,result.stderr)
-    assert re.fullmatch(rb'1\.2-[0-9a-f]{7}\r?\n',result.stdout),result.stdout
+    assert re.fullmatch(rb'1\.3-[0-9a-f]{7}\r?\n',result.stdout),result.stdout
     assert not result.stderr,result.stderr
 print('Version reporting checks passed (metadata, archives and optional display-free executable)')

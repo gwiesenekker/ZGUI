@@ -17,7 +17,7 @@ const
   BuildChangesKnown = False;
 {$ENDIF}
 resourcestring
-  AppReleaseVersion = '1.2';
+  AppReleaseVersion = '1.3';
 function AppBuildVersion:string;
 var ShortId:string;I:Integer;
 begin
