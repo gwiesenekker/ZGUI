@@ -6,7 +6,7 @@ ZGUI changes, newest first, starting from the GWDGUI 3.4 baseline.
 
 ### Prepare the embedded release number for 1.3 — 2026-11-25
 
-Commit: pending.
+Commit: `62a3738`.
 
 - Request: “Could you update the embedded release number and commit?”
 - Set AppReleaseVersion to 1.3, so About and --version identify subsequent Linux
